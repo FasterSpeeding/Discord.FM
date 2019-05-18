@@ -1,0 +1,28 @@
+{
+  "api": {
+    "user_agent": "Discord.FM",
+    "last_key": null,
+    "google_key": null,
+    "google_cse_engine_ID": "012985131236025862960:rhlblfpn4hc",
+    "spotify_ID": null,
+    "spotify_secret": null,
+    "dbl_token": null,
+    "discord_bots_gg": null
+  },
+  "exception_dm": true,
+  "exception_channel": null,
+  "default_prefix": "fm.",
+  "owners": [
+    115590097100865541
+  ],
+  "embed_values": {
+    "url": null,
+    "color": "000089"
+  },
+  "sql2": {
+    "database": null,
+    "server": null,
+    "user": null,
+    "password": null
+  }
+}

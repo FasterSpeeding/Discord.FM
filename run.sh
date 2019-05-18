@@ -1,0 +1,1 @@
+python3.6 -m disco.cli --config init.json --encoder=etf
