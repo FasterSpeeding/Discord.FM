@@ -2,6 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from time import time
 from traceback import extract_stack
+import os
 
 
 from disco.bot import Plugin
@@ -17,6 +18,8 @@ from bot.util.misc import api_loop, dm_default_send
 from bot.util.sql import db_session, guilds, users, handle_sql
 from bot.util.status import status_thread_handler
 
+if not os.path.exists("logs"):
+    os.makedirs("logs")
 log = logging.getLogger(__name__)
 file_handler = logging.FileHandler("logs/bot.log")
 file_handler.setFormatter(logging.Formatter(LOG_FORMAT))

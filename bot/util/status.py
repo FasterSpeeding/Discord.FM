@@ -94,7 +94,7 @@ class status_thread_handler(object):
         and ensures the integrity of the guild data.
         """
         sleep(60)
-        for token, object in services_dict.items():
+        for token, object in self.__services__.items():
             if token is not None:
                 self.status_services.append(
                     object(
