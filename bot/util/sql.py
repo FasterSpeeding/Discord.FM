@@ -1,4 +1,5 @@
 from json import load
+import os
 
 
 from disco.bot.command import CommandError
@@ -17,15 +18,15 @@ from bot.base.base import bot
 
 log = logging.getLogger(__name__)
 
-with open("config.json") as file:
-    data = load(file)
-    if bot.local.sql.server is not None:
-        sql = bot.local.sql
-        server_payload = f"mysql+pymysql://{sql.user}:{sql.password}@{sql.server}/{sql.database}"
-        log.info("Connecting to SQL server @{sql.server.")
-    else:
-        log.info("Defaulting to local SQL database.")
-        server_payload = "sqlite+pysqlite:///sql_database.db"
+if bot.local.sql.server is not None:
+    sql = bot.local.sql
+    server_payload = f"mysql+pymysql://{sql.user}:{sql.password}@{sql.server}/{sql.database}"
+    log.info(f"Connecting to SQL server @{sql.server}.")
+else:
+    if not os.path.exists("logs"):
+        os.makedirs("data")
+    log.info("Defaulting to local SQL database.")
+    server_payload = "sqlite+pysqlite:///data/sql_database.db"
 engine = create_engine(
     server_payload,
     encoding="utf8",
@@ -37,8 +38,10 @@ try:
     engine.execute("SELECT 1")
 except exc.OperationalError as e:
     log.warning("Failed to access server, defaulting to local instance: {}".format(e))
+    if not os.path.exists("data"):
+        os.makedirs("data")
     engine = create_engine(
-        "sqlite+pysqlite:///sql_database.db",
+        "sqlite+pysqlite:///data/sql_database.db",
         encoding="utf8",
         pool_recycle=3600,
         pool_pre_ping=True,
@@ -63,7 +66,7 @@ class SQLexception(CommandError):
 
 
 class friends(Base):
-    __tablename__ = "friends_beta"  # "friends"
+    __tablename__ = "friends"
     __table_args__ = (
         PrimaryKeyConstraint(
             "master_id",
@@ -190,7 +193,7 @@ class aliases(Base):
     def __init__(self, user_id, guild_id, alias):
         self.user_id = user_id
         self.guild_id = guild_id
-        self.alias = self.alias
+        self.alias = alias
 
     def __repr__(self):
         return f"aliases({self.guild_id}, {self.user_id}, {self.alias})"

@@ -20,15 +20,14 @@ class unset:
 
 class feed_dict:
     """Used for a config that takes in **kwargs"""
-    type = dict
+    __intake__ = dict
 
 class feed_list:
     """Used for a config that takes in *args"""
-    type = list
+    __intake__ = list
 
 class config_template:
     __name__ = "Unset"
-    __intake__ = feed_dict
     __unsettable__ = True
     def __init__(self, **kwargs):
         arguments = [arg for arg in dir(self) if not arg.startswith("__") and
@@ -40,10 +39,10 @@ class config_template:
             template = getattr(self, arg)
             if value is not unset:
                 if issubclass(template.type, config_template):
-                    if isinstance(value, template.type.__intake__.type):
-                        if template.type.__intake__.type is dict:
+                    if isinstance(value, template.type.__intake__):
+                        if template.type.__intake__ is dict:
                             setattr(self, arg, template.type(**value))
-                        elif template.type.__intake__.type is list:
+                        elif template.type.__intake__ is list:
                             setattr(self, arg, template.type(*value))
                     elif isinstance(value, type(None)):
                         setattr(self, arg, template.type())
@@ -51,7 +50,7 @@ class config_template:
                         log.warning("Invalid type for {}.{}, needs {}.".format(
                             self.__name__,
                             arg,
-                            template.type.__intake__.type,
+                            template.type.__intake__,
                         ))
                 else:
                     if isinstance(value, template.type):
@@ -82,11 +81,11 @@ class config_template:
                 ))
 
     def to_dict(self):
-        return self.__dict__
+        return {key:value for key, value in self.__dict__.items()
+                if value is not None}
 
-class api(config_template):
+class api(config_template, feed_dict):
     __name__ = "api"
-    __intake__ = feed_dict
     user_agent = unset(str, default="Discord.FM")
     last_key = unset(str)
     google_key = unset(str)
@@ -96,29 +95,58 @@ class api(config_template):
     dbl_token = unset(str)
     discord_bots_gg = unset(str)
 
-class sql(config_template):
+class sql(config_template, feed_dict):
     __name__ = "sql"
-    __intake__ = feed_dict
     database = unset(str)
     server = unset(str)
     user = unset(str)
     password = unset(str, default="")
 
-class embed_values(config_template):
+class embed_values(config_template, feed_dict):
     __name__ = "embed_values"
-    __intake__ = feed_dict
     url = unset(str)
     color = unset(str) # , default="000089")
 
+class bot(config_template, feed_dict):
+    commands_require_mention = unset(bool)
+    commands_mention_rules = unset(dict)
+    commands_prefix = unset(str)
+    commands_allow_edit = unset(bool)
+    commands_level_getter = unset(object) # idk. it's a function so I need a way to handle that
+    commands_group_abbrev = unset(bool)
+    plugin_config_provider = unset(object)  # same
+    plugin_config_format = unset(object)  # same
+    plugin_config_format = unset(str)
+    plugin_config_dir = unset(str)
+    http_enabled = unset(bool)
+    http_host = unset(str)
+    http_port = unset(int)
+    plugins = unset(list, default=[])
 
-class config(config_template):
+class disco(config_template, feed_dict):
+    __name__ = "disco"
+    token = unset(str)
+    bot = unset(bot)
+    config = unset(str)
+    shard_id = unset(int)
+    shard_count = unset(int)
+    max_reconnects = unset(int)
+    log_level = unset(str)
+    manhole = unset(bool) # manhole_enable
+    manhole_bind = unset(int)
+    plugin = unset(list, default=[])
+    run_bot = unset(bool, default=False)
+    encoder = unset(str)
+    shard_auto = unset(bool, default=False)
+
+class config(config_template, feed_dict):
     __name__ = "config"
-    __intake__ = feed_dict
     exception_dm = unset(bool, default=False)
     exception_channel = unset(int)
     default_prefix = unset(str, default="fm.")
     owners = unset(list, list())
     api = unset(api)
+    disco = unset(disco)
     sql = unset(sql)
     embed_values = unset(embed_values)
 
@@ -204,7 +232,3 @@ bot = bot_frame()
 if __name__ == "__main__":
     local = config(**load(open("config.json")))
     print(local.to_dict())
-    print(local.sql.to_dict())
-    print(local.embed_values.to_dict())
-    print(local.api.to_dict())
-    print(dir(local.api))

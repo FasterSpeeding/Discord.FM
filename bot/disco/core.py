@@ -10,7 +10,10 @@ from disco.api.http import APIException
 from disco.bot.command import CommandError
 from disco.types.base import Unset
 from disco.util.logging import logging, LOG_FORMAT
-from ujson import load
+try:
+    from ujson import load 
+except ImportError:
+    from json import load
 
 
 from bot.base.base import bot
@@ -18,12 +21,12 @@ from bot.util.misc import api_loop, dm_default_send
 from bot.util.sql import db_session, guilds, users, handle_sql
 from bot.util.status import status_thread_handler
 
-if not os.path.exists("logs"):
-    os.makedirs("logs")
+#if not os.path.exists("logs"):
+#    os.makedirs("logs")
 log = logging.getLogger(__name__)
-file_handler = logging.FileHandler("logs/bot.log")
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-log.addHandler(file_handler)
+#file_handler = logging.FileHandler("logs/bot.log")
+#file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+#log.addHandler(file_handler)
 
 
 class CorePlugin(Plugin):

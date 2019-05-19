@@ -3,47 +3,12 @@ from disco.util.logging import logging
 
 log = logging.getLogger(__name__)
 
-#class generic_embed_values(DiscoMessageEmbed):
-#    def __init__(self, bot):
-#        if "color" in bot.default_embed_properties:
-#            self.color = bot.default_embed_properties["color"]
-#
-#    def __call__( # could probably do this but with the normal Embed cause lol, I'm stupid
-#        author_name=None, 
-#        author_url:str=None, 
-#        author_icon:str=None, 
-#        title:str=None, 
-#        url:str=None, 
-#        thumbnail:str=None, 
-#        description:str=None, 
-#        non_inlines:dict=None, 
-#        skip_non_inlines=None, 
-#        inlines:dict=None, 
-#        skip_inlines=True, 
-#        image:str=None, 
-#        timestamp=None, 
-#        footer_text:str=None, 
-#        footer_img:str=None, 
-#        **kwargs):
-#            title = title
-#            type = Field(str, default='rich')
-#            description = Field(text)
-#            url = Field(text)
-#            timestamp = Field(datetime)
-#            color = Field(int)
-#            footer = Field(MessageEmbedFooter)
-#            image = Field(MessageEmbedImage)
-#            thumbnail = Field(MessageEmbedThumbnail)
-#            video = Field(MessageEmbedVideo)
-#            author = Field(MessageEmbedAuthor)
-#            fields = ListField(MessageEmbedField)
-
 class generic_embed_values:
     def __init__(self, local):
         self.local = local
 
     def __call__(
-            self, # could probably do this but with the normal Embed cause lol, I'm stupid
+            self,
             author_name=None,
             author_url:str=None,
             author_icon:str=None,

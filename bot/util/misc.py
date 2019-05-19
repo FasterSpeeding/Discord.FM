@@ -10,10 +10,6 @@ from requests.exceptions import ConnectionError
 
 log = logging.getLogger(__name__)
 
-#class APIwrapper(APIException):
-#    def __init__(exception):
-#        self = exception
-
 def api_loop(command, *args, **kwargs):
     init_time = time()
     while True:
@@ -28,7 +24,7 @@ def api_loop(command, *args, **kwargs):
                 raise CommandError("Missing permissions to respond (possibly Embed Links).")
             else:
                 log.critical("Api exception: {}: {}".format(e.code, e))
-                raise e # test this
+                raise e
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
     """
@@ -37,7 +33,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
     """
     try:
         api_loop(dm_channel.send_message, *args, **kwargs)
-    except APIException as e:#APIwrapper as e: #  APIException as e:
+    except APIException as e:
         if e.code == 50007:  # Wasn't able to open a DM/send DM message
             api_loop(event.channel.send_message, *args, **kwargs)
         else:

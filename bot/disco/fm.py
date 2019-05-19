@@ -32,6 +32,8 @@ class fmPlugin(Plugin):
             "last_key",
             "user_agent",
         )
+        if self.last_key is None:
+            raise Exception("Missing Last.fm api key in config.json, cannot initalise bot.")
         bot.init_help_embeds(self)
         bot.custom_prefix_init(self)
         self.user_reg = compile("[a-zA-Z0-9_-]+")
@@ -71,8 +73,11 @@ class fmPlugin(Plugin):
                         user_id=event.author.id,
                         guild_id=event.guild.id,
                     ).count) < 5):
-                        payload = aliases(user_id=event.author.id, guild_id=event.guild.id, alias=alias)
-                        payload.alias = alias  # THIS IS JUST FUCKING BROKEN AND I@M TOO PISSED OFF TO FIX IT
+                        payload = aliases(
+                            user_id=event.author.id,
+                            guild_id=event.guild.id,
+                            alias=alias,
+                        )
                         handle_sql(db_session.add, payload)
                         handle_sql(db_session.flush)
                         api_loop(

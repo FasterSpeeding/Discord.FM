@@ -13,8 +13,11 @@ from disco.voice.playable import YoutubeDLInput, BufferedOpusEncoderPlayable
 from disco.voice.player import Player
 from disco.voice.client import VoiceException
 from fuzzywuzzy.fuzz import partial_ratio
-from ujson import load
 from youtube_dl.utils import DownloadError
+try:
+    from ujson import load
+except ImportError:
+    from json import load
 
 
 from bot.base.base import bot
