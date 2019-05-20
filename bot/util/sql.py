@@ -13,12 +13,15 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 # import OperationalError
 # from sqlalchemy.exc import OperationlError
 
-
 from bot.base.base import bot
 
 log = logging.getLogger(__name__)
 
+ssl_args = {}
+
 if bot.local.sql.server is not None:
+    if (os.path.exists("certs/") and os.path.isfile("certs/ca-cert.pem")):
+        ssl_args = {'ssl_ca': "certs/ca-cert.pem"}
     sql = bot.local.sql
     server_payload = f"mysql+pymysql://{sql.user}:{sql.password}@{sql.server}/{sql.database}"
     log.info(f"Connecting to SQL server @{sql.server}.")
@@ -33,6 +36,7 @@ engine = create_engine(
     pool_recycle=3600,
     pool_pre_ping=True,
     echo=False,
+    connect_args=ssl_args,
 )
 try:
     engine.execute("SELECT 1")
@@ -105,7 +109,7 @@ class guilds(Base):
         "prefix",
         TEXT,
         nullable=False,
-        default="fm.",
+        default=(bot.local.disco.bot.commands_prefix  or "fm."),
     )
     last_seen = Column(
         "last_seen",
@@ -121,7 +125,7 @@ class guilds(Base):
     def __init__(
             self,
             guild_id:int,
-            prefix:str="fm.",
+            prefix:str=(bot.local.disco.bot.commands_prefix  or "fm."),
             last_seen:str=None,
             name:str=None):
         self.guild_id = guild_id

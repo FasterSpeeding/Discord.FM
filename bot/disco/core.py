@@ -45,6 +45,7 @@ class CorePlugin(Plugin):
             "exception_dm",
             "exception_channel",
         )
+        self.command_prefix = (bot.local.disco.bot.commands_prefix or "fm.")
         bot.init_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
@@ -93,7 +94,7 @@ class CorePlugin(Plugin):
                 )
                 db_session.add(guild)
                 handle_sql(db_session.flush)
-                self.prefixes[event.guild.id] = "fm."
+                self.prefixes[event.guild.id] = (self.command_prefix or "fm.")
 
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):
@@ -294,7 +295,7 @@ class CorePlugin(Plugin):
                     ).first,
                 )
                 if guild is None:
-                    prefix = "fm."
+                    prefix = (self.command_prefix or "fm.")
                     guild = guilds(
                         guild_id=event.guild.id,
                         last_seen=datetime.now().isoformat(),
@@ -443,7 +444,7 @@ class CorePlugin(Plugin):
                     event.message.channel_id,
                 )
             if isinstance(event.guild_id, Unset) and event.channel.is_dm:
-                prefix = "fm."
+                prefix = (self.command_prefix or "fm.")
             else:
                 if event.guild_id not in self.prefixes:
                     guild = handle_sql(
@@ -452,7 +453,7 @@ class CorePlugin(Plugin):
                         ).first,
                     )
                     if guild is None:
-                        prefix = "fm."
+                        prefix = (self.command_prefix or "fm.")
                         self.prefixes[event.guild_id] = prefix
                         guild = guilds(
                             guild_id=event.guild_id,

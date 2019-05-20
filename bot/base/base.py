@@ -57,7 +57,7 @@ class config_template:
                         setattr(self, arg, value)
                     else:
                         setattr(self, arg, template.default)
-                        if not isinstance(value, type(template.default)):
+                        if not isinstance(value, type(template.default)) and not isinstance(value, type(None)):
                             log.warning("Invalid type for {}.{}. Needs {}".format(
                                 self.__name__,
                                 arg,
