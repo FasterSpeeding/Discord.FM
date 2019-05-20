@@ -21,7 +21,11 @@ ssl_args = {}
 
 if bot.local.sql.server is not None:
     if (os.path.exists("certs/") and os.path.isfile("certs/ca-cert.pem")):
-        ssl_args = {'ssl_ca': "certs/ca-cert.pem"}
+        ssl_args = {"ssl": {
+            "ca": "certs/ca-cert.pem",
+            "cert": "certs/client-cert.pem",
+            "key": "certs/client-key.pem",
+            }}
     sql = bot.local.sql
     server_payload = f"mysql+pymysql://{sql.user}:{sql.password}@{sql.server}/{sql.database}"
     log.info(f"Connecting to SQL server @{sql.server}.")
