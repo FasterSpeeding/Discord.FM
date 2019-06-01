@@ -1,13 +1,18 @@
+from platform import python_version
+import logging
 import operator
+import os
+import yaml
 
 
-from disco.util.logging import logging
+
+from requests import __version__ as requests_version
 try:
     from ujson import load
 except ImportError:
     from json import load
 
-
+from bot import __VERSION__
 from bot.types.embed import generic_embed_values
 from bot.util.react import reactors_handler
 
@@ -18,22 +23,28 @@ class unset:
         self.type = type
         self.default = default
 
+
 class feed_dict:
     """Used for a config that takes in **kwargs"""
     __intake__ = dict
 
+
 class feed_list:
     """Used for a config that takes in *args"""
     __intake__ = list
+
+
+def optional(**kwargs):
+    return {index: data for index, data in kwargs.items() if data is not None}
+
 
 class config_template:
     __name__ = "Unset"
     __unsettable__ = True
     def __init__(self, **kwargs):
         arguments = [arg for arg in dir(self) if not arg.startswith("__") and
-                    not callable(getattr(self, arg)) or
-                    getattr(getattr(self, arg), "__unsettable__", False) is True and
-                    arg != "__class__"]
+                    (not callable(getattr(self, arg)) or
+                    getattr(getattr(self, arg), "__unsettable__", False) is True)]
         for arg in arguments:
             value = kwargs.get(arg, unset)
             template = getattr(self, arg)
@@ -47,6 +58,7 @@ class config_template:
                     elif isinstance(value, type(None)):
                         setattr(self, arg, template.type())
                     else:
+                        setattr(self, arg, template.type())
                         log.warning("Invalid type for {}.{}, needs {}.".format(
                             self.__name__,
                             arg,
@@ -75,7 +87,7 @@ class config_template:
             if local is not unset:
                 setattr(context, arg, local)
             else:
-                log.warning("Invalid argument {} in get {}.".format(
+                log.warning("Invalid or unset argument {} in get {}.".format(
                     arg,
                     self.__name__
                 ))
@@ -84,9 +96,17 @@ class config_template:
         return {key:value for key, value in self.__dict__.items()
                 if value is not None}
 
+    def __repr__(self):
+        return "<config {}>".format(self.__name__)
+
+
 class api(config_template, feed_dict):
     __name__ = "api"
-    user_agent = unset(str, default="Discord.FM")
+    user_agent = unset(str, default="Discord.FM @https://github.com/LMByrne/Discord.FM {} Python {} requests/{}".format(
+        __VERSION__,
+        python_version(),
+        requests_version,
+    ))
     last_key = unset(str)
     google_key = unset(str)
     google_cse_engine_ID = unset(str, default="012985131236025862960:rhlblfpn4hc")
@@ -95,33 +115,49 @@ class api(config_template, feed_dict):
     dbl_token = unset(str)
     discord_bots_gg = unset(str)
 
+
 class sql(config_template, feed_dict):
     __name__ = "sql"
+    __args__ = {"ca_path", "cert_path", "key_path"}
     database = unset(str)
     server = unset(str)
     user = unset(str)
     password = unset(str, default="")
+    ca_path = unset(str)
+    cert_path = unset(str)
+    key_path = unset(str)
+
+    def args(self):
+        return optional(**{key: value for key, value in self.__dict__.items()
+                        if key in self.__args__})
+
 
 class embed_values(config_template, feed_dict):
     __name__ = "embed_values"
     url = unset(str)
-    color = unset(str) # , default="000089")
+    color = unset(str)
+
 
 class bot(config_template, feed_dict):
-    commands_require_mention = unset(bool)
+    commands_require_mention = unset(bool, default=True)
     commands_mention_rules = unset(dict)
     commands_prefix = unset(str)
     commands_allow_edit = unset(bool)
-    commands_level_getter = unset(object) # idk. it's a function so I need a way to handle that
+    commands_level_getter = unset(object) # deal with
     commands_group_abbrev = unset(bool)
     plugin_config_provider = unset(object)  # same
-    plugin_config_format = unset(object)  # same
     plugin_config_format = unset(str)
     plugin_config_dir = unset(str)
     http_enabled = unset(bool)
     http_host = unset(str)
     http_port = unset(int)
-    plugins = unset(list, default=[])
+    plugins = unset(list, default=[
+        "bot.disco.core",
+        "bot.disco.api",
+        "bot.disco.fm",
+        "bot.disco.voice",
+    ])
+
 
 class disco(config_template, feed_dict):
     __name__ = "disco"
@@ -139,12 +175,13 @@ class disco(config_template, feed_dict):
     encoder = unset(str)
     shard_auto = unset(bool, default=False)
 
+
 class config(config_template, feed_dict):
     __name__ = "config"
-    exception_dm = unset(bool, default=False)
-    exception_channel = unset(int)
-    default_prefix = unset(str, default="fm.")
-    owners = unset(list, list())
+    exception_dms = unset(list)
+    exception_channels = unset(dict)
+    owners = unset(list, [])
+    prefix = unset(str, default="fm.")
     api = unset(api)
     disco = unset(disco)
     sql = unset(sql)
@@ -152,15 +189,30 @@ class config(config_template, feed_dict):
 
 
 class bot_frame:
-    commands_list = dict()
-    local = None
-    reactor = None
-    generic_embed_values = None
+    commands_dict = dict()
+    triggers_set = set()
+    local = config
+    reactor = reactors_handler
+    generic_embed_values = generic_embed_values
 
     def __init__(self, config_location="config.json"):
-        self.local = config(**load(open(config_location)))
-        self.reactor = reactors_handler()
-        self.generic_embed_values = generic_embed_values(self.local)
+        if os.path.isfile(config_location):
+            if config_location.lower().endswith(".json"):
+                self.local = self.local(**load(open(config_location, "r")))
+            elif config_location.lower().endswith(".yaml"):
+                self.local = self.local(**yaml.safe_load(open(config_location, "r")))
+            else:
+                log.exception("Invalid config file format.")
+        elif os.path.isfile("config.yaml"):
+            self.local = self.local(**yaml.safe_load(open("config.yaml", "r")))
+        elif not config_location:
+            log.exception("Missing config file or invalid location given {}".format(
+                config_location,
+            ))
+        else:
+            self.local = self.local()
+        self.reactor = self.reactor()
+        self.generic_embed_values = self.generic_embed_values(self.local)
 
     def custom_prefix_init(self, context):
         """
@@ -169,8 +221,9 @@ class bot_frame:
         """
         for command in iter(context.commands):
             for trigger in command.triggers:
-                if trigger not in self.commands_list:
-                    self.commands_list[trigger] = command
+                if trigger not in self.commands_dict:
+                    self.commands_dict[trigger] = command
+                    self.triggers_set.add(trigger)
                 else:
                     log.warning("Duplicate command trigger '{}' not loaded from {}.".format(
                         trigger,
@@ -194,7 +247,7 @@ class bot_frame:
         arrays_to_sort = list()
         for command in bot.commands:
             doc_string = command.get_docstring().strip("\n").strip("    ")
-            if len(command.get_docstring()) != 0:
+            if command.get_docstring():
                 array_name = doc_string.split(" ", 1)[0].lower()
                 if array_name not in help_embeds:
                     url = getattr(self.local.embed_values, "url")
@@ -210,7 +263,11 @@ class bot_frame:
                 else:
                     args = str()
                 help_embeds[array_name].add_field(
-                    name="fm.**{}** {}".format(command.name, args),
+                    name="{}**{}** {}".format(
+                        (self.local.disco.bot.commands_prefix or "fm."),
+                        command.name,
+                        args,
+                    ),
                     value="{}".format(
                         doc_string[len(array_name) + 1:].split(
                             "\n",

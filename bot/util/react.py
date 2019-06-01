@@ -1,7 +1,7 @@
 # hecking reacts don't work in dms
 # write in checks for missing permissions like message embed etc
 from time import sleep, time
-# ECONNABORTED
+import logging
 
 
 from disco.api.http import APIException
@@ -9,7 +9,6 @@ from disco.bot.command import CommandError
 from disco.types.channel import Channel
 from disco.bot.command import CommandError
 from disco.types.message import Message
-from disco.util.logging import logging
 
 
 from bot.util.misc import api_loop

@@ -16,17 +16,12 @@ except ImportError:
     from json import load
 
 
-from bot.base.base import bot
+from bot.base import bot
 from bot.util.misc import api_loop, dm_default_send
 from bot.util.sql import db_session, guilds, users, handle_sql
 from bot.util.status import status_thread_handler
 
-#if not os.path.exists("logs"):
-#    os.makedirs("logs")
 log = logging.getLogger(__name__)
-#file_handler = logging.FileHandler("logs/bot.log")
-#file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-#log.addHandler(file_handler)
 
 
 class CorePlugin(Plugin):
@@ -42,10 +37,10 @@ class CorePlugin(Plugin):
         bot.local.get(
             self,
             "owners",
-            "exception_dm",
-            "exception_channel",
+            "exception_dms",
+            "exception_channels",
         )
-        self.command_prefix = (bot.local.disco.bot.commands_prefix or "fm.")
+        self.command_prefix = (bot.local.prefix or bot.local.disco.bot.commands_prefix or "fm.")
         bot.init_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
@@ -94,7 +89,7 @@ class CorePlugin(Plugin):
                 )
                 db_session.add(guild)
                 handle_sql(db_session.flush)
-                self.prefixes[event.guild.id] = (self.command_prefix or "fm.")
+                self.prefixes[event.guild.id] = self.command_prefix
 
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):
@@ -148,7 +143,7 @@ class CorePlugin(Plugin):
             if message_id in bot.reactor.events:
                 event = bot.reactor.events[message_id]
                 if time() < event.end_time:
-                    if len(event.conditions) != 0:
+                    if event.conditions:
                         for condition in event.conditions:
                             if (not condition.auth or trigger_event.user_id == condition.owner_id and
                                     trigger_event.emoji.name == condition.reactor):
@@ -164,7 +159,6 @@ class CorePlugin(Plugin):
                                         if message_id in bot.reactor.events:
                                             del bot.reactor.events[message_id]
                                     else:
-                                        #log.warning(e)
                                         raise e
                                 else:
                                     index = condition.function(
@@ -215,27 +209,30 @@ class CorePlugin(Plugin):
         if command is None:
             for help_embed in bot.help_embeds.values():
                 dm_default_send(event, channel, embed=help_embed)
-        elif command in bot.commands_list:
-            if bot.commands_list[command].raw_args is not None:
-                args = " " + bot.commands_list[command].raw_args + ";"
-            else:
-                args = str()
-            docstring = bot.commands_list[command].get_docstring().replace("    ", "").strip("\n")
-            embed = bot.generic_embed_values(
-                title="fm.{}{} a command in the {} module.".format(
-                    str(bot.commands_list[command].triggers).replace("[", "(").replace("'", "**").replace(",", " |").replace("]", ")") + ":",
-                    args,
-                    docstring.split(" ", 1)[0]),
-                url=bot.local.embed_values.url,
-                description=docstring.split(" ", 1)[1],
-                )
-            dm_default_send(event, channel, embed=embed)
         else:
-            dm_default_send(
-                event,
-                channel,
-                content="``{}`` command not found.".format(command),
-            )
+            command_obj = bot.commands_dict.get(command, None)
+            if command_obj:
+                if command_obj.raw_args is not None:
+                    args = " " + command_obj.raw_args + ";"
+                else:
+                    args = str()
+                docstring = command_obj.get_docstring().replace("    ", "").strip("\n")
+                embed = bot.generic_embed_values(
+                    title="{}{}{} a command in the {} module.".format(
+                        self.command_prefix,
+                        str(command_obj.triggers).replace("[", "(").replace("'", "**").replace(",", " |").replace("]", ")") + ":",
+                        args,
+                        docstring.split(" ", 1)[0]),
+                    url=bot.local.embed_values.url,
+                    description=docstring.split(" ", 1)[1],
+                    )
+                dm_default_send(event, channel, embed=embed)
+            else:
+                dm_default_send(
+                    event,
+                    channel,
+                    content="``{}`` command not found.".format(command),
+                )
         user_info = handle_sql(
             db_session.query(users).filter_by(user_id=event.author.id).first,
         )
@@ -243,7 +240,9 @@ class CorePlugin(Plugin):
             dm_default_send(
                 event,
                 channel,
-                content="To get started with this bot, you can set your default last.fm username using the command ``fm.username <username>``.",
+                content="To get started with this bot, you can set your default last.fm username using the command ``{}username <username>``.".format(
+                    self.command_prefix
+                ),
             )
 
     @Plugin.command("invite")
@@ -295,7 +294,7 @@ class CorePlugin(Plugin):
                     ).first,
                 )
                 if guild is None:
-                    prefix = (self.command_prefix or "fm.")
+                    prefix = self.command_prefix
                     guild = guilds(
                         guild_id=event.guild.id,
                         last_seen=datetime.now().isoformat(),
@@ -412,28 +411,23 @@ class CorePlugin(Plugin):
             # do shutting down stuff
 
     def custom_prefix(self, event):
-        if not event.author.bot:  # further investigation needed
+        if not event.author.bot:
             if ((not hasattr(event, "channel") or event.channel is None) and
                     not isinstance(event.guild_id, Unset)):
-                if (event.guild_id in self.client.state.guilds and
-                        event.channel_id in self.client.state.guilds[
-                            event.guild_id
-                        ].channels):
-                    event.channel = self.client.state.guilds[
-                        event.guild_id
-                    ].channels[event.channel_id]
-                else:
-                    self.client.state.guilds[event.guild_id] = api_loop(
-                        self.client.api.guilds_get,
+                guild = getattr(event, "guild", None)
+                if guild is None:
+                    event.guild = self.client.state.guilds.get(
                         event.guild_id,
-                    )
-                    event.guild = self.client.state.guilds[event.guild_id]
-                    event.channel = self.client.state.guilds[event.guild_id].channels.get(
-                        event.channel_id,
                         None,
                     )
-                    if event.channel is None:
-                        event.channel = api_loop(
+                    if event.guild is None:
+                        event.guild = self.client.state.guilds[event.guild_id] = api_loop(
+                            self.client.api.guilds_get,
+                            event.guild_id,
+                        )
+                event.channel = event.guild.channels.get(event.channel_id, None)
+                if event.channel is None:
+                    event.channel = api_loop(
                             self.client.api.channels_get,
                             event.channel_id,
                         )
@@ -443,108 +437,119 @@ class CorePlugin(Plugin):
                     self.client.api.channels_get,
                     event.message.channel_id,
                 )
-            if isinstance(event.guild_id, Unset) and event.channel.is_dm:
-                prefix = (self.command_prefix or "fm.")
+
+            if event.channel.is_dm:
+                prefix = self.command_prefix
             else:
-                if event.guild_id not in self.prefixes:
+                prefix = self.prefixes.get(event.guild_id, None)
+                if prefix is None:
                     guild = handle_sql(
                         db_session.query(guilds).filter_by(
                             guild_id=event.guild_id,
                         ).first,
                     )
                     if guild is None:
-                        prefix = (self.command_prefix or "fm.")
+                        prefix = self.command_prefix
                         self.prefixes[event.guild_id] = prefix
                         guild = guilds(
                             guild_id=event.guild_id,
                             last_seen=datetime.now().isoformat(),
+                            prefix=prefix,
                         )
                         handle_sql(db_session.add, guild)
                         handle_sql(db_session.flush)
                     else:
                         preifx = guild.prefix
                         self.prefixes[event.guild_id] = guild.prefix
-                else:
-                    prefix = self.prefixes[event.guild_id]
-            if event.message.content[:len(prefix)] == prefix:
-                if (len(event.message.content[len(prefix):]) > 0 and
-                        event.message.content[len(prefix):][0] == " "):
-                    prefix_len = len(prefix) + 1
-                    message_dict = event.message.content[
-                        prefix_len:
-                    ].split(" ")
-                else:
-                    prefix_len = len(prefix)
-                    message_dict = event.message.content[
-                        prefix_len:
-                    ].split(" ")
-                if len(message_dict) == 0:
-                    return
-                command = message_dict[0]
-                two_word_command = None
+
+            if event.message.content and event.message.content.startswith(prefix):
+                prefix_len = len(prefix)
+                if (len(event.message.content) > prefix_len and
+                        event.message.content[prefix_len] == " "):
+                    prefix_len += 1
+                message_dict = event.message.content[
+                    prefix_len:
+                ].split(" ")
+                commands = [message_dict[0]]
                 if len(message_dict) > 1:
-                    two_word_command = command + " " + message_dict[1]
-                if (command in bot.commands_list or
-                        two_word_command in bot.commands_list):
-                    if two_word_command in bot.commands_list:
-                        command = two_word_command
-                    event.args = event.message.content[prefix_len:][
-                        len(command):
+                    for word in message_dict[1:]:
+                        commands.append(commands[-1] + " " + word)
+                commands = bot.triggers_set.intersection(commands)
+                if commands:
+                    command = sorted(commands)[-1]
+                    event.args = event.message.content[
+                        prefix_len + len(command):
                     ].split()
                     event.name = command
                     event.msg = event.message
-                #    if ((not hasattr(event, "guild") or event.guild is None)
-                #            and not isinstance(event.guild_id, Unset)):
-                #        event.guild = self.client.state.guilds.get(
-                #            event.guild_id,
-                #            None,
-                #        )
-                #        if event.guild is None:
-                        #    self.client.state.guilds[event.guild_id] = api_loop(
-                        #        self.client.api.guilds_get,
-                        #        event.guild_id,
-                        #    )  # could use cached
-                        #    event.guild = self.client.state.guilds[event.guild_id]
                     try:
-                        bot.commands_list[command].execute(event)
+                        bot.commands_dict[command].execute(event)
                     except CommandError as e:
                         api_loop(event.channel.send_message, str(e))
                     except Exception as e:
-                        self.exception_message(event, e)
+                        self.exception_response(event, e)
 
-    def exception_message(self, event, e, response:bool=True):
-        if response:
-            api_loop(
-                event.channel.send_message,
-                "Oops, looks like we've blown a fuse back here. Our technicians have been alerted and will fix the problem as soon as possible.",
-            )
-        if (self.owners is not None and len(self.owners) != 0 and
-                self.exception_dm):
-            dm = self.client.api.users_me_dms_create(int(self.owners[0]))
+    def exception_response(self, event, e, respond:bool=True):
+        if respond:
+            if not isinstance(e, APIException) or e.code != 50013:
+                api_loop(
+                    event.channel.send_message,
+                    "Oops, looks like we've blown a fuse back here. Our technicians have been alerted and will fix the problem as soon as possible.",
+                )
+        if (self.exception_dms):
             if event.channel.is_dm:
                 footer_text = "DM"
             else:
                 footer_text = "{}: {}".format(event.guild.name, event.guild.id)
             embed = bot.generic_embed_values(
-                author_name=str(event.author),
-                author_icon=event.author.get_avatar_url(size=32),
-                author_url="https://discordapp.com/users/{}".format(
-                    event.author.id,
-                ),
-                title="Exception occured: {}".format(str(e)),
-                description=event.message.content,
-                footer_text=footer_text,
-                timestamp=event.message.timestamp.isoformat(),
-            )
-            api_loop(dm.send_message, embed=embed)
-        if self.exception_channel is not None:
+                    author_name=str(event.author),
+                    author_icon=event.author.get_avatar_url(size=32),
+                    author_url="https://discordapp.com/users/{}".format(
+                        event.author.id,
+                    ),
+                    title="Exception occured: {}".format(str(e)),
+                    description=event.message.content,
+                    footer_text=footer_text,
+                    timestamp=event.message.timestamp.isoformat(),
+                )
+            for target in self.exception_dms.copy():
+                target_dm = self.client.api.users_me_dms_create(int(self.owners[0]))
+                try:
+                    api_loop(target_dm.send_message, embed=embed)
+                except APIException as e:
+                    if e.code == 50013:
+                        log.warning("Unable to exception dm: {}".format(target))
+                        self.exception_dms.remove(guild)
+                    else:
+                        raise e
+        if self.exception_channels:
             embed = bot.generic_embed_values(
-                title="Exception occured: {}".format(str(e)),
-                description=extract_stack(),
-                footer_text=event.message.content,
-            )
-            self.client.api.channels_messages_create(
-                self.exception_channel,
-                embed=embed,
-            )
+                    title="Exception occured: {}".format(str(e)),
+                    description=extract_stack(),
+                    footer_text=event.message.content,
+                )
+            for guild, channel in self.exception_channels.copy().items():
+                guild_obj = self.client.state.guilds(guild, None)
+                if guild_obj is not None:
+                    channel_obj = guild.channels.get(channel, None)
+                    if channel_obj is not None:
+                        try:
+                            api_loop(
+                                channel_obj.send_message,
+                                embed=embed,
+                            )
+                        except APIException as e:
+                            if e.code == 50013:
+                                log.warning("Unable to post in exception channel: {}".format(
+                                    channel
+                                    ))
+                                del self.exception_channels[guild]
+                            else:
+                                raise e
+                    else:
+                        log.warning("Invalid exception channel: {}".format(channel))
+                        del self.exception_channels[guild]
+                else:
+                    log.warning("Invalid exception guild: {}".format(guild))
+                    del self.exception_channels[guild]
         log.exception(e)

@@ -10,7 +10,8 @@ from disco.util.sanitize import S as sanitize
 from lyrics_extractor import Song_Lyrics as get_lyrics
 from requests import get, post
 
-from bot.base.base import bot
+
+from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.react import generic_react
 
@@ -51,14 +52,13 @@ class ApiPlugin(Plugin):
         ).get_lyrics(quote_plus(content))
         if len(lyrics) > 46300:
             return first_message.edit("I doubt that's a song.")
-        if len(lyrics) == 0:
+        if not lyrics:
             return first_message.edit("No Lyrics found for ``{}``".format(
                 sanitize(
                     content,
                     escape_codeblocks=True,
                 )
             ))
-        lyrics = lyrics[:2048*3]
         lyrics_embed = bot.generic_embed_values(
             title=title,
             footer_text="Requested by {}".format(event.author),
@@ -66,16 +66,18 @@ class ApiPlugin(Plugin):
             timestamp=event.msg.timestamp.isoformat(),
         )
         first_message.delete()
-        while len(lyrics) != 0:
+        responses = 1
+        while lyrics and responses < 4:
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
-            if len(lyrics) > 0:
+            if lyrics:
                 tmp_to_shift = lyrics_embed.description.splitlines()[-1]
                 lyrics = tmp_to_shift + lyrics
                 lyrics_embed.description = lyrics_embed.description[
                     :-len(tmp_to_shift)
                 ]
             api_loop(event.channel.send_message, embed=lyrics_embed)
+            responses += 1
 
     @Plugin.command("spotify", "<type:str> [search:str...]")
     def on_spotify_command(self, event, type, search=""):
@@ -120,7 +122,7 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code == 200:
-            if len(r.json()[type+"s"]["items"]) == 0:
+            if not r.json()[type+"s"]["items"]:
                 return api_loop(
                     event.channel.send_message,
                     "{}: ``{}`` not found.".format(

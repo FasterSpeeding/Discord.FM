@@ -1,11 +1,10 @@
 from re import compile
 from time import time
-# ECONNABORTED
+import logging
 
 
 from disco.api.http import APIException
 from disco.bot.command import CommandError
-from disco.util.logging import logging
 from requests.exceptions import ConnectionError
 
 log = logging.getLogger(__name__)

@@ -36,7 +36,7 @@ def disco_main(run=False):
     from disco.bot import Bot, BotConfig
     from disco.util.logging import setup_logging, LOG_FORMAT
 
-    from bot.base.base import bot
+    from bot.base import bot
 
     args = bot.local.disco
 
@@ -56,17 +56,19 @@ def disco_main(run=False):
         AutoSharder(config).run()
         return
 
+    # Setup logging based on the configured level
+
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+
     file_handler = logging.FileHandler("logs/bot.log")
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
     file_handler.setLevel(config.log_level.upper())
     stream_handler = logging.StreamHandler()
-    # Setup logging based on the configured level
     setup_logging(
         handlers=(file_handler, stream_handler),
         level=getattr(logging, config.log_level.upper()),
     )
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
 
     # Build out client object
     client = Client(config)
@@ -89,4 +91,4 @@ def disco_main(run=False):
 
 
 if __name__ == '__main__':
-    disco_main(True)
+    disco_main(True) # KeyboardInterrupt

@@ -12,10 +12,10 @@ from requests import get
 from urllib.parse import quote_plus
 
 
-from bot.base.base import bot
+from bot.base import bot
 from bot.util.misc import api_loop, AT_to_id, get_dict_item
 from bot.util.react import generic_react
-from bot.util.sql import aliases, db_session, handle_sql, friends, users
+from bot.util.sql import aliases, db_session, friends, handle_sql, periods, users
 
 log = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ class fmPlugin(Plugin):
                 guild_id=event.guild.id,
             ).all)
             user = self.client.api.guilds_members_get(event.guild.id, target)
-            if len(data) != 0:
+            if data:
                 inline = {
                     str(index + 1): alias.alias for
                     index, alias in enumerate(data)}
@@ -195,7 +195,7 @@ class fmPlugin(Plugin):
         data = handle_sql(db_session.query(friends).filter_by(
             master_id=event.author.id,
         ).all)
-        if len(data) == 0:
+        if not data:
             api_loop(
                 event.channel.send_message,
                 "You don't have any friends, use ``fm.friends add @`` to get some.",
@@ -348,7 +348,7 @@ class fmPlugin(Plugin):
             cool_down=3600,
         )
         artist_data = artist_data["results"]["artistmatches"]["artist"]
-        if len(artist_data) != 0:
+        if artist_data:
             content, embed = self.search_artist_react(artist_data, 0)
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(artist_data) > 5 and not event.channel.is_dm:
@@ -396,7 +396,7 @@ class fmPlugin(Plugin):
             cool_down=3600,
         )
         album_data = album_data["results"]["albummatches"]["album"]
-        if len(album_data) != 0:
+        if album_data:
             content, embed = self.search_album_react(album_data, 0)
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(album_data) > 5 and not event.channel.is_dm:
@@ -444,7 +444,7 @@ class fmPlugin(Plugin):
             cool_down=3600,
         )
         track_data = track_data["results"]["trackmatches"]["track"]
-        if len(track_data) != 0:
+        if track_data:
             content, embed = self.search_track_react(track_data, 0)
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(track_data) > 5 and not event.channel.is_dm:
@@ -574,19 +574,13 @@ class fmPlugin(Plugin):
         """
         if period is not None:
             period = period.replace(" ", "").strip("s").lower()
-            if period in (
-                    "overall",
-                    "7day",
-                    "1month",
-                    "3month",
-                    "6month",
-                    "12month"):
+            if period in periods.values():
                 data = self.get_user_info(event.author.id)
                 handle_sql(
                     db_session.query(users).filter_by(
                         user_id=event.author.id,
                     ).update,
-                    {"period": period},
+                    {"period": {y: x for x, y in periods.items()}[period],},
                 )
                 handle_sql(db_session.flush)
                 api_loop(
@@ -620,7 +614,7 @@ class fmPlugin(Plugin):
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            title_template=("Top tracks for {} over " +
+            title_template=("Top tracks for {} over" +
                             (" " + period).replace(" over", "")),
             footer_text="Requested by {}".format(event.author),
             footer_img=event.author.get_avatar_url(size=32),
@@ -998,10 +992,6 @@ class fmPlugin(Plugin):
         else:
             raise CommandError("Invalid username format.")
 
-    @Plugin.command("testicles", "<username:str...>")
-    def on_testicles_command(self, event, username):
-        return self.get_last_account(username)
-
     def get_user_info(self, target:str, guild:int=None):
         """
         Used to get a Discord user's information from the SQL server.
@@ -1050,12 +1040,12 @@ class fmPlugin(Plugin):
             user = users(user_id=target)
             handle_sql(db_session.add, user)
             handle_sql(db_session.flush)
-            data = {"user_id": target, "username": None, "period": "overall"}
+            data = {"user_id": target, "username": None, "period": periods[0]}
         else:
             data = {
                 "user_id": data.user_id,
                 "username": data.last_username,
-                "period": data.period,
+                "period": periods[data.period],
             }
         if data["username"] is None:
             raise CommandError("User should set a last.fm account using ``fm.username``")

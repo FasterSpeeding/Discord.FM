@@ -1,21 +1,18 @@
 from datetime import datetime
 from time import sleep
+import logging
 import threading
 
 
 from disco.bot.command import CommandError
 from disco.types.user import Game, Status, GameType
-from disco.util.logging import logging
 from requests import post, RequestException
 
 
+from bot.base import optional
 from bot.util.sql import db_session, guilds, handle_sql
 
 log = logging.getLogger(__name__)
-
-
-def optional(**kwargs):
-    return {index: data for index, data in kwargs.items() if data is not None}
 
 
 class api_basis:
@@ -106,7 +103,7 @@ class status_thread_handler(object):
             ))
         else:
             if r.status_code == 200:
-                log.info("Posted guild count ({}) to {}".format(
+                log.debug("Posted guild count ({}) to {}".format(
                     guilds_payload.Count,
                     service.__name__,
                 ))
@@ -127,8 +124,7 @@ class status_thread_handler(object):
         )
 
     def sql_guilds_refresh(self):
-        guilds_copy = list(self.bot.client.state.guilds)[:]
-        for guild in guilds_copy:
+        for guild in self.bot.client.state.guilds.copy().keys():
             try:
                 guild_object = self.bot.client.state.guilds.get(guild, None)
                 if guild_object is not None:

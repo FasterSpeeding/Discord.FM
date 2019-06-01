@@ -1,38 +1,32 @@
+from datetime import datetime
 from json import load
+import logging
 import os
 
 
 from disco.bot.command import CommandError
-from disco.util.logging import logging
 from sqlalchemy import (
     create_engine, PrimaryKeyConstraint,
     create_engine, Column, exc)
 from sqlalchemy.dialects.mysql import *
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
-# import OperationalError
-# from sqlalchemy.exc import OperationlError
+from pymysql import err
 
-from bot.base.base import bot
+from bot.base import bot
 
 log = logging.getLogger(__name__)
 
-ssl_args = {}
-
 if bot.local.sql.server is not None:
-    if (os.path.exists("certs/") and os.path.isfile("certs/ca-cert.pem")):
-        ssl_args = {"ssl": {
-            "ca": "certs/ca-cert.pem",
-            "cert": "certs/client-cert.pem",
-            "key": "certs/client-key.pem",
-            }}
     sql = bot.local.sql
     server_payload = f"mysql+pymysql://{sql.user}:{sql.password}@{sql.server}/{sql.database}"
     log.info(f"Connecting to SQL server @{sql.server}.")
+    args = sql.args()
 else:
     if not os.path.exists("logs"):
         os.makedirs("data")
     log.info("Defaulting to local SQL database.")
+    args = {}
     server_payload = "sqlite+pysqlite:///data/sql_database.db"
 engine = create_engine(
     server_payload,
@@ -40,7 +34,7 @@ engine = create_engine(
     pool_recycle=3600,
     pool_pre_ping=True,
     echo=False,
-    connect_args=ssl_args,
+    connect_args=args,
 )
 try:
     engine.execute("SELECT 1")
@@ -130,7 +124,7 @@ class guilds(Base):
             self,
             guild_id:int,
             prefix:str=(bot.local.disco.bot.commands_prefix  or "fm."),
-            last_seen:str=None,
+            last_seen:str=datetime.now().isoformat(),
             name:str=None):
         self.guild_id = guild_id
         self.prefix = prefix
@@ -140,6 +134,14 @@ class guilds(Base):
     def __repr__(self):
         return f"users({self.guild_id}, {self.prefix}, {self.last_seen}, {self.name})"
 
+periods = {
+    0: "overall",
+    7: "7day",
+    1: "1month",
+    3: "3month",
+    6: "6month",
+    12: "12month",
+}
 
 class users(Base):
     __tablename__ = "users"
@@ -156,16 +158,16 @@ class users(Base):
     )
     period = Column(
         "period",
-        TEXT,
+        INTEGER,
         nullable=True,
-        default="overall",
+        default=0,
     )
 
     def __init__(
             self,
             user_id:int,
             last_username:str=None,
-            period:str="overall"):
+            period:int=0):
         self.user_id = user_id
         self.last_username = last_username
         self.period = period

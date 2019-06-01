@@ -20,9 +20,8 @@ except ImportError:
     from json import load
 
 
-from bot.base.base import bot
+from bot.base import bot
 from bot.util.misc import api_loop
-
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +37,7 @@ class Queue_handler_thread(object):
 
     def queue_check(self):
         while True:
-            for guild in list(self.bot.guilds):  # [:]
+            for guild in self.bot.guilds.copy().keys():
                 guild_object = self.bot.guilds.get(guild, None)
                 try:
                     guild_object.guild_check()
@@ -70,8 +69,8 @@ class lonely_thread_handler(object):
         self.thread.start()
 
     def lonely_check(self):
-        while True:  # do a copy of the guilds list to avoid issues plus index error check
-            for guild in self.bot.guilds:
+        while True:
+            for guild in self.bot.guilds.copy():
                 to_pass = False
                 for x, y in self.bot.state.guilds[guild].members.items():
                     if (y.get_voice_state() is not None and
@@ -81,24 +80,15 @@ class lonely_thread_handler(object):
                         to_pass = True
                         break
                 if to_pass:
-                    continue  # sometime, something, this isn't very scalable.
-                if self.bot.guilds[guild].thread.isAlive():
-                    self.bot.guilds[guild].thread_end = True
-                    self.bot.guilds[guild].thread.join()
-                self.bot.guilds[guild].player.disconnect()
-                self.marked_for_delete.append(guild)
-            to_delete = self.marked_for_delete[:]
-            for guild in to_delete:
-                if guild in self.bot.guilds:
-                    if self.bot.guilds[guild].thread.isAlive():
-                        self.bot.guilds[guild].thread_end = True
-                        self.bot.guilds[guild].thread.join()
-                    del self.bot.guilds[guild]
-            self.marked_for_delete = list(
-                set(
-                    self.marked_for_delete
-                ) - set(to_delete)
-            )
+                    continue
+                self.bot.remove_player(guild)
+            if self.marked_for_delete:
+                for guild in self.marked_for_delete.copy():
+                    try:
+                        self.bot.remove_player(guild)
+                    except CommandError:
+                        continue
+                    self.marked_for_delete.remove(guild)
             if self.thread_end:
                 log.info("Ending lonely check thread.")
                 break
@@ -161,7 +151,7 @@ class MusicPlugin(Plugin):
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
         if type(event.unavailable) is Unset:
-            if guild_id in self.guilds:
+            if event.id in self.guilds:
                 if self.self.guilds[event.id].thread.isAlive():
                     self.self.guilds[event.id].thread_end = True
                     self.self.guilds[event.id].thread.join()
@@ -222,6 +212,16 @@ class MusicPlugin(Plugin):
             raise CommandError("I'm not currently playing music here.")
         return self.guilds.get(guild_id)
 
+    def remove_player(self, guild_id):
+        if guild_id not in self.guilds:
+            raise CommandError("I'm not currently playing music here.")
+        else:
+            self.get_player(guild_id).player.disconnect()
+            if self.get_player(guild_id).thread.isAlive():
+                self.get_player(guild_id).thread_end = True
+                self.get_player(guild_id).thread.join()
+            del self.guilds[guild_id]
+
     def same_channel_check(self, event):
         try:
             user_state = event.guild.get_member(event.author).get_voice_state()
@@ -250,11 +250,7 @@ class MusicPlugin(Plugin):
         Accepts no arguments.
         """
         self.pre_check(event)
-        self.get_player(event.guild.id).thread_end = True
-        if self.get_player(event.guild.id).thread.isAlive():
-            self.get_player(event.guild.id).thread.join()
-        self.get_player(event.guild.id).player.disconnect()
-        self.lonely.marked_for_delete.append(int(event.guild.id))
+        self.remove_player(event.guild.id)
 
     @Plugin.command("play", "[type:str] [content:str...]")
     def on_play(self, event, type="yt", content=None):
@@ -485,7 +481,7 @@ class MusicPlugin(Plugin):
     @Plugin.command("skip")
     def on_skip(self, event):
         """
-        Voice Play the next song in the playing queue.
+        Voice Play the next song in the queue.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -547,7 +543,7 @@ class MusicPlugin(Plugin):
         Accepts no arguments.
         """
         self.pre_check(event)
-        if len(self.get_player(event.guild.id).queue) == 0:
+        if not self.get_player(event.guild.id).queue:
             return event.channel.send_message("There aren't any songs queued.")
         ytdata = self.get_ytdl_values(
             self.get_player(event.guild.id).queue[0].metadata,
@@ -570,7 +566,7 @@ class MusicPlugin(Plugin):
         Otherwise, if no arguments are passed, this will return the current length of the queue.
         """
         self.pre_check(event)
-        if len(self.get_player(event.guild.id).queue) == 0:
+        if not self.get_player(event.guild.id).queue:
             api_loop(
                 event.channel.send_message,
                 "There aren't any songs queued right now.",
@@ -614,7 +610,7 @@ class MusicPlugin(Plugin):
                         self.get_player(event.guild.id).queue.index(item)+1,
                         ratio,
                     )] = item.metadata["title"]
-            if len(matched_list) != 0:
+            if matched_list:
                 embed = bot.generic_embed_values(
                     title="Queue search results",
                     footer_text="Requested by {}".format(event.author),
@@ -668,7 +664,7 @@ class MusicPlugin(Plugin):
         """
         self.pre_check(event)
         self.same_channel_check(event)
-        if len(self.get_player(event.guild.id).queue) != 0:
+        if self.get_player(event.guild.id).queue:
             self.get_player(event.guild.id).queue.clear()
             api_loop(event.channel.send_message, "The queue has been cleared.")
         else:
@@ -686,7 +682,7 @@ class MusicPlugin(Plugin):
         """
         self.pre_check(event)
         self.same_channel_check(event)
-        if len(self.get_player(event.guild.id).queue) == 0:
+        if not self.get_player(event.guild.id).queue:
             api_loop(
                 event.channel.send_message,
                 "There aren't any songs queued right now.",
@@ -744,7 +740,7 @@ class psuedo_queue(object):
         return yt_object
 
     def guild_check(self):
-        if len(self.queue) != 0:
+        if self.queue:
             if (not self.waiting and not self.paused and
                   (self.start_time == 0 or self.current_length < 5 or
                     time() - self.start_time >=
@@ -771,7 +767,7 @@ class psuedo_queue(object):
                     self.thread.start()
 
     def skip(self):
-        if len(self.queue) != 0:
+        if self.queue:
             try:
                 piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                 self.player.queue.append(piped)
@@ -815,13 +811,13 @@ class psuedo_queue(object):
                     self.paused = False
                     self.paused_length = 0
                     del self.queue[0]
-            elif (not self.waiting and len(self.queue) == 0 and
+            elif (not self.waiting and not self.queue and
                   time() - self.start_time
                   >= self.current_length + self.paused_length + 2):
                 self.player.disconnect()
                 self.thread_end = True
-                if int(self.id) not in self.bot.lonely.marked_for_delete:
-                    self.bot.lonely.marked_for_delete.append(int(self.id))
+                if id not in self.bot.marked_for_delete:
+                    self.bot.lonely.marked_for_delete.append(self.id)
             if self.thread_end:
                 break
             sleep(self.interval)

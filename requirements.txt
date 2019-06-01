@@ -7,4 +7,5 @@ python-Levenshtein
 ujson
 youtube-dl
 pymysql
+pyyaml
 sqlalchemy
