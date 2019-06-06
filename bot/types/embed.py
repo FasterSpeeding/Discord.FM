@@ -3,6 +3,7 @@ from disco.util.logging import logging
 
 log = logging.getLogger(__name__)
 
+
 class generic_embed_values:
     def __init__(self, local):
         self.local = local
@@ -27,24 +28,28 @@ class generic_embed_values:
             color:str=None,
             **kwargs):
         generic_embed = DiscoMessageEmbed()
-        if color != None:
+        if color:
             generic_embed.color = color
         else:
             generic_embed.color = self.local.embed_values.color
-        if author_name != None:
-            generic_embed.set_author(name=author_name, url=author_url, icon_url=author_icon)
-        if title != None:
+        if author_name:
+            generic_embed.set_author(
+                name=author_name,
+                url=author_url,
+                icon_url=author_icon,
+            )
+        if title:
             generic_embed.title = str(title)[:256]
-            if url != None:
+            if url:
                 generic_embed.url = url
-        if thumbnail != None:
+        if thumbnail:
             generic_embed.set_thumbnail(url=thumbnail)
-        if description != None:
+        if description:
             generic_embed.description = str(description)[:2048]
-        if non_inlines != None:
-            for non_inline_field, data in non_inlines.items():   # {k: mydict[k] for k in list(mydict)[:25]} for 25 entry limit
-                if data == None:
-                    if skip_non_inlines != None:
+        if non_inlines:
+            for non_inline_field, data in non_inlines.items():  # [:25]
+                if data is None:
+                    if skip_non_inlines:
                         data = skip_non_inlines
                     else:
                         continue
@@ -53,12 +58,11 @@ class generic_embed_values:
                     value=str(data)[:1024],
                     inline=False,
                 )
-        if inlines != None:
-            for inline_field, data in inlines.items():
-                if data == None:
+        if inlines:
+            for inline_field, data in inlines.items():  # [:25]
+                if data is None:
                     if not skip_inlines:
                         data = skip_inlines
-                    #    generic_embed.add_field(name=inline_field[:256], value=data[:1024], inline=True)
                     else:
                         continue
                 generic_embed.add_field(
@@ -66,10 +70,13 @@ class generic_embed_values:
                     value=str(data)[:1024],
                     inline=True,
                 )
-        if image != None:
+        if image:
             generic_embed.set_image(url=image)
-        if timestamp != None:
-            generic_embed.timestamp = timestamp #event.msg.timestamp.isoformat()
-        if footer_text != None:
-            generic_embed.set_footer(icon_url=footer_img, text=str(footer_text)[:2048])
+        if timestamp:
+            generic_embed.timestamp = timestamp
+        if footer_text:
+            generic_embed.set_footer(
+                icon_url=footer_img,
+                text=str(footer_text)[:2048],
+            )
         return generic_embed

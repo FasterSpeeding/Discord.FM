@@ -1,5 +1,3 @@
-# hecking reacts don't work in dms
-# write in checks for missing permissions like message embed etc
 from time import sleep, time
 import logging
 
@@ -36,7 +34,7 @@ class reactor_object:  # implement this
             self,
             channel_id:int,
             message_id:int,
-            end_time:int = None,
+            end_time:int=None,
             conditions:list=None,
             **kwargs):
         """
@@ -99,11 +97,12 @@ class reactors_handler(object):
             author_id,
             *args,
             channel=None,
-            time:int=30):
+            time=30):
         if isinstance(message, Message):
             if (message.id is None or message.channel is None or
                     message.channel.id is None):
-                log.info("Failed to add reactors, either message.id or message.channel or message.channel.id was None.")
+                log.info("Failed to add reactors, either message.id or "
+                         "message.channel or message.channel.id was None.")
                 return
             message_id = message.id
             channel_id = message.channel.id
@@ -112,13 +111,15 @@ class reactors_handler(object):
             if channel_id is not None:
                 if isinstance(channel_id, Channel):
                     if channel_id.id is None:
-                        log.info("Failed to add reactors, channel_id.id was None.")
+                        log.info("Failed to add reactors, "
+                                 "channel_id.id was None.")
                         return
                     channel_id = channel_id.id
                 else:
                     channel_id = int(channel_id)
             else:
-                raise Exception("Unable to add reactor, either unable to work out channel id or missing channel id.")
+                raise Exception("Unable to add reactor, either unable to "
+                                "work out channel id or missing channel id.")
         for reactor in args:
             self.add_argument(
                 id=message_id,
@@ -136,7 +137,6 @@ class reactors_handler(object):
             except APIException as e:
                 if e.code == 10008:
                     if message_id in self.events:
-                        # self.events.pop(message_id, None)
                         del self.events[message_id]
                     break
                 elif e.code == 50001:
@@ -159,7 +159,8 @@ class reactors_handler(object):
                 elif e.code == 50013:
                     client.client.api.channels_messages_create(
                         channel=channel_id,
-                        content="Missing permission required to clear message reactions ``Manage Messages``.",
+                        content=("Missing permission required to clear "
+                                 "message reactions ``Manage Messages``."),
                     )
                 else:
                     raise e

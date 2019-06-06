@@ -3,6 +3,8 @@ The CLI module is a small utility that can be used as an easy entry point for
 creating and running bots/clients.
 """
 import os
+import subprocess
+import sys
 import six
 import logging
 
@@ -21,6 +23,7 @@ CONFIG_OVERRIDE_MAPPING = {
     'manhole_bind': 'manhole_bind',
     'encoder': 'encoder',
 }
+log = logging.getLogger(__name__)
 
 
 def disco_main(run=False):
@@ -36,9 +39,39 @@ def disco_main(run=False):
     from disco.bot import Bot, BotConfig
     from disco.util.logging import setup_logging, LOG_FORMAT
 
+
     from bot.base import bot
 
     args = bot.local.disco
+
+    if sys.platform == "linux" or sys.platform == "linux2":
+        print("Sudo access may be required to keep youtube-dl up to date.")
+        if (any("voice" in plugin for plugin in bot.local.disco.plugin) or
+                any("voice" in plugin for plugin in bot.local.disco.bot.plugins)):
+            try:
+                subprocess.call([
+                    "sudo",
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--upgrade",
+                    "youtube-dl",
+                ])
+            except FileNotFoundError as e:
+                if e.filename == "sudo":
+                    subprocess.call([
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--upgrade",
+                        "youtube-dl",
+                    ])
+                else:
+                    raise e
+    else:
+        print(f"System {sys.platform} may not be supported, Linux is suggested.")
 
     # Create the base configuration object
     if args.config:
@@ -91,4 +124,14 @@ def disco_main(run=False):
 
 
 if __name__ == '__main__':
-    disco_main(True) # KeyboardInterrupt
+    from bot.util.sql import handle_sql, db_session
+    disco = disco_main(False)
+    try:
+         disco.run_forever()
+    except KeyboardInterrupt:
+        log.info("Keyboard interrupt received, unloading plugins.")
+        for plugin in disco.plugins.copy().values():
+            log.info("Unloading plugin: " + plugin.__class__.__name__)
+            disco.rmv_plugin(plugin.__class__)
+            log.info("Successfully unloaded plugin: " + plugin.__class__.__name__)
+        handle_sql(db_session.flush)

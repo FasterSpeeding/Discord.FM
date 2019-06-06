@@ -1,21 +1,21 @@
 # Discord.FM
-Discord.FM is a Discord designed for retrieving statistics and data from Last.fm whilest facilitating more community elements through allowing people to link their Last.FM accounts.
+Discord.FM is a Discord bot designed for retrieving statistics and data from Last.fm, whilst facilitating more community elements by allowing people to link their Last.FM accounts.
 
 # Installation
 
 ## Prerequisites
 
-This bot is designed primarily with Python 3.6 in mind in a Linux environment.
+This bot is designed primarily with Python 3.6 and a Linux environment in mind and may not function properly in other conditions.
 
-To install the neccessary Python modules use the following command in the bot's folder: 
+To install the necessary Python modules, use the following command in the bot's folder (with `sudo` not being required in all environments: 
 
-``pip3 install -r requirements.txt``
+``sudo pip3 install -r requirements.txt``
 
 In-order to enable voice functionality, you need to install ffmpeg3 and keep youtube-dl up-to-date for voice functionality to work using:
 
 ``sudo apt-get install ffmpeg3`` | ``pip3 install --upgrade youtube-dl``
 
-Whilest you could just randomly run ``pip3 install --upgrade youtube-dl`` to keep youtube-dl up-to-date, this bot is designed to update youtube-dl on startup and I'd recommend following the releases at their [github repository](https://github.com/ytdl-org/youtube-dl).
+Whilst you could just randomly run ``pip3 install --upgrade youtube-dl`` to keep youtube-dl up-to-date, this bot is designed to update youtube-dl on startup and I'd recommend following the releases at their [github repository](https://github.com/ytdl-org/youtube-dl).
 
 ## Setup
 
@@ -29,7 +29,7 @@ To enable the bot, you will have to create a new Discord application [here](http
 ```
 
 ### API access
-In-order enable the relevant API functions, you will have to setup accounts and get api keys or IDs and secrets from the relative websites, enable access to the relevent end points and put them into the relevant api entries in config.json.
+In-order enable the relevant API functions, you will have to setup accounts and get api keys or IDs and secrets from the relative websites, enable access to the relevant end points and put them into the relevant api entries in config.json.
 
 ```
 "api": {
@@ -42,7 +42,7 @@ In-order enable the relevant API functions, you will have to setup accounts and 
 
 ## Optional
 
-Whilest this bot will default to making and running off an sqlite database (``data/sql_database.db``), you can hock this bot up to an SQL server by adding the following to config.json with your own data inserted:
+whilst this bot will default to running off an automatically generated local sqlite database (``data/database.db``), you can hook it up to an SQL server by adding the following to config.json with your own data inserted:
 
 ```json
 "sql": {
@@ -53,15 +53,15 @@ Whilest this bot will default to making and running off an sqlite database (``da
 }
 ```
 
-In-order to enable SQL access over SSL, you can add a combination of the following values and the paths to the relative files to sql in config.json.
+In-order to enable SQL access over SSL, you can add a combination of the following values and the paths (to the relative files) to sql in config.json.
 
 ```json
 "ca_path": "path/to/certificate/authority/public/key.pem",
 "cert_path": "path/to/client/certificate/path/private/certificate.pem",
-"key_path": "path/to/client/public/key.pem
+"key_path": "path/to/client/public/key.pem"
 ```
 
-\* Whenever `config.json` is mentioned in this document, this is interchangable with `config.yaml`.
+\* Whenever `config.json` is mentioned in this document, this is interchangeable with `config.yaml`.
 
 # Discord
 

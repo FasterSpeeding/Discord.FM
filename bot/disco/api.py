@@ -14,6 +14,7 @@ from requests import get, post
 from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.react import generic_react
+from bot.util.sql import db_session, guilds, handle_sql
 
 log = logging.getLogger(__name__)
 
@@ -31,17 +32,29 @@ class ApiPlugin(Plugin):
             "user_agent",
         )
         bot.init_help_embeds(self)
-        bot.custom_prefix_init(self)
 
     def unload(self, ctx):
-        pass
+        bot.unload_help_embeds(self)
+        super(ApiPlugin, self).unload(ctx)
 
-    @Plugin.command("lyrics", "<content:str...>")
+    @Plugin.command("lyrics", "<content:str...>", metadata={"help": "api"})
     def on_lyrics_command(self, event, content):
         """
-        Api Return lyrics for a song.
+        Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
+        guild = handle_sql(
+            db_session.query(guilds).get, guild_id=event.guild.id,
+        )
+        if not guild:
+            guild = guilds(guild_id=event.guild.id)
+            handle_sql(db_session.add, guild)
+            handle_sql(db_session.flush)
+        if guild.lyrics_limit <= 0:
+            return api_loop(
+                event.channel.send_message,
+                "This command has been disabled in this guild.",
+            )
         first_message = api_loop(
             event.channel.send_message,
             "Searching for lyrics...",
@@ -53,21 +66,20 @@ class ApiPlugin(Plugin):
         if len(lyrics) > 46300:
             return first_message.edit("I doubt that's a song.")
         if not lyrics:
-            return first_message.edit("No Lyrics found for ``{}``".format(
-                sanitize(
-                    content,
-                    escape_codeblocks=True,
-                )
-            ))
+            content = sanitize(content, escape_codeblocks=True)
+            return api_loop(
+                first_message.edit,
+                f"No Lyrics found for ``{content}``",
+            )
         lyrics_embed = bot.generic_embed_values(
             title=title,
-            footer_text="Requested by {}".format(event.author),
+            footer_text=f"Requested by {event.author}",
             footer_img=event.author.get_avatar_url(size=32),
             timestamp=event.msg.timestamp.isoformat(),
         )
         first_message.delete()
-        responses = 1
-        while lyrics and responses < 4:
+        responses = 0
+        while lyrics and responses < (guild.lyrics_limit or 3):
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
             if lyrics:
@@ -79,31 +91,85 @@ class ApiPlugin(Plugin):
             api_loop(event.channel.send_message, embed=lyrics_embed)
             responses += 1
 
-    @Plugin.command("spotify", "<type:str> [search:str...]")
+    @Plugin.command("limit lyrics", "[limit:int]", metadata={"help": "api"})
+    def on_lyrics_limit_command(self, event, limit=None):
+        """
+        Used to set the maximum amount of embeds sent by the lyrics command.
+        Only argument is an integer that must be between 0 and 8.
+        When set to 0, the lyrics command will be disabled.
+        """
+        if limit:
+            member = event.guild.get_member(event.author)
+            if member.permissions.can(32):  # manage server
+                if not 0 <= limit <= 8:
+                    return api_loop(
+                        event.channel.send_message,
+                        "The limit can only be between 0 and 8.",
+                    )
+                guild = handle_sql(
+                    db_session.query(guilds).filter_by(
+                        guild_id=event.guild.id,
+                    ).first,
+                )
+                if not guild:
+                    guild = guilds(
+                        guild_id=event.guild_id,
+                        lyrics_limit=limit,
+                    )
+                    handle_sql(db_session.add, guild)
+                    handle_sql(db_session.flush)
+                else:
+                    handle_sql(
+                        db_session.query(guilds).filter_by(
+                            guild_id=event.guild.id,
+                        ).update,
+                        {"lyrics_limit": limit},
+                    )
+                api_loop(
+                    event.channel.send_message,
+                    f"Changed lyric response embed limit to {limit}.",
+                )
+            else:
+                api_loop(
+                    event.channel.send_message,
+                    "This command is limited to server admins.",
+                )
+        else:
+            guild = handle_sql(
+                    db_session.query(guilds).filter_by(
+                        guild_id=event.guild.id,
+                    ).first,
+                )
+            limit = (guild.lyrics_limit or 3)
+            api_loop(
+                    event.channel.send_message,
+                    f"The current limit is set to {limit}",
+                )
+
+    @Plugin.command("spotify", "<type:str> [search:str...]", metadata={"help": "api"})
     def on_spotify_command(self, event, type, search=""):
         """
-        Api Search for an item on Spotify.
+        Search for an item on Spotify.
         If the first argument is in the list
             "track", "album", "artist" or "playlist",
             then the relevant search point will be used.
         Otherwise, it will assume the user wants to find a track.
         """
         self.pre_check("spotify_ID", "spotify_secret")
-        auth = urlsafe_b64encode("{}:{}".format(
-            self.spotify_ID,
-            self.spotify_secret
-        ).encode()).decode()
+        auth = urlsafe_b64encode(
+            f"{self.spotify_ID}:{self.spotify_secret}".encode()
+        ).decode()
 
         spotify_auth = getattr(self, "spotify_auth", None)
         if spotify_auth is not None and ((time() - self.spotify_auth_time)
-                >= self.spotify_auth_expire):
+                                         >= self.spotify_auth_expire):
             get_auth = True
         else:
             get_auth = False
         if spotify_auth is None or get_auth:
             self.get_spotify_auth(auth)
         if type not in ("track", "album", "artist", "playlist"):
-            search = "{} {}".format(type, search)
+            search = f"{type} {search}"
             type = "track"
         elif search == "":
             return api_loop(
@@ -111,24 +177,23 @@ class ApiPlugin(Plugin):
                 "Missing search argument.",
             )
         r = get(
-            "https://api.spotify.com/v1/search?q={}&type={}".format(
-                quote_plus(search),
-                type,
-            ),
+            "https://api.spotify.com/v1/search",
+            params={
+                "q": search,
+                "type": type,
+            },
             headers={
-                "Authorization": "Bearer {}".format(self.spotify_auth),
+                "Authorization": f"Bearer {self.spotify_auth}",
                 "User-Agent": self.user_agent,
                 "Content-Type": "application/json",
             },
         )
         if r.status_code == 200:
             if not r.json()[type+"s"]["items"]:
+                search = sanitize(search, escape_codeblocks=True)
                 return api_loop(
                     event.channel.send_message,
-                    "{}: ``{}`` not found.".format(
-                        type,
-                        sanitize(search, escape_codeblocks=True)
-                    )
+                    f"{type}: ``{search}`` not found."
                 )
             url = r.json()[type+"s"]["items"][0]["external_urls"]["spotify"]
             reply = api_loop(event.channel.send_message, url)
@@ -155,7 +220,7 @@ class ApiPlugin(Plugin):
             log.warning(r.text)
             api_loop(
                 event.channel.send_message,
-                "Error code {} returned".format(r.status_code),
+                f"Error code {r.status_code} returned.",
             )
 
     def get_spotify_auth(self, auth):
@@ -164,16 +229,14 @@ class ApiPlugin(Plugin):
             "https://accounts.spotify.com/api/token",
             data={"grant_type": "client_credentials"},
             headers={
-                "Authorization": "Basic {}".format(auth),
+                "Authorization": f"Basic {auth}",
                 "User-Agent": self.user_agent,
             },
         )
         if r.status_code != 200:
             log.warning(r.text)
             raise CommandError(
-                "Error code {} returned by initial".format(
-                    r.status_code,
-                )
+                f"Error code {r.status_code} returned by oauth flow"
             )
         self.spotify_auth = r.json()["access_token"]
         self.spotify_auth_expire = r.json()["expires_in"]
@@ -182,14 +245,10 @@ class ApiPlugin(Plugin):
     def spotify_react(self, data, index, kwargs):
         return data[index]["external_urls"]["spotify"], None
 
-    @Plugin.command(
-        "youtube",
-        "<yt_type:str> [content:str...]",
-        aliases=("yt", )
-    )
+    @Plugin.command("youtube", "<yt_type:str> [content:str...]", aliases=["yt"], metadata={"help": "api"})
     def on_youtube_command(self, event, yt_type, content=None):
         """
-        Api Search for a Youtube video.
+        Search for a Youtube video.
         If the first argument is in the list
             "video", "channel" or "playlist"
             then it will use the relevant search point.
@@ -214,14 +273,17 @@ class ApiPlugin(Plugin):
             content = yt_type
             yt_type = "video"
         elif yt_type not in yt_types_indexs:
-            content = "{} {}".format(yt_type, content)
+            content = f"{yt_type} {content}"
             yt_type = "video"
         r = get(
-            "https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=50&key={}&type={}&q={}".format(
-                self.google_key,
-                yt_type,
-                quote_plus(content),
-            ),
+            "https://www.googleapis.com/youtube/v3/search",
+            params={
+                "part": "snippet",
+                "maxResults": 50,
+                "key": self.google_key,
+                "type": yt_type,
+                "q": content,
+            },
             headers={
                 "User-Agent": self.user_agent,
                 "Content-Type": "application/json",
@@ -262,7 +324,7 @@ class ApiPlugin(Plugin):
             log.warning(r.text)
             api_loop(
                 event.channel.send_message,
-                "Error code {} returned.".format(r.status_code),
+                f"Error code {r.status_code} returned.",
             )
 
     def youtube_react(self, data, index, kwargs):
@@ -276,5 +338,5 @@ class ApiPlugin(Plugin):
         returns a CommandError if not present
         """
         for key in args:
-            if getattr(self, key, None) == None:
+            if not getattr(self, key, None):
                 raise CommandError("This function is disabled.")

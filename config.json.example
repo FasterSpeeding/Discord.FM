@@ -1,24 +1,26 @@
 {
   "disco": {
-    "token": null
-  },
-  "api": {
-    "last_key": null,
-    "google_key": null,
-    "spotify_ID": null,
-    "spotify_secret": null
-  },
-  "owners": [
-    115590097100865541
-  ],
-  "embed_values": {
-    "url": null,
-    "color": "000089"
-  },
-  "sql": {
-    "database": null,
-    "server": null,
-    "user": null,
-    "password": null
+    "token": null,
+    "bot": {
+      "levels": {
+        "115590097100865541": "owner"
+      }
+    },
+    "api": {
+      "last_key": null,
+      "google_key": null,
+      "spotify_ID": null,
+      "spotify_secret": null
+    },
+    "embed_values": {
+      "url": null,
+      "color": "000089"
+    },
+    "sql": {
+      "database": null,
+      "server": null,
+      "user": null,
+      "password": null
+    }
   }
 }

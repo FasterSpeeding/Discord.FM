@@ -9,7 +9,8 @@ from requests.exceptions import ConnectionError
 
 log = logging.getLogger(__name__)
 
-def api_loop(command, *args, **kwargs):
+
+def api_loop(command, *args, log_50007=True, **kwargs):
     init_time = time()
     while True:
         if time() - init_time > 10:
@@ -20,10 +21,13 @@ def api_loop(command, *args, **kwargs):
             log.info("Didn't catch error reset.")
         except APIException as e:
             if e.code == 50013:
-                raise CommandError("Missing permissions to respond (possibly Embed Links).")
+                raise CommandError("Missing permissions to respond "
+                                   "(possibly Embed Links).")
             else:
-                log.critical("Api exception: {}: {}".format(e.code, e))
+                if e.code != 50007 or log_50007:
+                    log.critical(f"Api exception: {e.code}: {e}")
                 raise e
+
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
     """
@@ -31,7 +35,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
     defaults to the event channel if unable to send DM.
     """
     try:
-        api_loop(dm_channel.send_message, *args, **kwargs)
+        api_loop(dm_channel.send_message, log_50007=False, *args, **kwargs)
     except APIException as e:
         if e.code == 50007:  # Wasn't able to open a DM/send DM message
             api_loop(event.channel.send_message, *args, **kwargs)
@@ -39,15 +43,15 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
             raise e
 
 
-discord_user_reg = compile("[<][@]\\d{18}[>]")
-discord_nick_reg = compile("[<][@][!]\\d{18}[>]")
-discord_id_reg = compile("\\d{18}")
+user_regex = compile(r"[<]?[@]?[!]?\d{18}[>]?")
 
 
 def AT_to_id(id:str):
-    if (discord_user_reg.match(str(id)) or discord_nick_reg.match(str(id)) or
-            discord_id_reg.match(str(id))):
-        return int(str(id).replace("<", "").replace("@", "").replace("!", "").replace(">", ""))
+    id = str(id)
+    if user_regex.fullmatch(id):
+        for to_replace in (("<", ""), ("@", ""), ("!", ""), (">", "")):
+            id = id.replace(*to_replace)
+        return int(id)
     else:
         raise CommandError("Invalid @user.")
 
