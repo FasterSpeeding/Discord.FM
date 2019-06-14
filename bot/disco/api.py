@@ -31,7 +31,7 @@ class ApiPlugin(Plugin):
             "google_cse_engine_ID",
             "user_agent",
         )
-        bot.init_help_embeds(self)
+        bot.load_help_embeds(self)
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -43,9 +43,7 @@ class ApiPlugin(Plugin):
         Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
-        guild = handle_sql(
-            db_session.query(guilds).get, guild_id=event.guild.id,
-        )
+        guild = handle_sql(guilds.query.get, event.guild.id)
         if not guild:
             guild = guilds(guild_id=event.guild.id)
             handle_sql(db_session.add, guild)
@@ -98,7 +96,7 @@ class ApiPlugin(Plugin):
         Only argument is an integer that must be between 0 and 8.
         When set to 0, the lyrics command will be disabled.
         """
-        if limit:
+        if limit is not None:
             member = event.guild.get_member(event.author)
             if member.permissions.can(32):  # manage server
                 if not 0 <= limit <= 8:
@@ -106,11 +104,7 @@ class ApiPlugin(Plugin):
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
-                guild = handle_sql(
-                    db_session.query(guilds).filter_by(
-                        guild_id=event.guild.id,
-                    ).first,
-                )
+                guild = handle_sql(guilds.query.get, event.guild.id)
                 if not guild:
                     guild = guilds(
                         guild_id=event.guild_id,
@@ -120,7 +114,7 @@ class ApiPlugin(Plugin):
                     handle_sql(db_session.flush)
                 else:
                     handle_sql(
-                        db_session.query(guilds).filter_by(
+                        guilds.query.filter_by(
                             guild_id=event.guild.id,
                         ).update,
                         {"lyrics_limit": limit},
@@ -135,11 +129,7 @@ class ApiPlugin(Plugin):
                     "This command is limited to server admins.",
                 )
         else:
-            guild = handle_sql(
-                    db_session.query(guilds).filter_by(
-                        guild_id=event.guild.id,
-                    ).first,
-                )
+            guild = handle_sql(guilds.query.get, event.guild.id)
             limit = (guild.lyrics_limit or 3)
             api_loop(
                     event.channel.send_message,

@@ -1,5 +1,3 @@
-from datetime import datetime
-from json import load
 from time import sleep
 import logging
 import os
@@ -13,18 +11,19 @@ from sqlalchemy.dialects.mysql import *
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
     scoped_session, sessionmaker, relationship)
-from pymysql import err
+# from pymysql import err
+
 
 from bot.base import bot
 
 log = logging.getLogger(__name__)
 
-if bot.local.sql.server is not None:
+if bot.local.sql.server:
     sql = bot.local.sql
     server_payload = (f"mysql+pymysql://{sql.user}:"
                       f"{sql.password}@{sql.server}/{sql.database}")
     log.info(f"Connecting to SQL server @{sql.server}.")
-    args = sql.args()
+    args = sql.args
 else:
     if not os.path.exists("logs"):
         os.makedirs("data")
@@ -100,15 +99,19 @@ class guilds(Base):
         nullable=False,
         default=3,
     )
-    alias_list = relationship("aliases", cascade="all, delete-orphan", backref="guilds")
+    alias_list = relationship(
+        "aliases",
+        cascade="all, delete-orphan",
+        backref="guilds",
+    )
 
     def __init__(
             self,
-            guild_id:int,
-            prefix:str=(bot.local.disco.bot.commands_prefix or "fm."),
-            last_seen:str=None,
-            name:str=None,
-            lyrics_limit:int=3):
+            guild_id: int,
+            prefix: str = (bot.local.disco.bot.commands_prefix or "fm."),
+            last_seen: str = None,
+            name: str = None,
+            lyrics_limit: int = 3):
         self.guild_id = guild_id
         self.prefix = prefix
         self.last_seen = last_seen
@@ -146,17 +149,25 @@ class users(Base):
     period = Column(
         "period",
         INTEGER,
-        nullable=True,
+        nullable=False,
         default=0,
     )
-    friends = relationship("friends", cascade="all, delete-orphan", backref="users")
-    aliases = relationship("aliases", cascade="all, delete-orphan", backref="users")
+    friends = relationship(
+        "friends",
+        cascade="all, delete-orphan",
+        backref="users",
+    )
+    aliases = relationship(
+        "aliases",
+        cascade="all, delete-orphan",
+        backref="users",
+    )
 
     def __init__(
             self,
-            user_id:int,
-            last_username:str=None,
-            period:int=0):
+            user_id: int,
+            last_username: str = None,
+            period: int = 0):
         self.user_id = user_id
         self.last_username = last_username
         self.period = period
@@ -186,7 +197,7 @@ class friends(Base):
         nullable=False,
     )
 
-    def __init__(self, master_id:int, slave_id:int, index:int=None):
+    def __init__(self, master_id: int, slave_id: int, index: int = None):
         self.master_id = master_id
         self.slave_id = slave_id
 
@@ -240,10 +251,7 @@ def handle_sql(f, *args, **kwargs):
         try:
             return f(*args, **kwargs)
         except exc.OperationalError as e:
-            log.warning(e)
-            log.warning(e.orig)
-            log.warning(dir(e.orig))
-            log.warning("SQL call failed.")
+            log.warning(f"SQL call failed: {e}")
             sleep(2)
             fail += 1
             previous_exception = e
@@ -254,3 +262,7 @@ for table in (friends, guilds, users, aliases):
         log.info(f"Didn't find {table.__tablename__} "
                  "table, creating new instance.")
         table.__table__.create(engine)
+
+if __name__ == "__main__":
+    conn = engine.connect()
+    print(dir(conn))

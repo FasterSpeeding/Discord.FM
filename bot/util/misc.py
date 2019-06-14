@@ -46,7 +46,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
 user_regex = compile(r"[<]?[@]?[!]?\d{18}[>]?")
 
 
-def AT_to_id(id:str):
+def AT_to_id(id: str):
     id = str(id)
     if user_regex.fullmatch(id):
         for to_replace in (("<", ""), ("@", ""), ("!", ""), (">", "")):
@@ -56,7 +56,7 @@ def AT_to_id(id:str):
         raise CommandError("Invalid @user.")
 
 
-def get_dict_item(data:dict, map:list):
+def get_dict_item(data: dict, map: list):
     """
     Get the element embeded in layered dictionaries and lists
     based off a list of indexs and keys.

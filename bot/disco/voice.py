@@ -7,7 +7,7 @@ import threading
 
 
 from disco.bot import Plugin
-from disco.bot.command import CommandError, CommandLevels 
+from disco.bot.command import CommandError, CommandLevels
 from disco.types.base import Unset
 from disco.util.logging import logging
 from disco.voice.playable import YoutubeDLInput, BufferedOpusEncoderPlayable
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 class MusicPlugin(Plugin):
     def load(self, ctx):
         super(MusicPlugin, self).load(ctx)
-        bot.init_help_embeds(self)
+        bot.load_help_embeds(self)
         self.guilds = {}
         self.cool_down = {"general": {}, "playlist": {}}
         self.marked_for_delete = []
@@ -275,7 +275,7 @@ class MusicPlugin(Plugin):
                 elif type in search_prefixs.keys() and content is None:
                     return api_loop(
                         event.channel.send_message,
-                        "Search (content) argument missing.",
+                        "Search argument missing.",
                     )
                 for key, reg in url_regs.items():
                     if re.match(reg, content):
@@ -435,10 +435,11 @@ class MusicPlugin(Plugin):
     @Plugin.command("kill", metadata={"help": "voice"})
     def on_kill(self, event):
         """
-        Used to kill voice instance connection.
+        Used to reset voice instance ws connection.
         """
         self.pre_check(event)
-        self.get_player(event.guild.id).client.ws.sock.shutdown()
+        self.get_player(event.guild.id).player.client.ws.sock.shutdown()
+        api_loop(event.channel.send_message, ":thumbsup:")
 
     @Plugin.command("skip", metadata={"help": "voice"})
     def on_skip(self, event):
@@ -632,7 +633,7 @@ class MusicPlugin(Plugin):
             player.queue = list()
             api_loop(event.channel.send_message, "Cleared playing queue.")
         elif (str(index).isdigit() and
-              0<= (int(index) - 1) <= len(player.queue)):
+              0 <= (int(index) - 1) <= len(player.queue)):
             yt_dl_object = player.pop(int(index) - 1)
             ytdata = self.get_ytdl_values(yt_dl_object.metadata)
             api_loop(

@@ -1,5 +1,4 @@
 from datetime import datetime
-from time import sleep, time
 import logging
 
 
@@ -66,6 +65,8 @@ class guildCount:
 
 
 class status_handler(object):
+    services = []
+
     def __init__(
             self,
             bot,
@@ -76,13 +77,12 @@ class status_handler(object):
         self.bot = bot
         self.bot_id = bot_id
         self.user_agent = user_agent
-        self.__services__ = {
+        self.__tokens = {
             discordbotsorg: db_token,
             discordbotsgg: gg_token,
         }
-        self.status_services = []
 
-    def post_status(self, service, guilds_payload):
+    def post(self, service, guilds_payload):
         try:
             r = post(
                 service.url,
@@ -114,9 +114,9 @@ class status_handler(object):
         this exists to counter the fact that state.me isn't present at start.
         """
         self.bot_id = (self.bot_id or self.bot.state.me.id)
-        for object, token in self.__services__.items():
+        for object, token in self.__tokens.items():
             if token is not None:
-                self.status_services.append(object(
+                self.services.append(object(
                         url={"id": self.bot_id},
                         auth=token,
                         headers={"User-Agent": self.user_agent},
@@ -127,11 +127,7 @@ class status_handler(object):
             try:
                 guild_object = self.bot.client.state.guilds.get(guild, None)
                 if guild_object is not None:
-                    sql_guild = handle_sql(
-                        db_session.query(guilds).filter_by(
-                            guild_id=guild,
-                        ).first,
-                    )
+                    sql_guild = handle_sql(guilds.query.get, guild)
                     if sql_guild is None:
                         sql_guild = guilds(
                             guild_id=guild,
@@ -142,7 +138,7 @@ class status_handler(object):
                     else:
                         try:
                             handle_sql(
-                                db_session.query(guilds).filter_by(
+                                guilds.query.filter_by(
                                     guild_id=guild,
                                 ).update,
                                 {
@@ -168,6 +164,6 @@ class status_handler(object):
         guilds_len = len(self.bot.client.state.guilds)
         guilds_payload = guildCount(guilds_len)
         self.update_presence(guilds_len)
-        for service in self.status_services:
-            self.post_status(service, guilds_payload)
+        for service in self.services:
+            self.post(service, guilds_payload)
         self.sql_guilds_refresh()

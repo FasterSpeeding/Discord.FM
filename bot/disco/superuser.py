@@ -1,6 +1,5 @@
-from threading import Thread
 from decimal import Decimal
-from time import sleep
+
 
 from disco.bot import Plugin
 from disco.bot.command import CommandLevels
@@ -17,7 +16,7 @@ log = logging.getLogger(__name__)
 class superuserPlugin(Plugin):
     def load(self, ctx):
         super(superuserPlugin, self).load(ctx)
-        bot.init_help_embeds(self)
+        bot.load_help_embeds(self)
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -94,7 +93,7 @@ class superuserPlugin(Plugin):
 
         if plugin is None:
             return api_loop(event.msg.reply, f"{plugin_name} does not exist.")
-        self.bot.rmv_plugin(plugin.__class__)
+        self.bot.reload_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
     @Plugin.command("load", "<plugin:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
@@ -109,7 +108,7 @@ class superuserPlugin(Plugin):
         else:
             api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("modules", level=CommandLevels.OWNER, metadata={"help":"owner"})
+    @Plugin.command("modules", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_modules_command(self, event):
         """
         Used to get a list of the currently loaded plugins.

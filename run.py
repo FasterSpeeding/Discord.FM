@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 def disco_main(run=False):
     """
-    Creates an argument parser and parses a standard set of command line arguments,
+    Parse config.json
     creating a new :class:`Client`.
     Returns
     -------
@@ -38,7 +38,6 @@ def disco_main(run=False):
     from disco.client import Client, ClientConfig
     from disco.bot import Bot, BotConfig
     from disco.util.logging import setup_logging, LOG_FORMAT
-
 
     from bot.base import bot
 
@@ -71,7 +70,8 @@ def disco_main(run=False):
                 else:
                     raise e
     else:
-        print(f"System {sys.platform} may not be supported, Linux is suggested.")
+        print(f"System {sys.platform} may not "
+              "be supported, Linux is suggested.")
 
     # Create the base configuration object
     if args.config:
@@ -96,7 +96,7 @@ def disco_main(run=False):
 
     file_handler = logging.FileHandler("logs/bot.log")
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-    file_handler.setLevel(config.log_level.upper())
+    file_handler.setLevel(args.file_log_level.upper())
     stream_handler = logging.StreamHandler()
     setup_logging(
         handlers=(file_handler, stream_handler),
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     from bot.util.sql import handle_sql, db_session
     disco = disco_main(False)
     try:
-         disco.run_forever()
+        disco.run_forever()
     except KeyboardInterrupt:
         log.info("Keyboard interrupt received, unloading plugins.")
         for plugin in disco.plugins.copy().values():

@@ -1,7 +1,6 @@
 from decimal import Decimal
 from re import compile
 from time import time, strftime, gmtime
-from urllib.parse import quote_plus
 
 
 from disco.bot import Plugin
@@ -9,11 +8,11 @@ from disco.bot.command import CommandError
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from requests import Session, Request
-from urllib.parse import quote_plus
+from requests.exceptions import ConnectionError
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, AT_to_id, get_dict_item
+from bot.util.misc import api_loop, AT_to_id, get_dict_item, user_regex as discord_regex
 from bot.util.react import generic_react
 from bot.util.sql import (
     aliases, db_session, friends,
@@ -33,12 +32,11 @@ class fmPlugin(Plugin):
         if not bot.local.api.last_key:
             raise Exception("Missing Last.fm api key in "
                             "config.json, cannot initalise bot.")
-        bot.init_help_embeds(self)
-        self.user_reg = compile("[a-zA-Z]{1}[a-zA-Z0-9_-]{1,14}") # {4,7}
+        bot.load_help_embeds(self)
+        self.user_reg = compile("[a-zA-Z]{1}[a-zA-Z0-9_-]{1,14}")
         self.mbid_reg = compile(
             "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}",
         )
-        self.replace_reg = compile("[{][}]")
         self.cache = {}
         self.cool_downs = {"fulluser": {}, "friends": []}
         self.prefix = (bot.local.prefix or
@@ -49,11 +47,11 @@ class fmPlugin(Plugin):
             "api_key": bot.local.api.last_key,
             "format": "json",
         }
-        self.s.headers = {
+        self.s.headers.update({
             "User-Agent": bot.local.api.user_agent,
             "Content-Type": "application/json",
-        }
-        self.url = "https://ws.audioscrobbler.com/2.0/"
+        })
+        self.BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -75,62 +73,60 @@ class fmPlugin(Plugin):
         and cannot contain Discord's reserved special characters (e.g. '@').
         """
         if event.channel.is_dm:
-            api_loop(
+            return api_loop(
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
+        if len(alias) > 20 or sanitize(alias) != alias:
+            api_loop(
+                event.channel.send_message,
+                ("Aliasas are limited to 20 characters and cannot "
+                 "contain Discord's reserved special characters."),
+            )
         else:
-            if len(alias) > 20 or sanitize(alias) != alias:
-                api_loop(
-                    event.channel.send_message,
-                    ("Aliasas are limited to 20 characters and cannot "
-                     "contain Discord's reserved special characters."),
-                )
-            else:
-                data = handle_sql(db_session.query(aliases).filter(
-                    aliases.user_id == event.author.id,
-                    aliases.guild_id == event.guild.id,
-                    aliases.alias.like(alias),
-                ).first)
-                if data is None:
-                    if (handle_sql(db_session.query(aliases).filter_by(
+            data = handle_sql(aliases.query.filter(
+                aliases.guild_id == event.guild.id,
+                aliases.alias.like(alias),
+            ).first)
+            if data is None:
+                if (handle_sql(aliases.query.filter_by(
+                    user_id=event.author.id,
+                    guild_id=event.guild.id,
+                ).count) < 5):
+                    payload = aliases(
                         user_id=event.author.id,
                         guild_id=event.guild.id,
-                    ).count) < 5):
-                        payload = aliases(
-                            user_id=event.author.id,
-                            guild_id=event.guild.id,
-                            alias=alias,
-                        )
-                        handle_sql(db_session.add, payload)
-                        handle_sql(db_session.flush)
-                        api_loop(
-                            event.channel.send_message,
-                            f"Added alias ``{alias}``.",
-                        )
-                    else:
-                        api_loop(
-                            event.channel.send_message,
-                            "You've reached the 5 alias limit for this guild."
-                        )
+                        alias=alias,
+                    )
+                    handle_sql(db_session.add, payload)
+                    handle_sql(db_session.flush)
+                    api_loop(
+                        event.channel.send_message,
+                        f"Added alias ``{alias}``.",
+                    )
                 else:
-                    if data.user_id == event.author.id:
-                        handle_sql(db_session.query(aliases).filter_by(
-                            user_id=event.author.id,
-                            guild_id=event.guild.id,
-                            alias=data.alias,
-                        ).delete)
-                        handle_sql(db_session.flush)
-                        api_loop(
-                            event.channel.send_message,
-                            f"Removed alias ``{data.alias}``.",
-                        )
-                    else:
-                        api_loop(
-                            event.channel.send_message,
-                            (f"Alias ``{data.alias}`` is "
-                             "already taken in this guild."),
-                        )
+                    api_loop(
+                        event.channel.send_message,
+                        "You've reached the 5 alias limit for this guild."
+                    )
+            else:
+                if data.user_id == event.author.id:
+                    handle_sql(aliases.query.filter_by(
+                        user_id=event.author.id,
+                        guild_id=event.guild.id,
+                        alias=data.alias,
+                    ).delete)
+                    handle_sql(db_session.flush)
+                    api_loop(
+                        event.channel.send_message,
+                        f"Removed alias ``{data.alias}``.",
+                    )
+                else:
+                    api_loop(
+                        event.channel.send_message,
+                        (f"Alias ``{data.alias}`` is "
+                         "already taken in this guild."),
+                    )
 
     @Plugin.command("alias list", "[target:str...]", metadata={"help": "last.fm"})
     def on_alias_list_command(self, event, target=None):
@@ -152,7 +148,7 @@ class fmPlugin(Plugin):
                 try:
                     target = AT_to_id(target)
                 except CommandError as e:
-                    data = handle_sql(db_session.query(aliases).filter(
+                    data = handle_sql(aliases.query.filter(
                         aliases.guild_id == event.guild.id,
                         aliases.alias.like(target),
                     ).first)
@@ -161,7 +157,7 @@ class fmPlugin(Plugin):
                                            "found in this guild.")
                     else:
                         target = data.user_id
-            data = handle_sql(db_session.query(aliases).filter_by(
+            data = handle_sql(aliases.query.filter_by(
                 user_id=target,
                 guild_id=event.guild.id,
             ).all)
@@ -189,7 +185,14 @@ class fmPlugin(Plugin):
         """
         Get an artist's info on Last.fm.
         """
-        artist_info = self.get_artist(artist)
+        artist = self.get_artist(artist)
+        artist_info = artist.get("artist")
+        if not artist_info:
+            response = artist.get("message")
+            if not response:
+                response = f"Unknown error occured {code}."
+                log.warning(f"Failed to get artist error: {artist}")
+            return api_loop(event.channel.send_message, response)
         inline = {
             "Listeners": artist_info["stats"]["listeners"],
             "Play Count": artist_info["stats"]["playcount"],
@@ -214,11 +217,12 @@ class fmPlugin(Plugin):
         Get a list of what your friends have recently listened to.
         Accepts no arguments.
         """
-        user = handle_sql(db_session.query(users).get, event.author.id)
-        if not user.friends:
+        user = handle_sql(users.query.get, event.author.id)
+        if not user or not user.friends:
             api_loop(
                 event.channel.send_message,
-                "You don't have any friends, use ``fm.friends add`` to get some.",
+                ("You don't have any friends, use "
+                 f"``{self.prefix}friends add`` to catch some."),
             )
         else:
             data = [f.slave_id for f in user.friends]
@@ -262,14 +266,12 @@ class fmPlugin(Plugin):
                     user = str(user)
                 else:
                     user = data[current_index]
-                try:
-                    friend = self.get_user_info(data[current_index])
-                except CommandError:
-                    handle_sql(
-                        db_session.query(friends).filter_by(
-                            master_id=author,
-                            slave_id=data[current_index]).delete,
-                    )
+                friend = self.get_user_info(data[current_index])
+                if not friend["username"]:
+                    handle_sql(friends.query.filter_by(
+                        master_id=author,
+                        slave_id=data[current_index]
+                    ).delete)
                     handle_sql(db_session.flush)
                     data.pop(current_index)
                     if current_index >= len(data) - 1:
@@ -318,13 +320,17 @@ class fmPlugin(Plugin):
         and won't target users that haven't setup a last.fm username.
         This command accepts either a Discord user ID or @user
         """
-        target = self.get_user_info(target, event.guild.id)["user_id"]
+        target = self.get_user_info(target, event.guild.id)
+        if not target["username"]:
+            raise CommandError("Target user doesn't have a Last.FM account setup.")
+        else:
+            target = target["user_id"]
         name = self.state.users.get(int(target))
         if name is not None:
             name = str(name)
         else:
             name = target
-        user = handle_sql(db_session.query(users).get, event.author.id)
+        user = handle_sql(users.query.get, event.author.id)
         if not user:
             user = users(user_id=event.author.id)
             handle_sql(db_session.add, user)
@@ -345,7 +351,7 @@ class fmPlugin(Plugin):
             )
         handle_sql(db_session.flush)
 
-    @Plugin.command("search artist", "<artist:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("search artists", "<artist:str...>", metadata={"help": "last.fm"})
     def on_search_artist_command(self, event, artist):
         """
         Search for an artist on Last.fm.
@@ -392,7 +398,7 @@ class fmPlugin(Plugin):
             item="Artist"
         )
 
-    @Plugin.command("search album", "<album:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("search albums", "<album:str...>", metadata={"help": "last.fm"})
     def on_search_album_command(self, event, album):
         """
         Search for an album on Last.fm.
@@ -440,7 +446,7 @@ class fmPlugin(Plugin):
             item="Album",
         )
 
-    @Plugin.command("search track", "<track:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("search tracks", "<track:str...>", metadata={"help": "last.fm"})
     def on_search_track_command(self, event, track):
         """
         Search for a track on Last.fm.
@@ -586,7 +592,7 @@ class fmPlugin(Plugin):
             if period in periods.values():
                 data = self.get_user_info(event.author.id)
                 handle_sql(
-                    db_session.query(users).filter_by(
+                    users.query.filter_by(
                         user_id=event.author.id,
                     ).update,
                     {"period": {y: x for x, y in periods.items()}[period]},
@@ -652,7 +658,7 @@ class fmPlugin(Plugin):
         api_loop(event.channel.send_message, embed=fm_embed)
 
     @Plugin.command("username", "[username:str]", metadata={"help": "last.fm"})
-    def on_username_command(self, event, username:str=None):
+    def on_username_command(self, event, username: str = None):
         """
         Set user default last.fm account.
         This command accepts a username fitting Last.FM's username format
@@ -661,10 +667,10 @@ class fmPlugin(Plugin):
         """
         if username is not None:
             username = self.get_last_account(username)["user"]["name"]
-            user = handle_sql(db_session.query(users).get, event.author.id)
+            user = handle_sql(users.query.get, event.author.id)
             if user:
                 handle_sql(
-                    db_session.query(users).filter_by(
+                    users.query.filter_by(
                         user_id=event.author.id,
                     ).update,
                     {"last_username": username},
@@ -681,9 +687,8 @@ class fmPlugin(Plugin):
                 f"Username for ``{event.author}`` changed to ``{username}``.",
             )
         else:
-            try:
-                username = self.get_user_info(event.author.id)["username"]
-            except CommandError:
+            username = self.get_user_info(event.author.id)["username"]
+            if not username:
                 api_loop(
                     event.channel.send_message,
                     f"Username not set for ``{event.author}``",
@@ -692,7 +697,7 @@ class fmPlugin(Plugin):
                 api_loop(
                     event.channel.send_message,
                     (f"Username for ``{event.author}`` currently "
-                    f"set to ``{username}``."),
+                     f"set to ``{username}``."),
                 )
 
     @Plugin.command("user", "[username:str...]", aliases=["np", "now"], metadata={"help": "last.fm"})
@@ -860,16 +865,18 @@ class fmPlugin(Plugin):
         )
         api_loop(event.channel.send_message, " ", embed=fm_embed)
 
-    @Plugin.command("reset user", "[username:str...]", metadata={"help": "data"})
+    @Plugin.command("reset user", metadata={"help": "data"})
     def on_user_reset_command(self, event):
         """
         Used to reset any user data stored by the bot (e.g. Last.fm username)
         """
-        user = handle_sql(db_session.query(users).get, event.author.id)
+        user = handle_sql(users.query.get, event.author.id)
         if user:
             handle_sql(db_session.delete, user)
             handle_sql(db_session.flush)
             api_loop(event.channel.send_message, "Removed user data.")
+        else:
+            api_loop(event.channel.send_message, ":thumbsup: Nothing to see here.")
 
     def generic_user_data(
             self,
@@ -880,8 +887,8 @@ class fmPlugin(Plugin):
         user_data = self.get_user(username, guild)
         username = user_data["name"]
         if username is None:
-            raise CommandError("User should set a last.fm "
-                               "account using ``fm.username``")
+            raise CommandError("User should set a last.fm account "
+                               f"using ``{self.prefix}username``")
         inline = {
             "Playcount": user_data["playcount"],
             "Registered": strftime(
@@ -906,22 +913,25 @@ class fmPlugin(Plugin):
         else:
             params.update({"artist": artist.lower()})
         artist_data = self.get_cached(params, cool_down=3600, item="artist")
-        return artist_data["artist"]
+        return artist_data
 
     def get_cached(
             self,
-            params:dict,
-            url:str=None,
-            cool_down:int=300,
-            item:str="item"):
-        if url is None:
-            url = self.url
+            params: dict,
+            url: str = None,
+            cool_down: int = 300,
+            item: str = "item"):
+        url = (url or self.BASE_URL)
         params = {str(key): str(value) for key, value in params.items()}
         get = self.s.prepare_request(Request("GET", url, params=params))
         url = get.url
         if (url not in self.cache or self.cache[url].exists and
                 time() >= self.cache[url].expire):
-            r = self.s.send(get)
+            try:
+                r = self.s.send(get)
+            except ConnectionError as e:
+                log.warning(e)
+                raise CommandError("Last.FM isn't available right now.")
             if r.status_code == 200:
                 if cool_down is not None:
                     self.cache[url] = type(
@@ -1006,14 +1016,21 @@ class fmPlugin(Plugin):
                 inline=inline,
             )
 
-    def get_user(self, username:str, guild:int=None):
+    def get_user(self, username: str, guild: int = None):
+        username = str(username)
         try:
-            username = self.get_user_info(username, guild=guild)["username"]
+            result = self.get_user_info(username, guild=guild)["username"]
         except CommandError:
             pass
+        else:
+            if result:
+                username = result
+            elif discord_regex.match(username):
+                raise CommandError("User should set a last.fm account "
+                                   f"using ``{self.prefix}username``")
         return self.get_last_account(username)["user"]
 
-    def get_last_account(self, username:str):
+    def get_last_account(self, username: str):
         if self.user_reg.fullmatch(username):
             params = {
                 "method": "user.getinfo",
@@ -1024,7 +1041,7 @@ class fmPlugin(Plugin):
         else:
             raise CommandError("Invalid username format.")
 
-    def get_user_info(self, target:str, guild:int=None):
+    def get_user_info(self, target: str, guild: int = None):
         """
         Used to get a Discord user's information from the SQL server.
 
@@ -1053,7 +1070,7 @@ class fmPlugin(Plugin):
             target = AT_to_id(target)
         except CommandError as e:
             if guild is not None and not isinstance(guild, bool):
-                data = handle_sql(db_session.query(aliases).filter(
+                data = handle_sql(aliases.query.filter(
                     aliases.guild_id == guild,
                     aliases.alias.like(target)
                     ).first)
@@ -1065,7 +1082,7 @@ class fmPlugin(Plugin):
                 raise CommandError("User aliases aren't enabled in DMs.")
             else:
                 raise e
-        data = handle_sql(db_session.query(users).get, target)
+        data = handle_sql(users.query.get, target)
         if data is None:
             user = users(user_id=target)
             handle_sql(db_session.add, user)
@@ -1077,23 +1094,20 @@ class fmPlugin(Plugin):
                 "username": data.last_username,
                 "period": periods[data.period],
             }
-        if data["username"] is None:
-            raise CommandError("User should set a last.fm "
-                               "account using ``fm.username``")
         return data
 
     def search_embed(
             self,
-            data:dict,
-            index:int,
-            names:list,
-            name_format:str,
-            values:list,
-            value_format:str,
-            item:str="item",
-            url_index:list=("url", ),
-            thumbnail_index:list=("image", -1, "#text"),
-            limit:int=5,
+            data: dict,
+            index: int,
+            names: list,
+            name_format: str,
+            values: list,
+            value_format: str,
+            item: str = "item",
+            url_index: list = ("url", ),
+            thumbnail_index: list = ("image", -1, "#text"),
+            limit: int = 5,
             **kwargs):  # "last"
         non_inlines = dict()
         if len(data) - index < limit:
@@ -1101,27 +1115,28 @@ class fmPlugin(Plugin):
         for x in range(limit):
             current_index = index + x
             braces = name_format.count("{}")
-            current_name = self.replace_reg.sub(
+            current_name = name_format[:].replace(
+                "{}",
                 str(current_index + 1),
-                name_format[:], 1,
+                1,
             )
             current_value = value_format[:]
             for index_list in names:
-                current_name = self.replace_reg.sub(
+                current_name = current_name.replace(
+                    "{}",
                     get_dict_item(
                         data[current_index],
                         index_list
                     ),
-                    current_name,
                     1,
                 )
             for index_list in values:
-                current_value = self.replace_reg.sub(
+                current_value = current_value.replace(
+                    "{}",
                     get_dict_item(
                         data[current_index],
                         index_list,
                     ),
-                    current_value,
                     1,
                 )
             non_inlines[current_name] = current_value
@@ -1133,7 +1148,7 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    def time_since(self, time_of_event:int):
+    def time_since(self, time_of_event: int):
         """
         A command used get the time passed since a unix time stamp
         and output it as a human readable string.

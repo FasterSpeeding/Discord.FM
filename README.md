@@ -5,7 +5,7 @@ Discord.FM is a Discord bot designed for retrieving statistics and data from Las
 
 ## Prerequisites
 
-This bot is designed primarily with Python 3.6 and a Linux environment in mind and may not function properly in other conditions.
+This bot is designed primarily with Python 3.6 and a Linux environment in mind, and may not function properly in other conditions.
 
 To install the necessary Python modules, use the following command in the bot's folder (with `sudo` not being required in all environments: 
 
@@ -42,7 +42,8 @@ In-order enable the relevant API functions, you will have to setup accounts and 
 
 ## Optional
 
-whilst this bot will default to running off an automatically generated local sqlite database (``data/database.db``), you can hook it up to an SQL server by adding the following to config.json with your own data inserted:
+Whilst this bot will default to running off an automatically generated local SQLite database (``data/database.db``), you can hook it up to an SQL server by adding the example seen bellow to config.json with your own data inserted.
+For this to function, the SQL server will need to have a database with the name entered in config pre-created, but the bot will automatically create the necessary tables.
 
 ```json
 "sql": {
@@ -53,12 +54,16 @@ whilst this bot will default to running off an automatically generated local sql
 }
 ```
 
-In-order to enable SQL access over SSL, you can add a combination of the following values and the paths (to the relative files) to sql in config.json.
+In-order to enable SQL access over SSL, you can pass through the certificate paths to the SQL adapter in the `args` dictionary in `config.json.sql`, with the key for each certificate type varying for custom SQL adapters but being the following for the default adapter.
 
 ```json
-"ca_path": "path/to/certificate/authority/public/key.pem",
-"cert_path": "path/to/client/certificate/path/private/certificate.pem",
-"key_path": "path/to/client/public/key.pem"
+"sql": {
+   "args" {
+      "ca": "path/to/certificate/authority/public/key.pem",
+      "cert": "path/to/client/certificate/path/private/certificate.pem",
+      "key": "path/to/client/public/key.pem"
+   }
+}
 ```
 
 \* Whenever `config.json` is mentioned in this document, this is interchangeable with `config.yaml`.

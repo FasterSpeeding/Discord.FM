@@ -24,6 +24,12 @@ class unset:
         self.type = type
         self.default = default
 
+    def __nonzero__(self):
+        return False
+
+    def __bool__(self):
+        return False
+
 
 class feed_dict:
     """Used for a config that takes in **kwargs"""
@@ -114,18 +120,12 @@ class api(config_template, feed_dict):
 
 class sql(config_template, feed_dict):
     __name__ = "sql"
-    __args__ = {"ca_path", "cert_path", "key_path"}
     database = unset(str)
     server = unset(str)
     user = unset(str)
     password = unset(str, default="")
-    ca_path = unset(str)
-    cert_path = unset(str)
-    key_path = unset(str)
-
-    def args(self):
-        return optional(**{key: value for key, value in self.__dict__.items()
-                        if key in self.__args__})
+    adapter = unset(str, default="mysql+pymysql")
+    args = unset(dict, default={})
 
 
 class embed_values(config_template, feed_dict):
@@ -166,6 +166,7 @@ class disco(config_template, feed_dict):
     shard_count = unset(int)
     max_reconnects = unset(int)
     log_level = unset(str)
+    file_log_level = unset(str, default="WARNING")
     manhole = unset(bool)  # manhole_enable
     manhole_bind = unset(int)
     plugin = unset(list, default=[])
@@ -211,7 +212,7 @@ class bot_frame:
         self.reactor = self.reactor()
         self.generic_embed_values = self.generic_embed_values(self.local)
 
-    def init_help_embeds(self, bot):
+    def load_help_embeds(self, bot):
         """
         Generate embeds used in the help command response
         based off @Plugin.command function docstrings.

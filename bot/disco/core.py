@@ -2,7 +2,6 @@ from datetime import datetime
 from decimal import Decimal
 from time import time
 from traceback import extract_stack
-import os
 
 
 from disco.bot import Plugin
@@ -10,7 +9,7 @@ from disco.api.http import APIException
 from disco.bot.command import CommandError, CommandEvent, CommandLevels
 from disco.types.base import Unset
 from disco.util.sanitize import S as sanitize
-from disco.util.logging import logging, LOG_FORMAT
+from disco.util.logging import logging
 try:
     from ujson import load
 except ImportError:
@@ -21,7 +20,7 @@ from bot import __GIT__, __VERSION__
 from bot.base import bot
 from bot.util.misc import api_loop, dm_default_send
 from bot.util.sql import db_session, guilds, users, handle_sql
-from bot.util.status import status_handler
+from bot.util.status import status_handler, guildCount
 
 log = logging.getLogger(__name__)
 
@@ -54,12 +53,12 @@ class CorePlugin(Plugin):
         self.command_prefix = (bot.local.prefix or
                                bot.local.disco.bot.commands_prefix or
                                "fm.")
-        bot.init_help_embeds(self)
+        bot.load_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
         self.prefixes = {}
         try:
-            for guild in handle_sql(db_session.query(guilds).all):
+            for guild in handle_sql(guilds.query.all):
                 self.prefixes[guild.guild_id] = guild.prefix
         except CommandError as e:
             log.critical("Failed to load data from guild data "
@@ -94,8 +93,8 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
         if type(event.unavailable) is Unset:
-            if handle_sql(db_session.query(guilds).filter_by(
-                guild_id=event.guild.id).first,
+            if handle_sql(
+                    guilds.query.get, event.guild.id
                     ) is None:
                 guild = guilds(
                     guild_id=event.guild.id,
@@ -109,9 +108,7 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):
         try:
-            guild = handle_sql(db_session.query(guilds).filter_by(
-                guild_id=event.guild.id,
-            ).first)
+            guild = handle_sql(guilds.query.get, event.guild.id)
             if guild is None:
                 guild = guilds(
                     guild_id=event.guild.id,
@@ -123,7 +120,7 @@ class CorePlugin(Plugin):
             else:
                 if guild.name != event.guild.name:
                     handle_sql(
-                        db_session.query(guilds).filter_by(
+                        guilds.query.filter_by(
                             guild_id=event.guild.id,
                         ).update,
                         {
@@ -140,7 +137,7 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
         if type(event.unavailable) is Unset:
-            guild = handle_sql(db_session.query(guilds).get, event.id)
+            guild = handle_sql(guilds.query.get, event.id)
             if guild:
                 handle_sql(db_session.delete, guild)
                 handle_sql(db_session.flush)
@@ -150,9 +147,14 @@ class CorePlugin(Plugin):
         """
         Used to reset any custom guild data stored by the bot (e.g. prefix)
         """
+        if event.channel.is_dm:
+            return api_loop(
+                    event.channel.send_message,
+                    "This command cannot be used in the forbidden lands.",
+                )
         member = event.guild.get_member(event.author)
         if member.permissions.can(8):  # admin
-            guild = handle_sql(db_session.query(guilds).get, event.guild.id)
+            guild = handle_sql(guilds.query.get, event.guild.id)
             if guild:
                 handle_sql(db_session.delete, guild)
                 handle_sql(db_session.flush)
@@ -160,6 +162,7 @@ class CorePlugin(Plugin):
                     event.channel.send_message,
                     "Guild data removed.",
                 )
+                self.prefixes.pop(event.guild.id, None)
         else:
             api_loop(
                 event.channel.send_message,
@@ -251,7 +254,7 @@ class CorePlugin(Plugin):
             for command_obj in self.bot.commands:
                 match = command_obj.compiled_regex.match(command)
                 if (match and (not command_obj.level or
-                        author_level >= command_obj.level)):
+                               author_level >= command_obj.level)):
                     break
             if match:
                 if command_obj.raw_args is not None:
@@ -282,7 +285,7 @@ class CorePlugin(Plugin):
                     channel,
                     content=f"``{sanitize(command)}`` command not found.",
                 )
-        user_info = handle_sql(db_session.query(users).get, event.author.id)
+        user_info = handle_sql(users.query.get, event.author.id)
         if user_info is None or user_info.last_username is None:
             dm_default_send(
                 event,
@@ -349,11 +352,7 @@ class CorePlugin(Plugin):
         """
         if not event.channel.is_dm:
             if prefix is None:
-                guild = handle_sql(
-                    db_session.query(guilds).filter_by(
-                        guild_id=event.guild.id,
-                    ).first,
-                )
+                guild = handle_sql(guilds.query.get, event.guild.id)
                 if guild is None:
                     prefix = self.command_prefix
                     guild = guilds(
@@ -373,11 +372,7 @@ class CorePlugin(Plugin):
             if member.permissions.can(32):  # manage server
                 if (event.guild.id not in self.cool_down["prefix"] or
                         self.cool_down["prefix"][event.guild.id] <= time()):
-                    if handle_sql(
-                        db_session.query(guilds).filter_by(
-                            guild_id=event.guild.id
-                        ).first,
-                    ) is None:
+                    if handle_sql(guilds.query.get, event.guild.id) is None:
                         guild = guilds(
                             guild_id=event.guild.id,
                             last_seen=datetime.now().isoformat(),
@@ -387,7 +382,7 @@ class CorePlugin(Plugin):
                         handle_sql(db_session.add, guild)
                     else:
                         handle_sql(
-                            db_session.query(guilds).filter_by(
+                            guilds.query.filter_by(
                                 guild_id=event.guild.id
                             ).update,
                             {
@@ -437,6 +432,34 @@ class CorePlugin(Plugin):
                      "https://discordapp.com/invite/jkEXqVd"),
         )
 
+    @Plugin.command("update sites", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_update_sites_command(self, event):
+        """
+        Manually post the bot's stats to the enabled bot listing sites.
+        """
+        payload = guildCount(len(self.client.state.guilds))
+        if self.status.services:
+            for service in self.status.services:
+                self.status.post(service, payload)
+            guilds = [service.__name__ for service in self.status.services]
+            api_loop(
+                event.channel.send_message,
+                f"Updated stats on {guilds}.",
+            )
+        else:
+            api_loop(
+                event.channel.send_message,
+                "No status sites are enabled in config.",
+            )
+
+    @Plugin.command("update presence", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_update_presence_command(self, event):
+        """
+        Manually update the bot's presence.
+        """
+        self.status.update_presence(len(self.client.state.guilds))
+        api_loop(event.channel.send_message, ":thumbsup:")
+
     def custom_prefix(self, event):
         if event.author.bot:
             return
@@ -473,11 +496,7 @@ class CorePlugin(Plugin):
         else:
             prefix = self.prefixes.get(event.guild_id, None)
             if prefix is None:
-                guild = handle_sql(
-                    db_session.query(guilds).filter_by(
-                        guild_id=event.guild_id,
-                    ).first,
-                )
+                guild = handle_sql(guilds.query.get, event.guild_id)
                 if guild is None:
                     prefix = self.command_prefix
                     self.prefixes[event.guild_id] = prefix
@@ -512,7 +531,7 @@ class CorePlugin(Plugin):
                     self.exception_response(event, e)
                 break
 
-    def exception_response(self, event, e, respond:bool=True):
+    def exception_response(self, event, e, respond: bool = True):
         if respond:
             if not isinstance(e, APIException) or e.code != 50013:
                 api_loop(

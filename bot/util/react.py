@@ -19,8 +19,8 @@ class reactor_condition:  # implement this as well.
             self,
             reactor,
             function,
-            owner_id:int,
-            owner_only:bool=True,
+            owner_id: int,
+            owner_only: bool = True,
             **kwargs):
         self.auth = owner_only  # rename that
         self.function = function
@@ -32,10 +32,10 @@ class reactor_condition:  # implement this as well.
 class reactor_object:  # implement this
     def __init__(
             self,
-            channel_id:int,
-            message_id:int,
-            end_time:int=None,
-            conditions:list=None,
+            channel_id: int,
+            message_id: int,
+            end_time: int = None,
+            conditions: list = None,
             **kwargs):
         """
         conditions: list
