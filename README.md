@@ -58,7 +58,7 @@ In-order to enable SQL access over SSL, you can pass through the certificate pat
 
 ```json
 "sql": {
-   "args" {
+   "args": {
       "ca": "path/to/certificate/authority/public/key.pem",
       "cert": "path/to/client/certificate/path/private/certificate.pem",
       "key": "path/to/client/public/key.pem"
