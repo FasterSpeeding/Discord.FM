@@ -156,7 +156,7 @@ class bot(config_template, feed_dict):
         "bot.disco.fm",
         "bot.disco.api",
         "bot.disco.voice",
-    #    "bot.disco.discogs",
+        #  "bot.disco.discogs",
     ])
 
 

@@ -568,7 +568,7 @@ class CorePlugin(Plugin):
                 "name": str(event.author),
                 "icon": event.author.get_avatar_url(size=32),
                 "author_url": ("https://discordapp.com/"
-                                f"users/{event.author.id}"),
+                               f"users/{event.author.id}"),
             }
             embed = bot.generic_embed_values(
                     author=author,

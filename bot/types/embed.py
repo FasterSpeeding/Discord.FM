@@ -73,7 +73,7 @@ class generic_embed_values:
             )
 
     def image(self, embed, data):
-        embed.set_image(url=data)    
+        embed.set_image(url=data)
 
     def timestamp(self, embed, data):
         embed.timestamp = data

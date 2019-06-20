@@ -12,7 +12,10 @@ from requests.exceptions import ConnectionError
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, AT_to_id, get_dict_item, user_regex as discord_regex
+from bot.util.misc import (
+    api_loop, AT_to_id, get_dict_item,
+    user_regex as discord_regex,
+)
 from bot.util.react import generic_react
 from bot.util.sql import (
     aliases, db_session, friends,
@@ -172,7 +175,8 @@ class fmPlugin(Plugin):
                     str(index + 1): alias.alias for
                     index, alias in enumerate(data)}
                 embed = bot.generic_embed_values(
-                    title={"title": f"{user.name}'s aliases in {event.guild.name}"},
+                    title={"title": f"{user.name}'s aliases "
+                           "in {event.guild.name}"},
                     non_inlines=inline,
                 )
                 api_loop(
@@ -337,7 +341,8 @@ class fmPlugin(Plugin):
         """
         target = self.get_user_info(target, event.guild.id)
         if not target["username"]:
-            raise CommandError("Target user doesn't have a Last.FM account setup.")
+            raise CommandError("Target user doesn't have "
+                               "a Last.FM account setup.")
         else:
             target = target["user_id"]
         name = self.state.users.get(int(target))
@@ -379,8 +384,12 @@ class fmPlugin(Plugin):
         )
         artist_data = artist_data["results"]["artistmatches"]["artist"]
         if artist_data:
-            thumbnail = thumbnail=self.get_artwork(artist, "Artist")
-            content, embed = self.search_artist_react(artist_data, 0, thumbnail=thumbnail)
+            thumbnail = self.get_artwork(artist, "Artist")
+            content, embed = self.search_artist_react(
+                artist_data,
+                0,
+                thumbnail=thumbnail,
+            )
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(artist_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
@@ -430,8 +439,12 @@ class fmPlugin(Plugin):
         )
         album_data = album_data["results"]["albummatches"]["album"]
         if album_data:
-            thumbnail = thumbnail=self.get_artwork(album, "Album")
-            content, embed = self.search_album_react(album_data, 0, thumbnail=thumbnail)
+            thumbnail = self.get_artwork(album, "Album")
+            content, embed = self.search_album_react(
+                album_data,
+                0,
+                thumbnail=thumbnail,
+            )
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(album_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
@@ -481,8 +494,12 @@ class fmPlugin(Plugin):
         )
         track_data = track_data["results"]["trackmatches"]["track"]
         if track_data:
-            thumbnail = thumbnail=self.get_artwork(track, "Track")
-            content, embed = self.search_track_react(track_data, 0, thumbnail=thumbnail)
+            thumbnail = self.get_artwork(track, "Track")
+            content, embed = self.search_track_react(
+                track_data,
+                0,
+                thumbnail=thumbnail,
+            )
             reply = api_loop(event.channel.send_message, embed=embed)
             if len(track_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
@@ -926,7 +943,10 @@ class fmPlugin(Plugin):
             handle_sql(db_session.flush)
             api_loop(event.channel.send_message, "Removed user data.")
         else:
-            api_loop(event.channel.send_message, ":thumbsup: Nothing to see here.")
+            api_loop(
+                event.channel.send_message,
+                ":thumbsup: Nothing to see here.",
+            )
 
     def generic_user_data(
             self,
@@ -1216,13 +1236,13 @@ class fmPlugin(Plugin):
         if not (type and self.discogs_secret and self.discogs_key):
             return
         endpoint = "https://api.discogs.com/database/search"
-        headers={
+        headers = {
             "Authorization": (f"Discogs key={self.discogs_key},"
                               f" secret={self.discogs_secret}"),
             "User-Agent": bot.local.api.user_agent,
             "Content-Type": "application/json",
         }
-        params={
+        params = {
             "query": name,
             "type": type,
         }

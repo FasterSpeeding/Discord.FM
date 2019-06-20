@@ -46,9 +46,9 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
 
 user_regex = compile(r"[<]?[@]?[!]?\d{18}[>]?")
 api_key_regs = [
-    compile(r"[\w\d]{20,50}"), # 32 to 4? with some room given
-    compile(r"[\w\d]{30,45}.{65,80}.{35,50}"), # 36, 74, 43
-    ]
+    compile(r"[\w\d]{20,50}"),  # 32 to 4? with some room given
+    compile(r"[\w\d]{30,45}.{65,80}.{35,50}"),  # 36, 74, 43
+]
 
 
 def AT_to_id(id: str):

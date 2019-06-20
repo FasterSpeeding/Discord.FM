@@ -45,8 +45,8 @@ def disco_main(run=False):
 
     if sys.platform == "linux" or sys.platform == "linux2":
         print("Sudo access may be required to keep youtube-dl up to date.")
-        if (any("voice" in plugin for plugin in bot.local.disco.plugin) or
-                any("voice" in plugin for plugin in bot.local.disco.bot.plugins)):
+        if (any("voice" in plug for plug in bot.local.disco.plugin) or
+                any("voice" in plug for plug in bot.local.disco.bot.plugins)):
             try:
                 subprocess.call([
                     "sudo",
@@ -109,7 +109,8 @@ def disco_main(run=False):
     # If applicable, build the bot and load plugins
     bot = None
     if args.run_bot or hasattr(config, 'bot'):
-        bot_config = BotConfig(config.bot.to_dict()) if hasattr(config, 'bot') else BotConfig()
+        bot_config = (BotConfig(config.bot.to_dict()) if
+                      hasattr(config, 'bot') else BotConfig())
         if not hasattr(bot_config, 'plugins'):
             bot_config.plugins = args.plugin
         else:
@@ -133,5 +134,6 @@ if __name__ == '__main__':
         for plugin in disco.plugins.copy().values():
             log.info("Unloading plugin: " + plugin.__class__.__name__)
             disco.rmv_plugin(plugin.__class__)
-            log.info("Successfully unloaded plugin: " + plugin.__class__.__name__)
+            log.info("Successfully unloaded plugin: "
+                     + plugin.__class__.__name__)
         handle_sql(db_session.flush)
