@@ -10,7 +10,9 @@
       "last_key": null,
       "google_key": null,
       "spotify_ID": null,
-      "spotify_secret": null
+      "spotify_secret": null,
+      "discogs_key": null,
+      "discogs_secret": null
     },
     "embed_values": {
       "url": null,

@@ -6,77 +6,83 @@ log = logging.getLogger(__name__)
 
 class generic_embed_values:
     def __init__(self, local):
-        self.local = local
+        self.__local = local
+        self.__fields = {attr: getattr(self, attr) for attr in
+                         dir(self) if not attr.startswith("__")}
 
     def __call__(
             self,
-            author_name=None,
-            author_url: str = None,
-            author_icon: str = None,
-            title: str = None,
-            url: str = None,
-            thumbnail: str = None,
-            description: str = None,
-            non_inlines: dict = None,
-            skip_non_inlines: bool = None,
-            inlines: dict = None,
-            skip_inlines: bool = True,
-            image: str = None,
-            timestamp=None,
-            footer_text: str = None,
-            footer_img: str = None,
-            color: str = None,
             **kwargs):
-        generic_embed = DiscoMessageEmbed()
-        if color:
-            generic_embed.color = color
-        else:
-            generic_embed.color = self.local.embed_values.color
-        if author_name:
-            generic_embed.set_author(
-                name=author_name,
-                url=author_url,
-                icon_url=author_icon,
+        embed = DiscoMessageEmbed()
+        if ("color" not in kwargs and
+                self.__local.embed_values.color):
+            self.color(
+                embed,
+                self.__local.embed_values.color,
             )
-        if title:
-            generic_embed.title = str(title)[:256]
-            if url:
-                generic_embed.url = url
-        if thumbnail:
-            generic_embed.set_thumbnail(url=thumbnail)
-        if description:
-            generic_embed.description = str(description)[:2048]
-        if non_inlines:
-            for non_inline_field, data in non_inlines.items():  # [:25]
-                if data is None:
-                    if skip_non_inlines:
-                        data = skip_non_inlines
-                    else:
-                        continue
-                generic_embed.add_field(
-                    name=str(non_inline_field)[:256],
-                    value=str(data)[:1024],
-                    inline=False,
-                )
-        if inlines:
-            for inline_field, data in inlines.items():  # [:25]
-                if data is None:
-                    if not skip_inlines:
-                        data = skip_inlines
-                    else:
-                        continue
-                generic_embed.add_field(
-                    name=str(inline_field)[:256],
-                    value=str(data)[:1024],
-                    inline=True,
-                )
-        if image:
-            generic_embed.set_image(url=image)
-        if timestamp:
-            generic_embed.timestamp = timestamp
-        if footer_text:
-            generic_embed.set_footer(
-                icon_url=footer_img,
-                text=str(footer_text)[:2048],
+        for key, value in kwargs.items():
+            function = getattr(self, key, None)
+            if function:
+                function(embed, value)
+            else:
+                log.warning("Invalid argument given to "
+                            f"embed: '{key}'.")
+        return embed
+
+    def color(self, embed, data):
+        embed.color = data
+
+    def author(self, embed, data):
+        embed.set_author(
+            name=data.get("name", None),
+            url=data.get("url", None),
+            icon_url=data.get("icon", None),
+        )
+
+    def title(self, embed, data):
+        embed.title = str(data["title"])[:256]
+        if data.get("url", None):
+            embed.url = data["url"]
+        elif self.__local.embed_values.url:
+            embed.url = self.__local.embed_values.url
+
+    def thumbnail(self, embed, data):
+        embed.set_thumbnail(url=data)
+
+    def description(self, embed, data):
+        embed.description = str(data)[:2048]
+
+    def inlines(self, embed, data):
+        self.__field(embed, data, True)
+
+    def non_inlines(self, embed, data):
+        self.__field(embed, data, False)
+
+    def __field(self, embed, data, inline):
+        skip = data.pop("skip_inlines", None)
+        for key, value in data.items():  # [:25]
+            if not data:
+                if skip:
+                    value = skip
+                else:
+                    continue
+            embed.add_field(
+                name=str(key)[:256],
+                value=str(value)[:1024],
+                inline=inline,
             )
-        return generic_embed
+
+    def image(self, embed, data):
+        embed.set_image(url=data)    
+
+    def timestamp(self, embed, data):
+        embed.timestamp = data
+
+    def footer(self, embed, data):
+        text = data.get("text", None)
+        if text:
+            text = str(text)[:2048]
+        embed.set_footer(
+            icon_url=data.get("img", None),
+            text=text,
+        )

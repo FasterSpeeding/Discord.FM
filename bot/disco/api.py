@@ -29,7 +29,6 @@ class ApiPlugin(Plugin):
             "spotify_ID",
             "spotify_secret",
             "google_cse_engine_ID",
-            "user_agent",
         )
         bot.load_help_embeds(self)
 
@@ -69,10 +68,13 @@ class ApiPlugin(Plugin):
                 first_message.edit,
                 f"No Lyrics found for ``{content}``",
             )
+        footer = {
+            "text": f"Requested by {event.author}",
+            "img": event.author.get_avatar_url(size=32),
+        }
         lyrics_embed = bot.generic_embed_values(
-            title=title,
-            footer_text=f"Requested by {event.author}",
-            footer_img=event.author.get_avatar_url(size=32),
+            title={"title": title},
+            footer=footer,
             timestamp=event.msg.timestamp.isoformat(),
         )
         first_message.delete()
@@ -232,7 +234,7 @@ class ApiPlugin(Plugin):
         self.spotify_auth_expire = r.json()["expires_in"]
         self.spotify_auth_time = access_time
 
-    def spotify_react(self, data, index, kwargs):
+    def spotify_react(self, data, index, **kwargs):
         return data[index]["external_urls"]["spotify"], None
 
     @Plugin.command("youtube", "<yt_type:str> [content:str...]", aliases=["yt"], metadata={"help": "api"})
@@ -317,7 +319,7 @@ class ApiPlugin(Plugin):
                 f"Error code {r.status_code} returned.",
             )
 
-    def youtube_react(self, data, index, kwargs):
+    def youtube_react(self, data, index, **kwargs):
         return kwargs["url_format"].format(
                 data[index]["id"][kwargs["index_type"]],
             ), None

@@ -561,13 +561,16 @@ class MusicPlugin(Plugin):
                     key = f"#{queue.index(item)+1} ({ratio}% match)"
                     matched_list[key] = item.metadata["title"]
             if matched_list:
+                footer = {
+                    "text": f"Requested by {event.author}",
+                    "img": event.author.get_avatar_url(size=32),
+                }
                 embed = bot.generic_embed_values(
-                    title="Queue search results",
-                    footer_text=f"Requested by {event.author}",
+                    title={"title": "Queue search results"},
+                    footer=footer,
                     non_inlines={
                         k: matched_list[k] for k in list(matched_list)[-25:]
                     },
-                    footer_img=event.author.get_avatar_url(size=32),
                     timestamp=event.msg.timestamp.isoformat(),
                 )
                 api_loop(event.channel.send_message, embed=embed)

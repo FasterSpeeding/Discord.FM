@@ -17,10 +17,25 @@ class superuserPlugin(Plugin):
     def load(self, ctx):
         super(superuserPlugin, self).load(ctx)
         bot.load_help_embeds(self)
+        self.register_schedule(
+            self.__check__,
+            5,
+            repeat=False,
+            init=False,
+        )
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
         super(superuserPlugin, self).unload(ctx)
+
+    def __check__(self):
+        for plug in self.bot.plugins.copy().values():
+            if issubclass(plug.__class__, self.__class__):
+                continue
+            if hasattr(plug, "__check__") and not plug.__check__():
+                self.bot.rmv_plugin(plug.__class__)
+                log.info(plug.__class__.__name__ +
+                         " failed check and has been unloaded.")
 
     @Plugin.command("restart", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_restart_command(self, event):

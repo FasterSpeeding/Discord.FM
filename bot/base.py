@@ -116,6 +116,8 @@ class api(config_template, feed_dict):
     spotify_secret = unset(str)
     dbl_token = unset(str)
     discord_bots_gg = unset(str)
+    discogs_key = unset(str)
+    discogs_secret = unset(str)
 
 
 class sql(config_template, feed_dict):
@@ -153,7 +155,8 @@ class bot(config_template, feed_dict):
         "bot.disco.core",
         "bot.disco.fm",
         "bot.disco.api",
-        "bot.disco.voice"
+        "bot.disco.voice",
+    #    "bot.disco.discogs",
     ])
 
 
@@ -234,10 +237,11 @@ class bot_frame:
                 if not doc_string:
                     doc_string = "Null"
                 if array_name not in self.help_embeds:
-                    url = getattr(self.local.embed_values, "url")
+                    title = {
+                        "title": f"{array_name.capitalize()} module commands.",
+                    }
                     self.help_embeds[array_name] = self.generic_embed_values(
-                        title=f"{array_name.capitalize()} module commands.",
-                        url=url,
+                        title=title,
                         description=("Argument key: <required> [optional], "
                                      "with '...'specifying a multi-word "
                                      "argument and optional usernames "
@@ -247,9 +251,13 @@ class bot_frame:
                     args = command.raw_args
                 else:
                     args = str()
+                if command.group:
+                    command_name = command.group + " " + command.name
+                else:
+                    command_name = command.name
                 prefix = (self.local.disco.bot.commands_prefix or "fm.")
                 self.help_embeds[array_name].add_field(
-                    name=f"{prefix}**{command.name}** {args}",
+                    name=f"{prefix}**{command_name}** {args}",
                     value=doc_string.split("\n", 1)[0],
                     inline=False
                 )

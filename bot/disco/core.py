@@ -18,7 +18,7 @@ except ImportError:
 
 from bot import __GIT__, __VERSION__
 from bot.base import bot
-from bot.util.misc import api_loop, dm_default_send
+from bot.util.misc import api_key_regs, api_loop, dm_default_send
 from bot.util.sql import db_session, guilds, users, handle_sql
 from bot.util.status import status_handler, guildCount
 
@@ -236,7 +236,7 @@ class CorePlugin(Plugin):
     def on_help_command(self, event, command=None):
         """
         Get a list of the commands in a module.
-        If an argument is passed, this will return the info for the command.
+        If an argument is passed, this will return the command or module info.
         Otherwise, this will just return a list of all the enabled commands.
         """
         if not event.channel.is_dm:
@@ -244,13 +244,25 @@ class CorePlugin(Plugin):
         else:
             channel = event.channel
         if command is None:  # _attrs may not work in 1.0.0
-            for name, embed in bot.help_embeds.items():
+            for name, embed in bot.help_embeds.copy().items():
                 level = CommandLevels._attrs.get(name, None)
                 if level and level > self.bot.get_level(event.author):
                     continue
                 dm_default_send(event, channel, embed=embed)
         else:
+            if command.startswith(self.command_prefix):
+                command = command[len(self.command_prefix):]
+            print(bot.help_embeds)
             author_level = self.bot.get_level(event.author)
+
+            # Check for module match.
+            embed = bot.help_embeds.get(command.lower())
+            if embed:
+                level = CommandLevels._attrs.get(command.lower(), None)
+                if not level or level <= self.bot.get_level(event.author):
+                    return dm_default_send(event, channel, embed=embed)
+
+            # Check for command match.
             for command_obj in self.bot.commands:
                 match = command_obj.compiled_regex.match(command)
                 if (match and (not command_obj.level or
@@ -268,14 +280,18 @@ class CorePlugin(Plugin):
                     docstring = command_obj.get_docstring()
                     docstring = docstring.replace("    ", "").strip("\n")
                     triggers = "("
+                    trigger_base = str()
+                    if command_obj.group:
+                        trigger_base += command_obj.group + " "
                     for trigger in command_obj.triggers:
-                        triggers += f"**{trigger}** | "
+                        triggers += f"**{trigger_base}{trigger}** | "
                     triggers = triggers[:-3] + "):"
-                    title = (f"{self.command_prefix}{triggers}{args} "
-                             f"a command in the {array_name} module.")
+                    title = {
+                        "title": (f"{self.command_prefix}{triggers}{args} "
+                                  f"a command in the {array_name} module."),
+                    }
                     embed = bot.generic_embed_values(
                         title=title,
-                        url=bot.local.embed_values.url,
                         description=docstring,
                     )
                     dm_default_send(event, channel, embed=embed)
@@ -540,19 +556,25 @@ class CorePlugin(Plugin):
                      "here. Our technicians have been alerted and "
                      "will fix the problem as soon as possible."),
                 )
-        if (self.exception_dms):
+        strerror = str(e)
+        for reg in api_key_regs:
+            strerror = reg.sub("<REDACTED>", strerror)
+        if self.exception_dms:
             if event.channel.is_dm:
                 footer_text = "DM"
             else:
                 footer_text = f"{event.guild.name}: {event.guild.id}"
-            embed = bot.generic_embed_values(
-                    author_name=str(event.author),
-                    author_icon=event.author.get_avatar_url(size=32),
-                    author_url=("https://discordapp.com/"
+            author = {
+                "name": str(event.author),
+                "icon": event.author.get_avatar_url(size=32),
+                "author_url": ("https://discordapp.com/"
                                 f"users/{event.author.id}"),
-                    title=f"Exception occured: {e}",
+            }
+            embed = bot.generic_embed_values(
+                    author=author,
+                    title={"title": f"Exception occured: {strerror}"},
                     description=event.message.content,
-                    footer_text=footer_text,
+                    footer={"text": footer_text},
                     timestamp=event.message.timestamp.isoformat(),
                 )
             for target in self.exception_dms.copy():
@@ -567,12 +589,12 @@ class CorePlugin(Plugin):
                         raise e
         if self.exception_channels:
             embed = bot.generic_embed_values(
-                    title=f"Exception occured: {e}",
+                    title={"title": f"Exception occured: {strerror}"},
                     description=extract_stack(),
-                    footer_text=event.message.content,
+                    footer={"text": event.message.content},
                 )
             for guild, channel in self.exception_channels.copy().items():
-                guild_obj = self.client.state.guilds(guild, None)
+                guild_obj = self.client.state.guilds.get(int(guild), None)
                 if guild_obj is not None:
                     channel_obj = guild_obj.channels.get(channel, None)
                     if channel_obj is not None:

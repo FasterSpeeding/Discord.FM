@@ -166,7 +166,6 @@ class reactors_handler(object):
                     raise e
 
 
-@classmethod
 def generic_react(
         self,
         client,
@@ -211,7 +210,7 @@ def generic_react(
         )
     else:
         return
-    content, embed = edit_message(data=data, index=index, kwargs=kwargs)
+    content, embed = edit_message(data=data, index=index, **kwargs)
     api_loop(
         client.client.api.channels_messages_modify,
         channel_id,
