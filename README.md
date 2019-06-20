@@ -22,7 +22,7 @@ Whilst you could just randomly run ``pip3 install --upgrade youtube-dl`` to keep
 ### Discord access
 To enable the bot, you will have to create a new Discord application [here](https://discordapp.com/developers/applications/me), create and setup a bot user under it, and take it's token and put that into the following disco entry in config.json.
 
-```
+```json
 "disco": {
     "token": "INSERT_TOKEN_HERE"
   },
@@ -31,7 +31,7 @@ To enable the bot, you will have to create a new Discord application [here](http
 ### API access
 In-order enable the relevant API functions, you will have to setup accounts and get api keys or IDs and secrets from the relative websites, enable access to the relevant end points and put them into the relevant api entries in config.json.
 
-```
+```json
 "api": {
   "last_key": "https://www.last.fm/api/account/create",
   "google_key": "https://console.developers.google.com/apis/library/youtube.googleapis.com",
@@ -58,7 +58,7 @@ In-order to enable SQL access over SSL, you can pass through the certificate pat
 
 ```json
 "sql": {
-   "args" {
+   "args": {
       "ca": "path/to/certificate/authority/public/key.pem",
       "cert": "path/to/client/certificate/path/private/certificate.pem",
       "key": "path/to/client/public/key.pem"
