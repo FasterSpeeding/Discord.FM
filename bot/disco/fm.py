@@ -1,6 +1,6 @@
 from decimal import Decimal
-from re import compile
 from time import time, strftime, gmtime
+import re
 
 
 from disco.bot import Plugin
@@ -8,7 +8,7 @@ from disco.bot.command import CommandError
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from requests import get, Session, Request
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError as requestCError
 
 
 from bot.base import bot
@@ -33,8 +33,8 @@ class fmPlugin(Plugin):
     def load(self, ctx):
         super(fmPlugin, self).load(ctx)
         bot.load_help_embeds(self)
-        self.user_reg = compile("[a-zA-Z]{1}[a-zA-Z0-9_-]{1,14}")
-        self.mbid_reg = compile(
+        self.user_reg = re.compile("[a-zA-Z]{1}[a-zA-Z0-9_-]{1,14}")
+        self.mbid_reg = re.compile(
             "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}",
         )
         bot.local.api.get(
@@ -163,8 +163,7 @@ class fmPlugin(Plugin):
                     if data is None:
                         raise CommandError("User alias not "
                                            "found in this guild.")
-                    else:
-                        target = data.user_id
+                    target = data.user_id
             data = handle_sql(aliases.query.filter_by(
                 user_id=target,
                 guild_id=event.guild.id,
@@ -281,10 +280,7 @@ class fmPlugin(Plugin):
             current_index = index + x
             while True:
                 user = self.state.users.get(int(data[current_index]))
-                if user is not None:
-                    user = str(user)
-                else:
-                    user = data[current_index]
+                user = str(user) if user else data[current_index]
                 friend = self.get_user_info(data[current_index])
                 if not friend["username"]:
                     handle_sql(friends.query.filter_by(
@@ -343,13 +339,9 @@ class fmPlugin(Plugin):
         if not target["username"]:
             raise CommandError("Target user doesn't have "
                                "a Last.FM account setup.")
-        else:
-            target = target["user_id"]
+        target = target["user_id"]
         name = self.state.users.get(int(target))
-        if name is not None:
-            name = str(name)
-        else:
-            name = target
+        name = str(name) if name else target
         user = handle_sql(users.query.get, event.author.id)
         if not user:
             user = users(user_id=event.author.id)
@@ -1002,7 +994,7 @@ class fmPlugin(Plugin):
                 time() >= self.cache[url].expire):
             try:
                 r = self.s.send(get)
-            except ConnectionError as e:
+            except requestCError as e:
                 log.warning(e)
                 raise CommandError("Last.FM isn't available right now.")
             if r.status_code == 200:
@@ -1010,7 +1002,7 @@ class fmPlugin(Plugin):
                     self.cache[url] = type(
                         "cached_object",
                         (object, ),
-                        {  # proper class object
+                        {
                             "exists": True,
                             "expire": time() + cool_down,
                             "data": r.json(),
@@ -1022,7 +1014,7 @@ class fmPlugin(Plugin):
                 self.cache[url] = type(
                     "cached_object",
                     (object, ),
-                    {  # proper class object
+                    {
                         "exists": False,
                         "expire": time() + cool_down,
                         "data": None,
@@ -1112,8 +1104,7 @@ class fmPlugin(Plugin):
             }
             user_data = self.get_cached(params, cool_down=1800, item="user")
             return user_data
-        else:
-            raise CommandError("Invalid username format.")
+        raise CommandError("Invalid username format.")
 
     def get_user_info(self, target: str, guild: int = None):
         """
@@ -1226,14 +1217,14 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    def get_artwork(self, name, type):
+    def get_artwork(self, name, art_type):
         type_match = {
             "track": "release",
             "album": "release",
             "artist": "artist",
         }
-        type = type_match.get(type.lower())
-        if not (type and self.discogs_secret and self.discogs_key):
+        art_type = type_match.get(art_type.lower())
+        if not (art_type and self.discogs_secret and self.discogs_key):
             return
         endpoint = "https://api.discogs.com/database/search"
         headers = {
@@ -1244,19 +1235,18 @@ class fmPlugin(Plugin):
         }
         params = {
             "query": name,
-            "type": type,
+            "type": art_type,
         }
         try:
             r = get(endpoint, headers=headers, params=params)
-        except ConnectionError as e:
+        except requestCError as e:
             log.warning(e)
+        if r.status_code < 400:
+            data = r.json().get("results")
+            data = (data[0].get("thumb") if data else data)
+            return data
         else:
-            if r.status_code < 400:
-                data = r.json().get("results")
-                data = (data[0].get("thumb") if data else data)
-                return data
-            else:
-                log.warning(f"{r.status_code} returned "
+            log.warning(f"{r.status_code} returned "
                             f"by Discogs: {r.text}")
 
     def time_since(self, time_of_event: int):

@@ -116,9 +116,9 @@ class status_handler(object):
         this exists to counter the fact that state.me isn't present at start.
         """
         self.bot_id = (self.bot_id or self.bot.state.me.id)
-        for object, token in self.__tokens.items():
+        for obj, token in self.__tokens.items():
             if token is not None:
-                self.services.append(object(
+                self.services.append(obj(
                         url={"id": self.bot_id},
                         auth=token,
                         headers={"User-Agent": self.user_agent},

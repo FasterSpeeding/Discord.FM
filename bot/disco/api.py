@@ -140,8 +140,8 @@ class ApiPlugin(Plugin):
                     f"The current limit is set to {limit}",
                 )
 
-    @Plugin.command("spotify", "<type:str> [search:str...]", metadata={"help": "api"})
-    def on_spotify_command(self, event, type, search=""):
+    @Plugin.command("spotify", "<sp_type:str> [search:str...]", metadata={"help": "api"})
+    def on_spotify_command(self, event, sp_type, search=""):
         """
         Search for an item on Spotify.
         If the first argument is in the list
@@ -153,9 +153,9 @@ class ApiPlugin(Plugin):
         spotify_auth = getattr(self, "spotify_auth", None)
         if not spotify_auth or time() >= self.spotify_auth_expire:
             self.get_spotify_auth()
-        if type not in ("track", "album", "artist", "playlist"):
-            search = f"{type} {search}"
-            type = "track"
+        if sp_type not in ("track", "album", "artist", "playlist"):
+            search = f"{sp_type} {search}"
+            sp_type = "track"
         elif search == "":
             return api_loop(
                 event.channel.send_message,
@@ -165,7 +165,7 @@ class ApiPlugin(Plugin):
             "https://api.spotify.com/v1/search",
             params={
                 "q": search,
-                "type": type,
+                "type": sp_type,
             },
             headers={
                 "Authorization": f"Bearer {self.spotify_auth}",
@@ -174,20 +174,20 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code == 200:
-            if not r.json()[type+"s"]["items"]:
+            if not r.json()[sp_type+"s"]["items"]:
                 search = sanitize(search, escape_codeblocks=True)
                 return api_loop(
                     event.channel.send_message,
-                    f"{type}: ``{search}`` not found."
+                    f"{sp_type}: ``{search}`` not found."
                 )
-            url = r.json()[type+"s"]["items"][0]["external_urls"]["spotify"]
+            url = r.json()[sp_type+"s"]["items"][0]["external_urls"]["spotify"]
             reply = api_loop(event.channel.send_message, url)
-            if (len(r.json()[type+"s"]["items"]) > 1 and
+            if (len(r.json()[sp_type+"s"]["items"]) > 1 and
                     not event.channel.is_dm):
                 bot.reactor.init_event(
                     message=reply,
                     timing=30,
-                    data=r.json()[type+"s"]["items"],
+                    data=r.json()[sp_type+"s"]["items"],
                     index=0,
                     amount=1,
                     edit_message=self.spotify_react,

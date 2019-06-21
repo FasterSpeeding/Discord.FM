@@ -20,8 +20,8 @@ log = logging.getLogger(__name__)
 
 
 class unset:
-    def __init__(self, type, default=None):
-        self.type = type
+    def __init__(self, unset_type, default=None):
+        self.type = unset_type
         self.default = default
 
     def __nonzero__(self):

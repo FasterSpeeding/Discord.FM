@@ -5,7 +5,6 @@ import logging
 from disco.api.http import APIException
 from disco.bot.command import CommandError
 from disco.types.channel import Channel
-from disco.bot.command import CommandError
 from disco.types.message import Message
 
 
@@ -53,7 +52,7 @@ class reactors_handler(object):
         self.events = dict()
         self.__name__ = "reactor"
 
-    def init_event(self, message, timing, id=None, **kwargs):
+    def init_event(self, message, timing, **kwargs):
         end_time = time() + timing
         event_dict = {
             "channel_id": message.channel_id,
@@ -66,14 +65,14 @@ class reactors_handler(object):
 
     def add_argument(
             self,
-            id,
+            message_id,
             reactor,
             function,
             owner_id,
             owner_only=True,
             **kwargs):
-        if id in self.events:
-            self.events[id].conditions.append(
+        if message_id in self.events:
+            self.events[message_id].conditions.append(
                 type(
                     "reactor condition",
                     (object, ),
@@ -87,7 +86,7 @@ class reactors_handler(object):
                     )()
             )
         else:
-            raise IndexError("ID not present in list.")
+            raise IndexError("Message ID not present in list.")
 
     def add_reactors(
             self,
@@ -122,10 +121,10 @@ class reactors_handler(object):
                                 "work out channel id or missing channel id.")
         for reactor in args:
             self.add_argument(
-                id=message_id,
-                reactor=reactor,
-                function=reaction,
-                owner_id=author_id,
+                message_id,
+                reactor,
+                reaction,
+                author_id,
             )
         for reactor in args:
             try:
@@ -236,10 +235,9 @@ def left_shift(index, list_len, remainder, amount=1, limit=100):
 
 
 def length(item, limit=100):
-    if len(item) >= limit:
-        return limit
-    else:
-        return len(item)
+    if len(item) < limit:
+        limit = len(item)
+    return limit
 
 
 def right_shift(index, list_len, remainder, amount=1, limit=100):

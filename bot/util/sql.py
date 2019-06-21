@@ -6,8 +6,10 @@ import os
 from disco.bot.command import CommandError
 from sqlalchemy import (
     create_engine, PrimaryKeyConstraint,
-    create_engine, Column, exc, ForeignKey)
-from sqlalchemy.dialects.mysql import *
+    Column, exc, ForeignKey)
+from sqlalchemy.dialects.mysql import (
+    TEXT, BIGINT, INTEGER, VARCHAR,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
     scoped_session, sessionmaker, relationship)

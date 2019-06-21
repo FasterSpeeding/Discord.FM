@@ -60,8 +60,9 @@ class generic_embed_values:
 
     def __field(self, embed, data, inline):
         skip = data.pop("skip_inlines", None)
-        for key, value in data.items():  # [:25]
-            if not data:
+        for key in list(data.keys())[:25]:
+            value = data[key]
+            if not value:
                 if skip:
                     value = skip
                 else:

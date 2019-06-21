@@ -18,7 +18,7 @@ except ImportError:
 
 from bot import __GIT__, __VERSION__
 from bot.base import bot
-from bot.util.misc import api_key_regs, api_loop, dm_default_send
+from bot.util.misc import api_loop, dm_default_send, redact
 from bot.util.sql import db_session, guilds, users, handle_sql
 from bot.util.status import status_handler, guildCount
 
@@ -92,7 +92,7 @@ class CorePlugin(Plugin):
 
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
-        if type(event.unavailable) is Unset:
+        if isinstance(event.unavailable, Unset):
             if handle_sql(
                     guilds.query.get, event.guild.id
                     ) is None:
@@ -136,7 +136,7 @@ class CorePlugin(Plugin):
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
-        if type(event.unavailable) is Unset:
+        if isinstance(event.unavailable, Unset):
             guild = handle_sql(guilds.query.get, event.id)
             if guild:
                 handle_sql(db_session.delete, guild)
@@ -262,6 +262,7 @@ class CorePlugin(Plugin):
                     return dm_default_send(event, channel, embed=embed)
 
             # Check for command match.
+            command_obj = None
             for command_obj in self.bot.commands:
                 match = command_obj.compiled_regex.match(command)
                 if (match and (not command_obj.level or
@@ -556,9 +557,7 @@ class CorePlugin(Plugin):
                      "here. Our technicians have been alerted and "
                      "will fix the problem as soon as possible."),
                 )
-        strerror = str(e)
-        for reg in api_key_regs:
-            strerror = reg.sub("<REDACTED>", strerror)
+        strerror = redact(str(e))
         if self.exception_dms:
             if event.channel.is_dm:
                 footer_text = "DM"
@@ -584,7 +583,7 @@ class CorePlugin(Plugin):
                 except APIException as e:
                     if e.code == 50013:
                         log.warning(f"Unable to exception dm: {target}")
-                        self.exception_dms.remove(guild)
+                        self.exception_dms.remove(target)
                     else:
                         raise e
         if self.exception_channels:
