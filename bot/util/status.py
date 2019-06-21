@@ -2,13 +2,15 @@ from datetime import datetime
 import logging
 
 
-from disco.bot.command import CommandError
 from disco.types.user import Game, Status, GameType
 from requests import post, RequestException
 
 
 from bot.base import optional
-from bot.util.sql import db_session, guilds, handle_sql
+from bot.util.sql import (
+    db_session, guilds, handle_sql,
+    SQLexception,
+)
 
 log = logging.getLogger(__name__)
 
@@ -151,7 +153,7 @@ class status_handler(object):
                                         f"in status: {e.previous_exception}")
                         else:
                             handle_sql(db_session.flush)
-            except CommandError as e:
+            except SQLexception as e:
                 log.warning(f"Failed to call SQL server: {e.msg}")
                 log.warning(str(e.original_exception))
                 break

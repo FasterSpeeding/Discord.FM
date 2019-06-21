@@ -166,7 +166,7 @@ class CorePlugin(Plugin):
         else:
             api_loop(
                 event.channel.send_message,
-                "This command can only be used by server Admins.",
+                "This command can only be used by server admins.",
             )
 
     @Plugin.listen("MessageReactionAdd")
@@ -252,7 +252,6 @@ class CorePlugin(Plugin):
         else:
             if command.startswith(self.command_prefix):
                 command = command[len(self.command_prefix):]
-            print(bot.help_embeds)
             author_level = self.bot.get_level(event.author)
 
             # Check for module match.
@@ -296,10 +295,11 @@ class CorePlugin(Plugin):
                     )
                     dm_default_send(event, channel, embed=embed)
             else:
+                command = sanitize(command, escape_codeblocks=True)
                 dm_default_send(
                     event,
                     channel,
-                    content=f"``{sanitize(command)}`` command not found.",
+                    content=f"``{command}`` command not found.",
                 )
         user_info = handle_sql(users.query.get, event.author.id)
         if user_info is None or user_info.last_username is None:

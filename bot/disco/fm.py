@@ -85,7 +85,7 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
-        if len(alias) > 20 or sanitize(alias) != alias:
+        if len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias:
             api_loop(
                 event.channel.send_message,
                 ("Aliasas are limited to 20 characters and cannot "

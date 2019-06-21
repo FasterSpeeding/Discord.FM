@@ -7,7 +7,7 @@ from disco.bot import Plugin
 from disco.bot.command import CommandError
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
-from lyrics_extractor import Song_Lyrics as get_lyrics
+from lyrics_extractor import Song_Lyrics
 from requests import get, post
 
 
@@ -31,6 +31,10 @@ class ApiPlugin(Plugin):
             "google_cse_engine_ID",
         )
         bot.load_help_embeds(self)
+        self.lyrics = Song_Lyrics(
+            self.google_key,
+            self.google_cse_engine_ID,
+        )
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -47,7 +51,7 @@ class ApiPlugin(Plugin):
             guild = guilds(guild_id=event.guild.id)
             handle_sql(db_session.add, guild)
             handle_sql(db_session.flush)
-        if guild.lyrics_limit <= 0:
+        elif guild.lyrics_limit <= 0:
             return api_loop(
                 event.channel.send_message,
                 "This command has been disabled in this guild.",
@@ -56,18 +60,16 @@ class ApiPlugin(Plugin):
             event.channel.send_message,
             "Searching for lyrics...",
         )
-        title, lyrics = get_lyrics(
-            self.google_key,
-            self.google_cse_engine_ID,
-        ).get_lyrics(quote_plus(content))
-        if len(lyrics) > 46300:
-            return first_message.edit("I doubt that's a song.")
+        title, lyrics = self.lyrics.get_lyrics(quote_plus(content))
+        
         if not lyrics:
             content = sanitize(content, escape_codeblocks=True)
             return api_loop(
                 first_message.edit,
                 f"No Lyrics found for ``{content}``",
             )
+        elif len(lyrics) > 46300:
+            return first_message.edit("I doubt that's a song.")
         footer = {
             "text": f"Requested by {event.author}",
             "img": event.author.get_avatar_url(size=32),
@@ -148,18 +150,9 @@ class ApiPlugin(Plugin):
         Otherwise, it will assume the user wants to find a track.
         """
         self.pre_check("spotify_ID", "spotify_secret")
-        auth = urlsafe_b64encode(
-            f"{self.spotify_ID}:{self.spotify_secret}".encode()
-        ).decode()
-
         spotify_auth = getattr(self, "spotify_auth", None)
-        if spotify_auth is not None and ((time() - self.spotify_auth_time)
-                                         >= self.spotify_auth_expire):
-            get_auth = True
-        else:
-            get_auth = False
-        if spotify_auth is None or get_auth:
-            self.get_spotify_auth(auth)
+        if not spotify_auth or time() >= self.spotify_auth_expire:
+            self.get_spotify_auth()
         if type not in ("track", "album", "artist", "playlist"):
             search = f"{type} {search}"
             type = "track"
@@ -215,8 +208,10 @@ class ApiPlugin(Plugin):
                 f"Error code {r.status_code} returned.",
             )
 
-    def get_spotify_auth(self, auth):
-        access_time = time()
+    def get_spotify_auth(self):
+        auth = urlsafe_b64encode(
+            f"{self.spotify_ID}:{self.spotify_secret}".encode()
+        ).decode()
         r = post(
             "https://accounts.spotify.com/api/token",
             data={"grant_type": "client_credentials"},
@@ -231,8 +226,7 @@ class ApiPlugin(Plugin):
                 f"Error code {r.status_code} returned by oauth flow"
             )
         self.spotify_auth = r.json()["access_token"]
-        self.spotify_auth_expire = r.json()["expires_in"]
-        self.spotify_auth_time = access_time
+        self.spotify_auth_expire = time() + r.json()["expires_in"]
 
     def spotify_react(self, data, index, **kwargs):
         return data[index]["external_urls"]["spotify"], None
@@ -326,8 +320,8 @@ class ApiPlugin(Plugin):
 
     def pre_check(self, *args):
         """
-        Checks to see if api keys are available.
-        returns a CommandError if not present
+        Checks to see if api key(s) are available.
+        raises a CommandError if not present
         """
         for key in args:
             if not getattr(self, key, None):
