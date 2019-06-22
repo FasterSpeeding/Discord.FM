@@ -480,34 +480,6 @@ class CorePlugin(Plugin):
     def custom_prefix(self, event):
         if event.author.bot:
             return
-
-        if ((not hasattr(event, "channel") or event.channel is None) and
-                not isinstance(event.guild_id, Unset)):
-            guild = getattr(event, "guild", None)
-            if guild is None:
-                event.guild = self.client.state.guilds.get(
-                    event.guild_id,
-                    None,
-                )
-                if event.guild is None:
-                    self.client.state.guilds[event.guild_id] = api_loop(
-                        self.client.api.guilds_get,
-                        event.guild_id,
-                    )
-                    event.guild = self.client.state.guilds[event.guild_id]
-            event.channel = event.guild.channels.get(event.channel_id, None)
-            if event.channel is None:
-                event.channel = api_loop(
-                        self.client.api.channels_get,
-                        event.channel_id,
-                    )
-        elif ((not hasattr(event, "channel") or event.channel is None) and
-                isinstance(event.guild_id, Unset)):
-            event.channel = api_loop(
-                self.client.api.channels_get,
-                event.message.channel_id,
-            )
-
         if event.channel.is_dm:
             prefix = self.command_prefix
         else:
@@ -548,16 +520,16 @@ class CorePlugin(Plugin):
                     self.exception_response(event, e)
                 break
 
-    def exception_response(self, event, e, respond: bool = True):
+    def exception_response(self, event, exception, respond: bool = True):
         if respond:
-            if not isinstance(e, APIException) or e.code != 50013:
+            if not isinstance(e, APIException) or exception.code != 50013:
                 api_loop(
                     event.channel.send_message,
                     ("Oops, looks like we've blown a fuse back "
                      "here. Our technicians have been alerted and "
                      "will fix the problem as soon as possible."),
                 )
-        strerror = redact(str(e))
+        strerror = redact(str(exception))
         if self.exception_dms:
             if event.channel.is_dm:
                 footer_text = "DM"
@@ -615,4 +587,37 @@ class CorePlugin(Plugin):
                 else:
                     log.warning(f"Invalid exception guild: {guild}")
                     del self.exception_channels[guild]
-        log.exception(e)
+        log.exception(exception)
+
+def event_channel_guild_check(self, event):
+    """
+    Used to work around a bug with the etf encoder
+    where certain guilds will stop returning
+    Guild objects in Message Create Events at seemingly random intervals.
+    """
+    if ((not hasattr(event, "channel") or event.channel is None) and
+            not isinstance(event.guild_id, Unset)):
+        guild = getattr(event, "guild", None)
+        if guild is None:
+            event.guild = self.client.state.guilds.get(
+                event.guild_id,
+                None,
+            )
+            if event.guild is None:
+                self.client.state.guilds[event.guild_id] = api_loop(
+                    self.client.api.guilds_get,
+                    event.guild_id,
+                )
+                event.guild = self.client.state.guilds[event.guild_id]
+        event.channel = event.guild.channels.get(event.channel_id, None)
+        if event.channel is None:
+            event.channel = api_loop(
+                self.client.api.channels_get,
+                event.channel_id,
+            )
+    elif ((not hasattr(event, "channel") or event.channel is None) and
+            isinstance(event.guild_id, Unset)):
+        event.channel = api_loop(
+            self.client.api.channels_get,
+            event.message.channel_id,
+        )

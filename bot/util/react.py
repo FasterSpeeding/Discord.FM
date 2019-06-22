@@ -95,30 +95,14 @@ class reactors_handler(object):
             reaction,
             author_id,
             *args,
-            channel=None,
+            channel_id=None,
             time=30):
         if isinstance(message, Message):
-            if (message.id is None or message.channel is None or
-                    message.channel.id is None):
-                log.info("Failed to add reactors, either message.id or "
-                         "message.channel or message.channel.id was None.")
-                return
             message_id = message.id
             channel_id = message.channel.id
         else:
+            assert channel_id
             message_id = int(message)
-            if channel_id is not None:
-                if isinstance(channel_id, Channel):
-                    if channel_id.id is None:
-                        log.info("Failed to add reactors, "
-                                 "channel_id.id was None.")
-                        return
-                    channel_id = channel_id.id
-                else:
-                    channel_id = int(channel_id)
-            else:
-                raise Exception("Unable to add reactor, either unable to "
-                                "work out channel id or missing channel id.")
         for reactor in args:
             self.add_argument(
                 message_id,

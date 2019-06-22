@@ -61,7 +61,7 @@ class ApiPlugin(Plugin):
             "Searching for lyrics...",
         )
         title, lyrics = self.lyrics.get_lyrics(quote_plus(content))
-        
+
         if not lyrics:
             content = sanitize(content, escape_codeblocks=True)
             return api_loop(

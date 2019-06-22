@@ -1,8 +1,8 @@
 from platform import python_version
+from yaml import safe_load
 import logging
 import operator
 import os
-import yaml
 
 
 from requests import __version__ as __Rversion__
@@ -201,12 +201,12 @@ class bot_frame:
                 data = load(open(config_location, "r"))
                 self.local = self.local(**data)
             elif config_location.lower().endswith(".yaml"):
-                data = yaml.safe_load(open(config_location, "r"))
+                data = safe_load(open(config_location, "r"))
                 self.local = self.local(**data)
             else:
                 log.exception("Invalid config file format.")
         elif os.path.isfile("config.yaml"):
-            self.local = self.local(**yaml.safe_load(open("config.yaml", "r")))
+            self.local = self.local(**safe_load(open("config.yaml", "r")))
         elif not config_location:
             log.exception("Missing config file or invalid "
                           f"location given {config_location}")

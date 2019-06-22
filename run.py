@@ -52,7 +52,7 @@ def disco_main(run=False):
                     "sudo",
                     sys.executable,
                     "-m",
-                    "pip",
+                    "pip3",
                     "install",
                     "--upgrade",
                     "youtube-dl",
@@ -62,7 +62,7 @@ def disco_main(run=False):
                     subprocess.call([
                         sys.executable,
                         "-m",
-                        "pip",
+                        "pip3",
                         "install",
                         "--upgrade",
                         "youtube-dl",

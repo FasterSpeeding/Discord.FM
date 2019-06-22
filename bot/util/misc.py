@@ -24,10 +24,9 @@ def api_loop(command, *args, log_50007=True, **kwargs):
             if e.code == 50013:
                 raise CommandError("Missing permissions to respond "
                                    "(possibly Embed Links).")
-            else:
-                if e.code != 50007 or log_50007:
-                    log.critical(f"Api exception: {e.code}: {e}")
-                raise e
+            if e.code != 50007 or log_50007:
+                log.critical(f"Api exception: {e.code}: {e}")
+            raise e
 
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
@@ -50,17 +49,17 @@ redact_regs = [
     re.compile(r"[-._\w\d]{20,70}"),
     re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
     re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
-            r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
-            r"|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0"
-            r"-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA"
-            r"-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,"
-            r"4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0"
-            r"-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80"
-            r":(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}"
-            r"){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
-            r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
-            r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
-            r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"),
+               r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+               r"|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0"
+               r"-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA"
+               r"-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,"
+               r"4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0"
+               r"-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80"
+               r":(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}"
+               r"){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
+               r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"),
 ]
 
 
@@ -68,6 +67,7 @@ def redact(data):
     for reg in redact_regs:
         data = reg.sub("<REDACTED>", data)
     return data
+
 
 def AT_to_id(discord_id: str):
     discord_id = str(discord_id)
@@ -132,6 +132,5 @@ def get(
         return r.json()
     elif r.status_code == 404:
         raise CommandError(f"404 - {item} doesn't exist.")
-    else:
-        raise CommandError(f"{r.status_code} - {service} threw "
+    raise CommandError(f"{r.status_code} - {service} threw "
                            f"unexpected error: {redact(r.text)}")

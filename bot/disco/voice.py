@@ -113,7 +113,7 @@ class MusicPlugin(Plugin):
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
-        if type(event.unavailable) is Unset:
+        if isinstance(event.unavailable, Unset):
             if event.id in self.guilds:
                 if self.self.guilds[event.id].thread.isAlive():
                     self.self.guilds[event.id].thread_end = True
@@ -178,12 +178,11 @@ class MusicPlugin(Plugin):
     def remove_player(self, guild_id):
         if guild_id not in self.guilds:
             raise CommandError("I'm not currently playing music here.")
-        else:
-            self.get_player(guild_id).player.disconnect()
-            if self.get_player(guild_id).thread.isAlive():
-                self.get_player(guild_id).thread_end = True
-                self.get_player(guild_id).thread.join()
-            del self.guilds[guild_id]
+        self.get_player(guild_id).player.disconnect()
+        if self.get_player(guild_id).thread.isAlive():
+            self.get_player(guild_id).thread_end = True
+            self.get_player(guild_id).thread.join()
+        del self.guilds[guild_id]
 
     def same_channel_check(self, event):
         try:
@@ -194,19 +193,18 @@ class MusicPlugin(Plugin):
         if user_state is None:
             raise CommandError("You need to be in a voice "
                                "channel to use this command.")
-        else:
-            bot_state = self.get_player(
-                event.guild.id,
-            ).player.client.channel_id
-            try:
-                same_channel = bot_state == user_state.channel_id
-            except CommandError as e:
-                raise e
-            except Exception as e:
-                log.warning(e)
-            if not same_channel:
-                raise CommandError("You need to be in the same "
-                                   "voice channel to use this command.")
+        bot_state = self.get_player(
+            event.guild.id,
+        ).player.client.channel_id
+        try:
+            same_channel = bot_state == user_state.channel_id
+        except CommandError as e:
+            raise e
+        except Exception as e:
+            log.warning(e)
+        if not same_channel:
+            raise CommandError("You need to be in the same "
+                               "voice channel to use this command.")
 
     @Plugin.command("leave", metadata={"help": "voice"})
     def on_leave(self, event):
@@ -217,8 +215,8 @@ class MusicPlugin(Plugin):
         self.pre_check(event)
         self.remove_player(event.guild.id)
 
-    @Plugin.command("play", "[type:str] [content:str...]", metadata={"help": "voice"})
-    def on_play(self, event, type="yt", content=None):
+    @Plugin.command("play", "[play_type:str] [content:str...]", metadata={"help": "voice"})
+    def on_play(self, event, play_type="yt", content=None):
         """
         Make me play music from youtube or soundcloud in a voice chat.
         With the optional client argument being required
@@ -255,8 +253,8 @@ class MusicPlugin(Plugin):
                     self.on_join(event)
                 self.same_channel_check(event)
                 url_found = False
-                if type not in search_prefixs.keys():
-                    if type == "override":
+                if play_type not in search_prefixs.keys():
+                    if play_type == "override":
                         user_level = self.bot.get_level(event.author)
                         if user_level != CommandLevels.OWNER:
                             return api_loop(
@@ -265,14 +263,13 @@ class MusicPlugin(Plugin):
                             )
                         video_url = content
                         url_found = True
-                        pass
                     elif content is not None:
-                        content = f"{type} {content}"
-                        type = "yt"
+                        content = f"{play_type} {content}"
+                        play_type = "yt"
                     else:
-                        content = type
-                        type = "yt"
-                elif type in search_prefixs.keys() and content is None:
+                        content = play_type
+                        play_type = "yt"
+                elif play_type in search_prefixs.keys() and content is None:
                     return api_loop(
                         event.channel.send_message,
                         "Search argument missing.",
@@ -281,11 +278,11 @@ class MusicPlugin(Plugin):
                     if re.match(reg, content):
                         url_found = True
                         video_url = content
-                        type = key
+                        play_type = key
                         break
                 if not url_found:
-                    if type in search_prefixs:
-                        video_url = search_prefixs[type].format(content)
+                    if play_type in search_prefixs:
+                        video_url = search_prefixs[play_type].format(content)
                     else:
                         video_url = search_prefixs["yt"].format(content)
                 youtubedl_object = YoutubeDLInput(video_url, command="ffmpeg")
@@ -301,7 +298,7 @@ class MusicPlugin(Plugin):
                         event.channel.send_message,
                         "Livestreams aren't supported",
                     )
-                elif yt_data["duration"] > 3620:
+                if yt_data["duration"] > 3620:
                     return api_loop(
                         event.channel.send_message,
                         "The maximum supported length is 1 hour.",
@@ -693,7 +690,6 @@ class psuedo_queue(object):
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
                         log.warning(e)
                         sleep(10)
-                        pass
                     else:
                         log.exception(e)
                 except CommandError as e:
@@ -715,7 +711,6 @@ class psuedo_queue(object):
             except AttributeError as e:
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)
-                    pass
                 else:
                     log.exception(e)
             except CommandError as e:

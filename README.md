@@ -7,11 +7,11 @@ Discord.FM is a Discord bot designed for retrieving statistics and data from Las
 
 This bot is designed primarily with Python 3.6 and a Linux environment in mind, and may not function properly in other conditions.
 
-To install the necessary Python modules, use the following command in the bot's folder (with `sudo` not being required in all environments: 
+To install the necessary Python modules, use the following command in the bot's folder (with `sudo` not being required in all environments): 
 
 ``sudo pip3 install -r requirements.txt``
 
-In-order to enable voice functionality, you need to install ffmpeg3 and keep youtube-dl up-to-date for voice functionality to work using:
+In-order to enable voice functionality, you need to install ffmpeg3 and keep youtube-dl up-to-date using:
 
 ``sudo apt-get install ffmpeg3`` | ``pip3 install --upgrade youtube-dl``
 
@@ -20,7 +20,7 @@ Whilst you could just randomly run ``pip3 install --upgrade youtube-dl`` to keep
 ## Setup
 
 ### Discord access
-To enable the bot, you will have to create a new Discord application [here](https://discordapp.com/developers/applications/me), create and setup a bot user under it, and take it's token and put that into the following disco entry in config.json.
+To enable the bot, you will have to create a new Discord application [here](https://discordapp.com/developers/applications/me), create and setup a bot user under it, and take its token and put that into the following disco entry in config.json.
 
 ```json
 "disco": {
@@ -42,7 +42,7 @@ In-order enable the relevant API functions, you will have to setup accounts and 
 
 ## Optional
 
-Whilst this bot will default to running off an automatically generated local SQLite database (``data/database.db``), you can hook it up to an SQL server by adding the example seen bellow to config.json with your own data inserted.
+Whilst this bot will default to running off an automatically generated local SQLite database (``data/database.db``), you can hook it up to an SQL server by adding the example seen below to config.json with your own data inserted.
 For this to function, the SQL server will need to have a database with the name entered in config pre-created, but the bot will automatically create the necessary tables.
 
 ```json
