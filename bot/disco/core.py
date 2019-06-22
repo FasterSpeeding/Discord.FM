@@ -522,7 +522,7 @@ class CorePlugin(Plugin):
 
     def exception_response(self, event, exception, respond: bool = True):
         if respond:
-            if not isinstance(e, APIException) or exception.code != 50013:
+            if not isinstance(exception, APIException) or exception.code != 50013:
                 api_loop(
                     event.channel.send_message,
                     ("Oops, looks like we've blown a fuse back "
