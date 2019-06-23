@@ -133,6 +133,13 @@ class superuserPlugin(Plugin):
             str([plugin.name for plugin in self.bot.plugins.values()]),
         )
 
+    @Plugin.command("except", "<message:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_except_command(self, event, message):
+        """
+        Used to test exception handling.
+        """
+        raise Exception(message)
+
     @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_echo_command(self, event, payload):
         """
