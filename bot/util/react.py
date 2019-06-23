@@ -1,12 +1,8 @@
-# hecking reacts don't work in dms
-# write in checks for missing permissions like message embed etc
 from time import sleep, time
 import logging
 
 
 from disco.api.http import APIException
-from disco.bot.command import CommandError
-from disco.types.channel import Channel
 from disco.bot.command import CommandError
 from disco.types.message import Message
 
@@ -21,8 +17,8 @@ class reactor_condition:  # implement this as well.
             self,
             reactor,
             function,
-            owner_id:int,
-            owner_only:bool=True,
+            owner_id: int,
+            owner_only: bool = True,
             **kwargs):
         self.auth = owner_only  # rename that
         self.function = function
@@ -34,10 +30,10 @@ class reactor_condition:  # implement this as well.
 class reactor_object:  # implement this
     def __init__(
             self,
-            channel_id:int,
-            message_id:int,
-            end_time:int = None,
-            conditions:list=None,
+            channel_id: int,
+            message_id: int,
+            end_time: int = None,
+            conditions: list = None,
             **kwargs):
         """
         conditions: list
@@ -55,7 +51,7 @@ class reactors_handler(object):
         self.events = dict()
         self.__name__ = "reactor"
 
-    def init_event(self, message, timing, id=None, **kwargs):
+    def init_event(self, message, timing, **kwargs):
         end_time = time() + timing
         event_dict = {
             "channel_id": message.channel_id,
@@ -68,14 +64,14 @@ class reactors_handler(object):
 
     def add_argument(
             self,
-            id,
+            message_id,
             reactor,
             function,
             owner_id,
             owner_only=True,
             **kwargs):
-        if id in self.events:
-            self.events[id].conditions.append(
+        if message_id in self.events:
+            self.events[message_id].conditions.append(
                 type(
                     "reactor condition",
                     (object, ),
@@ -89,7 +85,7 @@ class reactors_handler(object):
                     )()
             )
         else:
-            raise IndexError("ID not present in list.")
+            raise IndexError("Message ID not present in list.")
 
     def add_reactors(
             self,
@@ -98,33 +94,21 @@ class reactors_handler(object):
             reaction,
             author_id,
             *args,
-            channel=None,
-            time:int=30):
+            channel_id=None,
+            time=30):
         if isinstance(message, Message):
-            if (message.id is None or message.channel is None or
-                    message.channel.id is None):
-                log.info("Failed to add reactors, either message.id or message.channel or message.channel.id was None.")
-                return
             message_id = message.id
             channel_id = message.channel.id
         else:
+            if not channel_id:
+                raise AssertionError()
             message_id = int(message)
-            if channel_id is not None:
-                if isinstance(channel_id, Channel):
-                    if channel_id.id is None:
-                        log.info("Failed to add reactors, channel_id.id was None.")
-                        return
-                    channel_id = channel_id.id
-                else:
-                    channel_id = int(channel_id)
-            else:
-                raise Exception("Unable to add reactor, either unable to work out channel id or missing channel id.")
         for reactor in args:
             self.add_argument(
-                id=message_id,
-                reactor=reactor,
-                function=reaction,
-                owner_id=author_id,
+                message_id,
+                reactor,
+                reaction,
+                author_id,
             )
         for reactor in args:
             try:
@@ -136,9 +120,8 @@ class reactors_handler(object):
             except APIException as e:
                 if e.code == 10008:
                     if message_id in self.events:
-                        # self.events.pop(message_id, None)
                         del self.events[message_id]
-                    break
+                    return
                 elif e.code == 50001:
                     if message_id in self.events:
                         del self.events[message_id]
@@ -159,13 +142,13 @@ class reactors_handler(object):
                 elif e.code == 50013:
                     client.client.api.channels_messages_create(
                         channel=channel_id,
-                        content="Missing permission required to clear message reactions ``Manage Messages``.",
+                        content=("Missing permission required to clear "
+                                 "message reactions ``Manage Messages``."),
                     )
                 else:
                     raise e
 
 
-@classmethod
 def generic_react(
         self,
         client,
@@ -210,7 +193,7 @@ def generic_react(
         )
     else:
         return
-    content, embed = edit_message(data=data, index=index, kwargs=kwargs)
+    content, embed = edit_message(data=data, index=index, **kwargs)
     api_loop(
         client.client.api.channels_messages_modify,
         channel_id,
@@ -236,10 +219,9 @@ def left_shift(index, list_len, remainder, amount=1, limit=100):
 
 
 def length(item, limit=100):
-    if len(item) >= limit:
-        return limit
-    else:
-        return len(item)
+    if len(item) < limit:
+        limit = len(item)
+    return limit
 
 
 def right_shift(index, list_len, remainder, amount=1, limit=100):

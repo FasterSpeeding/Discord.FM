@@ -2,11 +2,12 @@ from decimal import Decimal
 from random import shuffle
 from time import sleep, time
 from uuid import uuid4
+import re
 import threading
 
 
 from disco.bot import Plugin
-from disco.bot.command import CommandError
+from disco.bot.command import CommandError, CommandLevels
 from disco.types.base import Unset
 from disco.util.logging import logging
 from disco.voice.playable import YoutubeDLInput, BufferedOpusEncoderPlayable
@@ -14,10 +15,6 @@ from disco.voice.player import Player
 from disco.voice.client import VoiceException
 from fuzzywuzzy.fuzz import partial_ratio
 from youtube_dl.utils import DownloadError
-try:
-    from ujson import load
-except ImportError:
-    from json import load
 
 
 from bot.base import bot
@@ -26,102 +23,64 @@ from bot.util.misc import api_loop
 log = logging.getLogger(__name__)
 
 
-class Queue_handler_thread(object):
-    def __init__(self, bot, interval):
-        self.interval = interval
-        self.bot = bot
-        self.thread_end = bot.threads_end
-        self.thread = threading.Thread(target=self.queue_check)
-        self.thread.daemon = True
-        self.thread.start()
+class MusicPlugin(Plugin):
+    def load(self, ctx):
+        super(MusicPlugin, self).load(ctx)
+        bot.load_help_embeds(self)
+        self.guilds = {}
+        self.cool_down = {"general": {}, "playlist": {}}
+        self.marked_for_delete = []
 
+    def unload(self, ctx):
+        for guild in self.guilds.copy().keys():
+            self.remove_player(guild)
+        bot.unload_help_embeds(self)
+        super(MusicPlugin, self).unload(ctx)
+
+    @Plugin.schedule(1)
     def queue_check(self):
-        while True:
-            for guild in self.bot.guilds.copy().keys():
-                guild_object = self.bot.guilds.get(guild, None)
+        if getattr(self, "guilds", None):
+            for guild in self.guilds.copy().keys():
+                guild_object = self.guilds.get(guild, None)
                 try:
                     guild_object.guild_check()
                 except CommandError as e:
-                    log.warning("CommandError occured during queue_check {}".format(e))
-                    log.warning(dir(guild_object))
+                    log.warning(f"CommandError occured during queue_check {e}")
                 except Exception as e:
-                    log.warning("CommandError occured during queue_check {}".format(e))
+                    log.warning(f"Exception occured during queue_check {e}")
             #    except CommandError as e:
-            #        self.bot.channel.send_message  # was self.bot.msg.reply(e) ??? this is broken
+            #        self.channel.send_message  # was self.msg.reply(e)
             #    except IndexError:
             #        continue
             #    except Exception as e:
             #        log.warning(e)
-            if self.thread_end:
-                log.info("Ending queue_check thread.")
-                break
-            sleep(self.interval)
 
-
-class lonely_thread_handler(object):
-    def __init__(self, bot, interval):
-        self.interval = interval
-        self.bot = bot
-        self.thread_end = bot.threads_end
-        self.marked_for_delete = list()
-        self.thread = threading.Thread(target=self.lonely_check)
-        self.thread.daemon = True
-        self.thread.start()
-
+    @Plugin.schedule(5)
     def lonely_check(self):
-        while True:
-            for guild in self.bot.guilds.copy():
-                to_pass = False
-                for x, y in self.bot.state.guilds[guild].members.items():
-                    if (y.get_voice_state() is not None and
-                            y.id != self.bot.state.me.id and
-                            y.get_voice_state().channel_id == self.bot.get_player(
-                                self.bot.state.guilds[guild].id).player.client.channel_id):
-                        to_pass = True
-                        break
-                if to_pass:
-                    continue
-                self.bot.remove_player(guild)
+        if getattr(self, "guilds", None):
+            for guild, player in self.guilds.copy().items():
+                if not any(user.get_voice_state() is not None and
+                           user.id != self.state.me.id and
+                           user.get_voice_state().channel_id ==
+                           player.player.client.channel_id
+                           for user in self.state.guilds[
+                               guild].members.copy().values()):
+                    try:
+                        self.remove_player(guild)
+                    except CommandError:
+                        continue
             if self.marked_for_delete:
                 for guild in self.marked_for_delete.copy():
                     try:
-                        self.bot.remove_player(guild)
+                        self.remove_player(guild)
                     except CommandError:
                         continue
                     self.marked_for_delete.remove(guild)
-            if self.thread_end:
-                log.info("Ending lonely check thread.")
-                break
-            sleep(self.interval)
-
-
-class MusicPlugin(Plugin):
-    def load(self, ctx):
-        super(MusicPlugin, self).load(ctx)
-        bot.local.get(
-            self,
-            "owners",
-        )
-        bot.init_help_embeds(self)
-        bot.custom_prefix_init(self)
-        self.guilds = {}
-        self.cool_down = {"general": {}, "playlist": {}}
-        self.recursive = False
-        self.threads_end = False
-        self.ok = Queue_handler_thread(self, interval=1)
-        self.lonely = lonely_thread_handler(self, interval=5)
-
-    def unload(self, ctx):
-        self.threads_end = True
-        self.thread.join()
-        for guild in self.guilds.values():
-            guild.thread_end = True
-            guild.thread.join()
-        self.status_thread.thread.join()
 
     def pre_check(self, event):
         if event.channel.is_dm:
-            raise CommandError("Voice commands aren't allowed in the forbidden lands.")
+            raise CommandError("Voice commands cannot be used "
+                               "in DMs.")
 
     def get_ytdl_values(self, data):
         duration = data.get("duration", None)
@@ -146,21 +105,21 @@ class MusicPlugin(Plugin):
         time_formated = Decimal(seconds)/60
         minutes = round(time_formated - (time_formated % 1), 0)
         seconds = format(int(round(time_formated % 1 * 60, 0)), "02d")
-        return "{}.{}".format(minutes, seconds)
+        return f"{minutes}.{seconds}"
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
-        if type(event.unavailable) is Unset:
+        if isinstance(event.unavailable, Unset):
             if event.id in self.guilds:
                 if self.self.guilds[event.id].thread.isAlive():
                     self.self.guilds[event.id].thread_end = True
                     self.self.guilds[event.id].thread.join()
                 del self.guilds[event.id]
 
-    @Plugin.command("join")
+    @Plugin.command("join", metadata={"help": "voice"})
     def on_join(self, event):
         """
-        Voice Make me join a voice channel.
+        Make me join a voice channel.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -176,7 +135,7 @@ class MusicPlugin(Plugin):
             except VoiceException as e:
                 return api_loop(
                     event.channel.send_message,
-                    "Failed to connect to voice: `{}`".format(e),
+                    f"Failed to connect to voice: `{e}`",
                 )
             else:
                 self.guilds[event.guild.id] = psuedo_queue(
@@ -186,10 +145,10 @@ class MusicPlugin(Plugin):
                 )
             return
 
-    @Plugin.command("move")
+    @Plugin.command("move")  # , metadata={"help": "voice"}
     def on_move(self, event):
         # """
-        # Voice Move me to another voice channel (this currently clears play queue).
+        # Move me to another voice channel (this currently clears play queue).
         # Accepts no arguments.
         # """
         raise CommandError("NotImplemented")
@@ -197,7 +156,7 @@ class MusicPlugin(Plugin):
         if event.guild.id != 152559372126519296:
             return api_loop(
                 event.channel.send_message,
-                "This command is currently B R O K E and crippingly out of date.",
+                "This command is currently disabled.",
             )
         self.get_player(event.guild.id).thread.isAlive()
         state = event.guild.get_member(event.author).get_voice_state()
@@ -215,12 +174,11 @@ class MusicPlugin(Plugin):
     def remove_player(self, guild_id):
         if guild_id not in self.guilds:
             raise CommandError("I'm not currently playing music here.")
-        else:
-            self.get_player(guild_id).player.disconnect()
-            if self.get_player(guild_id).thread.isAlive():
-                self.get_player(guild_id).thread_end = True
-                self.get_player(guild_id).thread.join()
-            del self.guilds[guild_id]
+        self.get_player(guild_id).player.disconnect()
+        if self.get_player(guild_id).thread.isAlive():
+            self.get_player(guild_id).thread_end = True
+            self.get_player(guild_id).thread.join()
+        del self.guilds[guild_id]
 
     def same_channel_check(self, event):
         try:
@@ -229,47 +187,50 @@ class MusicPlugin(Plugin):
             log.warning(e)
             user_state = None
         if user_state is None:
-            raise CommandError("You need to be in a voice channel to use this command.")
-        else:
-            bot_state = self.get_player(
-                event.guild.id,
-            ).player.client.channel_id
-            try:
-                same_channel = bot_state == user_state.channel_id
-            except CommandError as e:
-                raise e
-            except Exception as e:
-                log.warning(e)
-            if not same_channel:
-                raise CommandError("You need to be in the same voice channel to use this command.")
+            raise CommandError("You need to be in a voice "
+                               "channel to use this command.")
+        bot_state = self.get_player(
+            event.guild.id,
+        ).player.client.channel_id
+        try:
+            same_channel = bot_state == user_state.channel_id
+        except CommandError as e:
+            raise e
+        except Exception as e:
+            log.warning(e)
+        if not same_channel:
+            raise CommandError("You need to be in the same "
+                               "voice channel to use this command.")
 
-    @Plugin.command("leave")
+    @Plugin.command("leave", metadata={"help": "voice"})
     def on_leave(self, event):
         """
-        Voice Make me leave a voice channel.
+        Make me leave a voice channel.
         Accepts no arguments.
         """
         self.pre_check(event)
         self.remove_player(event.guild.id)
 
-    @Plugin.command("play", "[type:str] [content:str...]")
-    def on_play(self, event, type="yt", content=None):
+    @Plugin.command("play", "[play_type:str] [content:str...]", metadata={"help": "voice"})
+    def on_play(self, event, play_type="yt", content=None):
         """
-        Voice Make me play the audio stream from youtube or soundcloud in a voice chat.
-        With the optional client argument being required when trying to search a client rather than inputting a link.
+        Make me play music from youtube or soundcloud in a voice chat.
+        With the optional client argument being required
+        when trying to search a client rather than inputting a link.
         If the first argument is in the list:
         "yt" or "youtube", "sc" or "soundcloud",
-        then 2nd argument will be searched for on the relevant site before being piped into the player queue.
-        If a url fitting either the youtube or soundcloud formats.
-        is passed as the first argument then it will be piped into the player queue.
-        Otherwise, this will search youtube and then pipe the result into the player queue.
+        then 2nd argument will be searched for and added to the queue.
+        If a url fitting one of the supported url formats
+        is passed as the first argument then it will be added to the queue.
+        Otherwise, this will search youtube and then queue the result.
         """
-        urls = {
-            "https://www.youtube.com/watch?v=": "yt",
-            "https://youtube.com/watch?v=": "yt",
-            "https://youtu.be": "yt",
-            "https://soundcloud.com": "sc",
-        }  # /watch?v= /watch?v=
+        url_regs = {
+            "yt": (r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)"
+                   r"\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?(?P<id>"
+                   r"[A-Za-z0-9\-=_]{11})"),
+            "sc": (r"^(https?:\/\/)?(www.)?(m\.)?soundcloud"
+                   r"\.com\/[\w\-\.]+(\/)+[\w\-\.]+/?$"),
+        }
         search_prefixs = {
             "youtube": "ytsearch:{}",
             "yt": "ytsearch:{}",
@@ -287,37 +248,37 @@ class MusicPlugin(Plugin):
                 if event.guild.get_member(event.author).get_voice_state():
                     self.on_join(event)
                 self.same_channel_check(event)
-                if type not in search_prefixs.keys():
-                    if type == "override":
-                        if event.author.id not in self.owners:
+                url_found = False
+                if play_type not in search_prefixs.keys():
+                    if play_type == "override":
+                        user_level = self.bot.get_level(event.author)
+                        if user_level != CommandLevels.OWNER:
                             return api_loop(
                                 event.channel.send_message,
                                 "You don't own me",
                             )
                         video_url = content
                         url_found = True
-                        pass
                     elif content is not None:
-                        content = "{} {}".format(type, content)
-                        type = "yt"
+                        content = f"{play_type} {content}"
+                        play_type = "yt"
                     else:
-                        content = type
-                        type = "yt"
-                elif type in search_prefixs.keys() and content is None:
+                        content = play_type
+                        play_type = "yt"
+                elif play_type in search_prefixs.keys() and content is None:
                     return api_loop(
                         event.channel.send_message,
-                        "Search (content) argument missing.",
+                        "Search argument missing.",
                     )
-                if "url_found" not in locals():
-                    url_found = False
-                for url, index in urls.items():
-                    if url in content:
+                for key, reg in url_regs.items():
+                    if re.match(reg, content):
                         url_found = True
                         video_url = content
-                        type = index
+                        play_type = key
+                        break
                 if not url_found:
-                    if type in search_prefixs:
-                        video_url = search_prefixs[type].format(content)
+                    if play_type in search_prefixs:
+                        video_url = search_prefixs[play_type].format(content)
                     else:
                         video_url = search_prefixs["yt"].format(content)
                 youtubedl_object = YoutubeDLInput(video_url, command="ffmpeg")
@@ -326,14 +287,14 @@ class MusicPlugin(Plugin):
                 except DownloadError as e:
                     return api_loop(
                         event.channel.send_message,
-                        "Video not avaliable: {}".format(e),
+                        f"Video not avaliable: {e}",
                     )
                 if yt_data["is_live"]:
                     return api_loop(
                         event.channel.send_message,
                         "Livestreams aren't supported",
                     )
-                elif yt_data["duration"] > 3620:
+                if yt_data["duration"] > 3620:
                     return api_loop(
                         event.channel.send_message,
                         "The maximum supported length is 1 hour.",
@@ -341,11 +302,8 @@ class MusicPlugin(Plugin):
                 self.get_player(event.guild.id).append(youtubedl_object)
                 api_loop(
                     event.channel.send_message,
-                    "Added ``{}`` by ``{}`` using ``{}``.".format(
-                        yt_data["title"],
-                        yt_data["uploader"],
-                        yt_data["source"],
-                    ),
+                    (f"Added ``{yt_data['title']}`` by ``"
+                     f"{yt_data['uploader']}`` using ``{yt_data['source']}``.")
                 )
             else:
                 api_loop(
@@ -360,13 +318,13 @@ class MusicPlugin(Plugin):
             )
             api_loop(
                 event.channel.send_message,
-                "Cool down: {} seconds left.".format(cool),
+                f"Cool down: {cool} seconds left.",
             )
 
-    @Plugin.command("playlist", "<to_shuffle:str> [url:str...]")
+    @Plugin.command("playlist", "<to_shuffle:str> [url:str...]", metadata={"help": "voice"})
     def on_playlist_command(self, event, to_shuffle, url=""):
         """
-        Voice Used to load the music from a youtube playlist link.
+        Used to load the music from a youtube playlist link.
         If the first argument is in the list:
         "shuffle" or "Shuffle",
         then the playlist will be shuffled before it's loaded.
@@ -375,14 +333,11 @@ class MusicPlugin(Plugin):
         """
         self.pre_check(event)
         if to_shuffle != "shuffle" and to_shuffle != "Shuffle":
-            url = "{} {}".format(to_shuffle, url)
+            url = f"{to_shuffle} {url}"
             to_shuffle = "no"
-        url_not_found = False
-        for url_format in ("https://www.youtube.com/playlist?list=",
-                "https://youtube.com/playlist?list=", "https://youtu.be"):
-            if url_format in url:
-                url_not_found = True
-        if not url_not_found:
+        if not re.match(r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)"
+                        r"\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?(?P<id>"
+                        r"[A-Za-z0-9\-=_]{11})", url):
             return api_loop(
                 event.channel.send_message,
                 "Invalid youtube playlist link.",
@@ -403,7 +358,7 @@ class MusicPlugin(Plugin):
                 except Exception as e:
                     return api_loop(
                         event.channel.send_message,
-                        "Playlist not found: {}".format(e),
+                        f"Playlist not found: {e}",
                     )
                 if to_shuffle == "shuffle" or to_shuffle == "Shuffle":
                     shuffle(many_object)
@@ -411,9 +366,9 @@ class MusicPlugin(Plugin):
                     event.channel.send_message,
                     "Adding music from playlist.",
                 )
-                for youtubedl_object in many_object:
+                for ytdl_object in many_object:
                     try:
-                        yt_data = self.get_ytdl_values(youtubedl_object.info)
+                        yt_data = self.get_ytdl_values(ytdl_object.info)
                     except DownloadError as e:
                         continue
                     if yt_data["is_live"]:
@@ -421,16 +376,16 @@ class MusicPlugin(Plugin):
                     elif yt_data is None or yt_data["duration"] > 3620:
                         continue
                     try:
-                        self.get_player(event.guild.id).append(youtubedl_object)
+                        self.get_player(event.guild.id).append(ytdl_object)
                     except CommandError as e:
                         self.cool_down["playlist"][event.guild.id] = False
                         raise e
                     videos_added += 1
-                message.edit(
-                    "Successfully added {} videos to queue from playlist and dropped {} videos.".format(
-                        videos_added,
-                        len(many_object) - videos_added,
-                    ),
+                dropped = len(many_object) - videos_added
+                api_loop(
+                    message.edit,
+                    (f"Successfully added {videos_added} videos to queue "
+                     f"from playlist and dropped {dropped} videos."),
                 )
                 self.cool_down["playlist"][event.guild.id] = False
             else:
@@ -446,42 +401,42 @@ class MusicPlugin(Plugin):
             )
             api_loop(
                 event.channel.send_message,
-                "Cool down: {} seconds left.".format(cool),
+                f"Cool down: {cool} seconds left.",
             )
 
-    @Plugin.command("pause")
+    @Plugin.command("pause", metadata={"help": "voice"})
     def on_pause(self, event):
         """
-        Voice Pause the audio stream.
+        Pause the audio stream.
         Accepts no arguments.
         """
         self.pre_check(event)
         if not self.get_player(event.guild.id).paused:
             self.get_player(event.guild.id).pause()
 
-    @Plugin.command("resume")
+    @Plugin.command("resume", metadata={"help": "voice"})
     def on_resume(self, event):
         """
-        Voice Resume the audio stream.
+        Resume the audio stream.
         Accepts no arguments.
         """
         self.pre_check(event)
         if self.get_player(event.guild.id).paused:
             self.get_player(event.guild.id).resume()
 
-    @Plugin.command("kill")
+    @Plugin.command("kill", metadata={"help": "voice"})
     def on_kill(self, event):
-        if event.channel.is_dm:
-            return api_loop(
-                event.channel.send_message,
-                "Voice commands aren't allowed in the forbidden lands.",
-            )
-        self.get_player(event.guild.id).client.ws.sock.shutdown()
+        """
+        Used to reset voice instance ws connection.
+        """
+        self.pre_check(event)
+        self.get_player(event.guild.id).player.client.ws.sock.shutdown()
+        api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("skip")
+    @Plugin.command("skip", metadata={"help": "voice"})
     def on_skip(self, event):
         """
-        Voice Play the next song in the queue.
+        Play the next song in the queue.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -496,23 +451,23 @@ class MusicPlugin(Plugin):
                 ),
             )
             return event.channel.send_message(
-                "Cool down: {} seconds left.".format(cool),
+                f"Cool down: {cool} seconds left.",
             )
 
-    @Plugin.command("shuffle")
+    @Plugin.command("shuffle", metadata={"help": "voice"})
     def on_shuffle(self, event):
         """
-        Voice Shuffle the playing queue.
+        Shuffle the playing queue.
         Accepts no arguments.
         """
         self.pre_check(event)
         shuffle(self.get_player(event.guild.id).queue)
         api_loop(event.channel.send_message, "Queue shuffled.")
 
-    @Plugin.command("playing")
+    @Plugin.command("playing", metadata={"help": "voice"})
     def on_playing_command(self, event):
         """
-        Voice Get information about currently playing song.
+        Get information about currently playing song.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -528,18 +483,16 @@ class MusicPlugin(Plugin):
             )
             api_loop(
                 event.channel.send_message,
-                "Currently playing ``{}`` by ``{}`` with length ``{}`` minutes using ``{}``.".format(
-                    ytdata["title"],
-                    ytdata["uploader"],
-                    ytdata["time_formated"],
-                    ytdata["source"],
-                ),
+                (f"Currently playing ``{ytdata['title']}`` by "
+                 f"``{ytdata['uploader']}`` with length "
+                 f"``{ytdata['time_formated']}`` minutes "
+                 f"using ``{ytdata['source']}``."),
             )
 
-    @Plugin.command("next")
+    @Plugin.command("next", metadata={"help": "voice"})
     def on_next_command(self, event):
         """
-        Voice Get information about next queued song.
+        Get information about next queued song.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -549,24 +502,23 @@ class MusicPlugin(Plugin):
             self.get_player(event.guild.id).queue[0].metadata,
         )
         event.channel.send_message(
-            "Next in queue is ``{}`` by ``{}`` with length ``{}`` minutes using ``{}``.".format(
-                ytdata["title"],
-                ytdata["uploader"],
-                ytdata["time_formated"],
-                ytdata["source"],
-            ),
+            (f"Next in queue is ``{ytdata['title']}`` by "
+             f"``{ytdata['uploader']}`` with length "
+             f"``{ytdata['time_formated']}`` minutes "
+             f"using ``{ytdata['source']}``.")
         )
 
-    @Plugin.command("queue", "[index:str...]", aliases=("queued", ))
+    @Plugin.command("queue", "[index:str...]", aliases=["queued"], metadata={"help": "voice"})
     def on_queued_command(self, event, index=None):
         """
-        Voice Get the information of a certain song in the queue or the amount of songs in the queue.
-        If an integer argument is input, then this will return the relevant queue entry.
-        If a string is input, then the string will be used to search for queue entry titles.
-        Otherwise, if no arguments are passed, this will return the current length of the queue.
+        Get information about the queue (search, entry info or length).
+        If an integer argument is input, then this will return the queue entry.
+        If a string is input, then this command will search the queue.
+        Else, if no arguments are passed, this will return the queue's length
         """
         self.pre_check(event)
-        if not self.get_player(event.guild.id).queue:
+        player = self.get_player(event.guild.id)
+        if not player.queue:
             api_loop(
                 event.channel.send_message,
                 "There aren't any songs queued right now.",
@@ -574,50 +526,43 @@ class MusicPlugin(Plugin):
         elif index is None:
             api_loop(
                 event.channel.send_message,
-                "There are {} songs queued ({} minutes). To get a specific song's info, just do this command + index.".format(
-                    len(self.get_player(event.guild.id).queue),
-                    self.minutes_format(self.get_player(
-                        event.guild.id,
-                    ).queue_length),
-                ),
+                (f"There are {len(player.queue)} songs queued "
+                 f"({self.minutes_format(player.queue_length)} minutes). To "
+                 "get a specific song's info, just do this command + index."),
             )
-        elif (index.replace("-", "").strip(" ").isdigit() and
-              0 <= (int(index.replace("-", "").strip(" ")) - 1) <=
-                len(self.get_player(event.guild.id).queue)):
-            ytdata = self.get_ytdl_values(
-                self.get_player(event.guild.id).queue[
-                    int(index.replace("-", "").strip(" ")) - 1
-                ].metadata,
-            )
-            api_loop(
-                event.channel.send_message,
-                "The song at index ``{}`` is ``{}`` by ``{}`` with length ``{}`` minutes and is sourced from ``{}``.".format(
-                    int(index.replace("-", "").strip(" ")),
-                    ytdata["title"],
-                    ytdata["uploader"],
-                    ytdata["time_formated"],
-                    ytdata["source"],
-                ),
-            )
-        elif index.replace("-", "").isdigit():
-            api_loop(event.channel.send_message, "Invalid index input.")
+        elif index.replace("-", "").strip(" ").isdigit():  # why replace - ?
+            index = int(index.replace("-", "").strip(" "))
+            if 0 <= index - 1 <= len(player.queue):
+                track = player.queue[index - 1].metadata
+                ytdata = self.get_ytdl_values(track)
+                api_loop(
+                    event.channel.send_message,
+                    (f"The song at index ``{index}`` is ``{ytdata['title']}`` "
+                     f"by ``{ytdata['uploader']}`` with length "
+                     f"``{ytdata['time_formated']}`` minutes and is "
+                     f"sourced from ``{ytdata['source']}``."),
+                )
+            else:
+                api_loop(event.channel.send_message, "Invalid index input.")
         else:
             matched_list = dict()
-            for item in self.get_player(event.guild.id).queue:
+            queue = player.queue
+            for item in queue:
                 ratio = partial_ratio(item.metadata["title"], index)
                 if ratio >= 70:
-                    matched_list["#{} ({}% match)".format(
-                        self.get_player(event.guild.id).queue.index(item)+1,
-                        ratio,
-                    )] = item.metadata["title"]
+                    key = f"#{queue.index(item)+1} ({ratio}% match)"
+                    matched_list[key] = item.metadata["title"]
             if matched_list:
+                footer = {
+                    "text": f"Requested by {event.author}",
+                    "img": event.author.get_avatar_url(size=32),
+                }
                 embed = bot.generic_embed_values(
-                    title="Queue search results",
-                    footer_text="Requested by {}".format(event.author),
+                    title={"title": "Queue search results"},
+                    footer=footer,
                     non_inlines={
                         k: matched_list[k] for k in list(matched_list)[-25:]
                     },
-                    footer_img=event.author.get_avatar_url(size=32),
                     timestamp=event.msg.timestamp.isoformat(),
                 )
                 api_loop(event.channel.send_message, embed=embed)
@@ -627,39 +572,30 @@ class MusicPlugin(Plugin):
                     "No similar items found in queue.",
                 )
 
-    @Plugin.command("shift", "<index:int>")
+    @Plugin.command("shift", "<index:int>", metadata={"help": "voice"})
     def on_queue_next_command(self, event, index):
         """
-        Voice Move an item that's already queued to the front of the queue by index.
-        Only accepts a single integer argument (the index of the target queue item).
+        Move an item that's already queued to the front of the queue by index.
+        Only accepts a single integer argument (a queue index).
         """
         self.pre_check(event)
         self.same_channel_check(event)
-        if 1 < index <= len(self.get_player(event.guild.id).queue):
+        player = self.get_player(event.guild.id)
+        if 1 < index <= len(player.queue):
             index -= 1
-            self.get_player(event.guild.id).queue.insert(
-                0,
-                self.get_player(event.guild.id).queue.pop(index),
-            )
-            ytdata = self.get_ytdl_values(
-                self.get_player(event.guild.id).queue[0].metadata,
-            )
+            player.queue.insert(0, player.queue.pop(index))
+            ytdata = self.get_ytdl_values(player.queue[0].metadata)
             api_loop(
                 event.channel.send_message,
-                "Moved ``{}`` to the front of the queue.".format(
-                    ytdata["title"],
-                    ytdata["uploader"],
-                    ytdata["time_formated"],
-                    ytdata["source"],
-                ),
+                f"Moved ``{ytdata['title']}`` to the front of the queue."
             )
         else:
             api_loop(event.channel.send_message, "Invalid index input.")
 
-    @Plugin.command("clear queue")
+    @Plugin.command("clear queue", metadata={"help": "voice"})
     def on_queue_clear_command(self, event):
         """
-        Voice Clear the current player's queue.
+        Clear the current player's queue.
         Accepts no arguments.
         """
         self.pre_check(event)
@@ -674,33 +610,30 @@ class MusicPlugin(Plugin):
     def on_queue_insert_command(self, event, index=1):
         pass
 
-    @Plugin.command("remove", "<index:str>")
+    @Plugin.command("remove", "<index:str>", metadata={"help": "voice"})
     def on_remove_command(self, event, index):
         """
-        Voice Remove a song from the queue by it's index.
+        Remove a song from the queue by it's index.
         Accepts no arguments.
         """
         self.pre_check(event)
         self.same_channel_check(event)
-        if not self.get_player(event.guild.id).queue:
+        player = self.get_player(event.guild.id)
+        if not player.queue:
             api_loop(
                 event.channel.send_message,
                 "There aren't any songs queued right now.",
             )
         elif str(index).lower() == "all":
-            self.get_player(event.guild.id).queue = list()
+            player.queue = list()
             api_loop(event.channel.send_message, "Cleared playing queue.")
         elif (str(index).isdigit() and
-              0 <= (int(index) - 1) <=
-                len(self.get_player(event.guild.id).queue)):
-            yt_dl_object = self.get_player(event.guild.id).pop(int(index) - 1)
+              0 <= (int(index) - 1) <= len(player.queue)):
+            yt_dl_object = player.pop(int(index) - 1)
             ytdata = self.get_ytdl_values(yt_dl_object.metadata)
             api_loop(
                 event.channel.send_message,
-                "Removed index ``{}`` at index ``{}``.".format(
-                    ytdata["title"],
-                    index,
-                ),
+                f"Removed index ``{ytdata['title']}`` at index ``{index}``.",
             )
         else:
             api_loop(event.channel.send_message, "Invalid index input.")
@@ -742,9 +675,9 @@ class psuedo_queue(object):
     def guild_check(self):
         if self.queue:
             if (not self.waiting and not self.paused and
-                  (self.start_time == 0 or self.current_length < 5 or
-                    time() - self.start_time >=
-                    self.current_length + self.paused_length - 10)):
+                    (self.start_time == 0 or self.current_length < 5 or
+                     time() - self.start_time >=
+                     self.current_length + self.paused_length - 10)):
                 try:
                     piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                     self.player.queue.append(piped)
@@ -752,7 +685,6 @@ class psuedo_queue(object):
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
                         log.warning(e)
                         sleep(10)
-                        pass
                     else:
                         log.exception(e)
                 except CommandError as e:
@@ -774,7 +706,6 @@ class psuedo_queue(object):
             except AttributeError as e:
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)
-                    pass
                 else:
                     log.exception(e)
             except CommandError as e:
@@ -817,7 +748,7 @@ class psuedo_queue(object):
                 self.player.disconnect()
                 self.thread_end = True
                 if id not in self.bot.marked_for_delete:
-                    self.bot.lonely.marked_for_delete.append(self.id)
+                    self.bot.marked_for_delete.append(self.id)
             if self.thread_end:
                 break
             sleep(self.interval)

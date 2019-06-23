@@ -1,29 +1,33 @@
-from re import compile
 from time import time
 import logging
+import re
 
 
 from disco.api.http import APIException
 from disco.bot.command import CommandError
-from requests.exceptions import ConnectionError
+from requests import Request
+from requests.exceptions import ConnectionError as requestsCError
 
 log = logging.getLogger(__name__)
 
-def api_loop(command, *args, **kwargs):
+
+def api_loop(command, *args, log_50007=True, **kwargs):
     init_time = time()
     while True:
         if time() - init_time > 10:
             raise CommandError("Command timed out.")
         try:
             return command(*args, **kwargs)
-        except ConnectionError as e:
+        except requestsCError as e:
             log.info("Didn't catch error reset.")
         except APIException as e:
             if e.code == 50013:
-                raise CommandError("Missing permissions to respond (possibly Embed Links).")
-            else:
-                log.critical("Api exception: {}: {}".format(e.code, e))
-                raise e
+                raise CommandError("Missing permissions to respond "
+                                   "(possibly Embed Links).")
+            if e.code != 50007 or log_50007:
+                log.critical(f"Api exception: {e.code}: {e}")
+            raise e
+
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
     """
@@ -31,7 +35,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
     defaults to the event channel if unable to send DM.
     """
     try:
-        api_loop(dm_channel.send_message, *args, **kwargs)
+        api_loop(dm_channel.send_message, log_50007=False, *args, **kwargs)
     except APIException as e:
         if e.code == 50007:  # Wasn't able to open a DM/send DM message
             api_loop(event.channel.send_message, *args, **kwargs)
@@ -39,24 +43,94 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
             raise e
 
 
-discord_user_reg = compile("[<][@]\\d{18}[>]")
-discord_nick_reg = compile("[<][@][!]\\d{18}[>]")
-discord_id_reg = compile("\\d{18}")
+user_regex = re.compile(r"[<]?[@]?[!]?\d{18}[>]?")
+redact_regs = [
+    re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
+    re.compile(r"[-._\w\d]{20,70}"),
+    re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
+    re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
+               r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+               r"|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0"
+               r"-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA"
+               r"-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,"
+               r"4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0"
+               r"-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80"
+               r":(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}"
+               r"){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
+               r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"),
+]
 
 
-def AT_to_id(id:str):
-    if (discord_user_reg.match(str(id)) or discord_nick_reg.match(str(id)) or
-            discord_id_reg.match(str(id))):
-        return int(str(id).replace("<", "").replace("@", "").replace("!", "").replace(">", ""))
-    else:
-        raise CommandError("Invalid @user.")
+def redact(data):
+    for reg in redact_regs:
+        data = reg.sub("<REDACTED>", data)
+    return data
 
 
-def get_dict_item(data:dict, map:list):
+def AT_to_id(discord_id: str):
+    discord_id = str(discord_id)
+    if user_regex.fullmatch(discord_id):
+        for to_replace in (("<", ""), ("@", ""), ("!", ""), (">", "")):
+            discord_id = discord_id.replace(*to_replace)
+        return int(discord_id)
+    raise CommandError("Invalid @user.")
+
+
+dictify_regex = re.compile(r"[\w\d]+\s{0,2}[=:]\s{0,2}[\w\d\s]+[,]?")
+equal_seperate = re.compile(r"[\w\d]+\s{0,2}[=]\s{0,2}[\w\d\s]+")
+colon_seperate = re.compile(r"[\w\d]+\s{0,2}[:]\s{0,2}[\w\d\s]+")
+
+
+def dictify(intake):
+    data = {}
+    for match in dictify_regex.findall(intake):
+        seperate = equal_seperate.match(match)
+        if seperate:
+            split = "="
+        else:
+            split = ":"
+            seperate = colon_seperate.match(match)
+        split = seperate.string.split(split)
+        key = split.pop(0).strip(" ")
+        value = ""
+        for item in split:
+            value += item
+        value = (value[:-1] if value[-1] == "," else value).strip(" ")
+        data[key] = value
+    return data
+
+
+def get_dict_item(data: dict, Dict_map: list):
     """
     Get the element embeded in layered dictionaries and lists
     based off a list of indexs and keys.
     """
-    for index in map:
+    for index in Dict_map:
         data = data[index]
     return data
+
+
+def get(
+        self,
+        params: dict = None,
+        endpoint: str = "",
+        url: str = None,
+        item: str = "item"):
+    url = (url or self.BASE_URL) + endpoint
+    if params:
+        params = {str(key): str(value) for key, value in params.items()}
+    get = self.s.prepare_request(Request("GET", url, params=params))
+    service = getattr(self, "SERVICE", None)
+    try:
+        r = self.s.send(get)
+    except requestsCError as e:
+        log.warning(e)
+        raise CommandError(f"{service} isn't available right now.")
+    if r.status_code < 400:
+        return r.json()
+    elif r.status_code == 404:
+        raise CommandError(f"404 - {item} doesn't exist.")
+    raise CommandError(f"{r.status_code} - {service} threw "
+                           f"unexpected error: {redact(r.text)}")

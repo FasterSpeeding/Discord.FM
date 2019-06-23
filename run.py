@@ -3,8 +3,14 @@ The CLI module is a small utility that can be used as an easy entry point for
 creating and running bots/clients.
 """
 import os
+import subprocess
+import sys
 import six
 import logging
+try:
+    from pip import __path__ as pip
+except ImportError:
+    pip = None
 
 from gevent import monkey
 
@@ -21,11 +27,12 @@ CONFIG_OVERRIDE_MAPPING = {
     'manhole_bind': 'manhole_bind',
     'encoder': 'encoder',
 }
+log = logging.getLogger(__name__)
 
 
 def disco_main(run=False):
     """
-    Creates an argument parser and parses a standard set of command line arguments,
+    Parse config.json
     creating a new :class:`Client`.
     Returns
     -------
@@ -39,6 +46,34 @@ def disco_main(run=False):
     from bot.base import bot
 
     args = bot.local.disco
+
+    if pip and sys.platform == "linux" or sys.platform == "linux2":
+        print("Sudo access may be required to keep youtube-dl up to date.")
+        if (any("voice" in plug for plug in bot.local.disco.plugin) or
+                any("voice" in plug for plug in bot.local.disco.bot.plugins)):
+            try:
+                subprocess.call([
+                    "sudo",
+                    sys.executable,
+                    pip[0],
+                    "install",
+                    "--upgrade",
+                    "youtube-dl",
+                ])
+            except FileNotFoundError as e:
+                if e.filename == "sudo":
+                    subprocess.call([
+                        sys.executable,
+                        pip[0],
+                        "install",
+                        "--upgrade",
+                        "youtube-dl",
+                    ])
+                else:
+                    raise e
+    else:
+        print(f"System {sys.platform} may not be supported, "
+              "Linux is suggested or pip isn't installed.")
 
     # Create the base configuration object
     if args.config:
@@ -63,7 +98,7 @@ def disco_main(run=False):
 
     file_handler = logging.FileHandler("logs/bot.log")
     file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
-    file_handler.setLevel(config.log_level.upper())
+    file_handler.setLevel(args.file_log_level.upper())
     stream_handler = logging.StreamHandler()
     setup_logging(
         handlers=(file_handler, stream_handler),
@@ -76,7 +111,8 @@ def disco_main(run=False):
     # If applicable, build the bot and load plugins
     bot = None
     if args.run_bot or hasattr(config, 'bot'):
-        bot_config = BotConfig(config.bot.to_dict()) if hasattr(config, 'bot') else BotConfig()
+        bot_config = (BotConfig(config.bot.to_dict()) if
+                      hasattr(config, 'bot') else BotConfig())
         if not hasattr(bot_config, 'plugins'):
             bot_config.plugins = args.plugin
         else:
@@ -91,4 +127,15 @@ def disco_main(run=False):
 
 
 if __name__ == '__main__':
-    disco_main(True) # KeyboardInterrupt
+    from bot.util.sql import handle_sql, db_session
+    disco = disco_main(False)
+    try:
+        disco.run_forever()
+    except KeyboardInterrupt:
+        log.info("Keyboard interrupt received, unloading plugins.")
+        for plugin in disco.plugins.copy().values():
+            log.info("Unloading plugin: " + plugin.__class__.__name__)
+            disco.rmv_plugin(plugin.__class__)
+            log.info("Successfully unloaded plugin: "
+                     + plugin.__class__.__name__)
+        handle_sql(db_session.flush)
