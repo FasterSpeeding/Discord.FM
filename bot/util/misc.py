@@ -5,7 +5,7 @@ import re
 
 from disco.api.http import APIException
 from disco.bot.command import CommandError
-from requests import Session, Request
+from requests import Request
 from requests.exceptions import ConnectionError as requestsCError
 
 log = logging.getLogger(__name__)
@@ -78,14 +78,14 @@ def AT_to_id(discord_id: str):
     raise CommandError("Invalid @user.")
 
 
-regex = re.compile(r"[\w\d]+\s{0,2}[=:]\s{0,2}[\w\d\s]+[,]?")
+dictify_regex = re.compile(r"[\w\d]+\s{0,2}[=:]\s{0,2}[\w\d\s]+[,]?")
 equal_seperate = re.compile(r"[\w\d]+\s{0,2}[=]\s{0,2}[\w\d\s]+")
 colon_seperate = re.compile(r"[\w\d]+\s{0,2}[:]\s{0,2}[\w\d\s]+")
 
 
 def dictify(intake):
     data = {}
-    for match in regex.findall(intake):
+    for match in dictify_regex.findall(intake):
         seperate = equal_seperate.match(match)
         if seperate:
             split = "="

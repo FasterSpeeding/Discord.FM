@@ -155,7 +155,7 @@ class fmPlugin(Plugin):
             else:
                 try:
                     target = AT_to_id(target)
-                except CommandError as e:
+                except CommandError:
                     data = handle_sql(aliases.query.filter(
                         aliases.guild_id == event.guild.id,
                         aliases.alias.like(target),
@@ -320,7 +320,7 @@ class fmPlugin(Plugin):
             except CommandError:
                 embed.add_field(
                     name=f"[{current_index + 1}] {user}",
-                    value=f"Last.fm account `{friend}` not found.",
+                    value=f"Unable to access Last.fm account `{friend}`.",
                     inline=True,
                 )
             if current_index >= len(data) - 1:
@@ -382,7 +382,7 @@ class fmPlugin(Plugin):
                 0,
                 thumbnail=thumbnail,
             )
-            reply = api_loop(event.channel.send_message, embed=embed)
+            reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(artist_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
@@ -437,7 +437,7 @@ class fmPlugin(Plugin):
                 0,
                 thumbnail=thumbnail,
             )
-            reply = api_loop(event.channel.send_message, embed=embed)
+            reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(album_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
@@ -492,7 +492,7 @@ class fmPlugin(Plugin):
                 0,
                 thumbnail=thumbnail,
             )
-            reply = api_loop(event.channel.send_message, embed=embed)
+            reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(track_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
@@ -922,7 +922,7 @@ class fmPlugin(Plugin):
         fm_embed.set_footer(
             text=f"{round(Decimal(time() - test) * 1000)} ms",
         )
-        api_loop(event.channel.send_message, " ", embed=fm_embed)
+        api_loop(message.edit, " ", embed=fm_embed)
 
     @Plugin.command("reset user", metadata={"help": "data"})
     def on_user_reset_command(self, event):
@@ -1022,13 +1022,11 @@ class fmPlugin(Plugin):
                     },
                 )()
                 raise fmEntryNotFound(self.cache[url].error)
-            else:
-                raise fmEntryNotFound(f"{r.status_code} - Last.fm "
+            raise fmEntryNotFound(f"{r.status_code} - Last.fm "
                                       "threw unexpected HTTP status code.")
         elif self.cache[url].exists and time() <= self.cache[url].expire:
             return self.cache[url].data
-        else:
-            raise fmEntryNotFound(self.cache[url].error)
+        raise fmEntryNotFound(self.cache[url].error)
 
     def get_fm_secondary(
             self,
@@ -1178,7 +1176,6 @@ class fmPlugin(Plugin):
             limit = len(data) - index
         for x in range(limit):
             current_index = index + x
-            braces = name_format.count("{}")
             current_name = name_format[:].replace(
                 "{}",
                 str(current_index + 1),
@@ -1241,13 +1238,13 @@ class fmPlugin(Plugin):
             r = get(endpoint, headers=headers, params=params)
         except requestCError as e:
             log.warning(e)
-        if r.status_code < 400:
-            data = r.json().get("results")
-            data = (data[0].get("thumb") if data else data)
-            return data
         else:
+            if r.status_code < 400:
+                data = r.json().get("results")
+                data = (data[0].get("thumb") if data else data)
+                return data
             log.warning(f"{r.status_code} returned "
-                            f"by Discogs: {r.text}")
+                        f"by Discogs: {r.text}")
 
     def time_since(self, time_of_event: int):
         """

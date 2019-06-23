@@ -25,11 +25,11 @@ class api_basis:
             self,
             url: dict,
             auth: str,
-            headers: dict = {},
-            payload: dict = {}):
+            headers: dict = None,
+            payload: dict = None):
         self.url = self.url.format(**url)
-        self.headers = {**self.headers, self.auth_header: auth, **headers}
-        self.payload = {**self.payload, **payload}
+        self.headers.update({self.auth_header: auth, **(headers or {})})
+        self.payload.update(payload or {})
 
     def to_dict(self):
         return self.__dict__
@@ -84,6 +84,7 @@ class status_handler(object):
             discordbotsgg: gg_token,
         }
 
+    @staticmethod
     def post(self, service, guilds_payload):
         try:
             r = post(

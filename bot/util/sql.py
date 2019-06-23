@@ -244,6 +244,7 @@ class aliases(Base):
 
 def handle_sql(f, *args, **kwargs):
     fail = 0
+    previous_exception = None
     while True:
         if fail >= 10:
             raise SQLexception(

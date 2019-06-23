@@ -4,7 +4,6 @@ import logging
 
 from disco.api.http import APIException
 from disco.bot.command import CommandError
-from disco.types.channel import Channel
 from disco.types.message import Message
 
 

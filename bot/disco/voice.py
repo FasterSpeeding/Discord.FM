@@ -15,10 +15,6 @@ from disco.voice.player import Player
 from disco.voice.client import VoiceException
 from fuzzywuzzy.fuzz import partial_ratio
 from youtube_dl.utils import DownloadError
-try:
-    from ujson import load
-except ImportError:
-    from json import load
 
 
 from bot.base import bot
@@ -339,7 +335,6 @@ class MusicPlugin(Plugin):
         if to_shuffle != "shuffle" and to_shuffle != "Shuffle":
             url = f"{to_shuffle} {url}"
             to_shuffle = "no"
-        url_not_found = False
         if not re.match(r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)"
                         r"\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?(?P<id>"
                         r"[A-Za-z0-9\-=_]{11})", url):

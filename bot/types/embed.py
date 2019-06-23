@@ -29,10 +29,12 @@ class generic_embed_values:
                             f"embed: '{key}'.")
         return embed
 
-    def color(self, embed, data):
+    @staticmethod
+    def color(embed, data):
         embed.color = data
 
-    def author(self, embed, data):
+    @staticmethod
+    def author(embed, data):
         embed.set_author(
             name=data.get("name", None),
             url=data.get("url", None),
@@ -46,10 +48,12 @@ class generic_embed_values:
         elif self.__local.embed_values.url:
             embed.url = self.__local.embed_values.url
 
-    def thumbnail(self, embed, data):
+    @staticmethod
+    def thumbnail(embed, data):
         embed.set_thumbnail(url=data)
 
-    def description(self, embed, data):
+    @staticmethod
+    def description(embed, data):
         embed.description = str(data)[:2048]
 
     def inlines(self, embed, data):
@@ -58,7 +62,8 @@ class generic_embed_values:
     def non_inlines(self, embed, data):
         self.__field(embed, data, False)
 
-    def __field(self, embed, data, inline):
+    @staticmethod
+    def __field(embed, data, inline):
         skip = data.pop("skip_inlines", None)
         for key in list(data.keys())[:25]:
             value = data[key]
@@ -73,13 +78,16 @@ class generic_embed_values:
                 inline=inline,
             )
 
-    def image(self, embed, data):
+    @staticmethod
+    def image(embed, data):
         embed.set_image(url=data)
 
-    def timestamp(self, embed, data):
+    @staticmethod
+    def timestamp(embed, data):
         embed.timestamp = data
 
-    def footer(self, embed, data):
+    @staticmethod
+    def footer(embed, data):
         text = data.get("text", None)
         if text:
             text = str(text)[:2048]

@@ -10,10 +10,6 @@ from disco.bot.command import CommandError, CommandEvent, CommandLevels
 from disco.types.base import Unset
 from disco.util.sanitize import S as sanitize
 from disco.util.logging import logging
-try:
-    from ujson import load
-except ImportError:
-    from json import load
 
 
 from bot import __GIT__, __VERSION__
@@ -497,7 +493,7 @@ class CorePlugin(Plugin):
                     handle_sql(db_session.add, guild)
                     handle_sql(db_session.flush)
                 else:
-                    preifx = guild.prefix
+                    prefix = guild.prefix
                     self.prefixes[event.guild_id] = guild.prefix
 
         if event.message.content and event.message.content.startswith(prefix):
