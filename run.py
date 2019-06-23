@@ -7,6 +7,10 @@ import subprocess
 import sys
 import six
 import logging
+try:
+    from pip import __path__ as pip
+except ImportError:
+    pip = None
 
 from gevent import monkey
 
@@ -43,7 +47,7 @@ def disco_main(run=False):
 
     args = bot.local.disco
 
-    if sys.platform == "linux" or sys.platform == "linux2":
+    if pip and sys.platform == "linux" or sys.platform == "linux2":
         print("Sudo access may be required to keep youtube-dl up to date.")
         if (any("voice" in plug for plug in bot.local.disco.plugin) or
                 any("voice" in plug for plug in bot.local.disco.bot.plugins)):
@@ -51,8 +55,7 @@ def disco_main(run=False):
                 subprocess.call([
                     "sudo",
                     sys.executable,
-                    "-m",
-                    "pip3",
+                    pip[0],
                     "install",
                     "--upgrade",
                     "youtube-dl",
@@ -61,8 +64,7 @@ def disco_main(run=False):
                 if e.filename == "sudo":
                     subprocess.call([
                         sys.executable,
-                        "-m",
-                        "pip3",
+                        pip[0],
                         "install",
                         "--upgrade",
                         "youtube-dl",
@@ -70,8 +72,8 @@ def disco_main(run=False):
                 else:
                     raise e
     else:
-        print(f"System {sys.platform} may not "
-              "be supported, Linux is suggested.")
+        print(f"System {sys.platform} may not be supported, "
+              "Linux is suggested or pip isn't installed.")
 
     # Create the base configuration object
     if args.config:

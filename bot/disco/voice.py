@@ -79,8 +79,8 @@ class MusicPlugin(Plugin):
 
     def pre_check(self, event):
         if event.channel.is_dm:
-            raise CommandError("Voice commands aren't allowed "
-                               "in the forbidden lands.")
+            raise CommandError("Voice commands cannot be used "
+                               "in DMs.")
 
     def get_ytdl_values(self, data):
         duration = data.get("duration", None)

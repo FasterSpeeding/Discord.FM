@@ -62,7 +62,8 @@ class fmPlugin(Plugin):
         bot.unload_help_embeds(self)
         super(fmPlugin, self).unload(ctx)
 
-    def __check__(self):
+    @staticmethod
+    def __check__():
         return bot.local.api.last_key
 
     @Plugin.schedule(60)
@@ -1104,7 +1105,8 @@ class fmPlugin(Plugin):
             return user_data
         raise CommandError("Invalid username format.")
 
-    def get_user_info(self, target: str, guild: int = None):
+    @staticmethod
+    def get_user_info(target: str, guild: int = None):
         """
         Used to get a Discord user's information from the SQL server.
 
@@ -1159,8 +1161,8 @@ class fmPlugin(Plugin):
             }
         return data
 
+    @staticmethod
     def search_embed(
-            self,
             data: dict,
             index: int,
             names: list,
@@ -1246,7 +1248,8 @@ class fmPlugin(Plugin):
             log.warning(f"{r.status_code} returned "
                         f"by Discogs: {r.text}")
 
-    def time_since(self, time_of_event: int):
+    @staticmethod
+    def time_since(time_of_event: int):
         """
         A command used get the time passed since a unix time stamp
         and output it as a human readable string.

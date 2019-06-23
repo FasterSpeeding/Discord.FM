@@ -146,7 +146,7 @@ class CorePlugin(Plugin):
         if event.channel.is_dm:
             return api_loop(
                     event.channel.send_message,
-                    "This command cannot be used in the forbidden lands.",
+                    "This command cannot be used in DMs.",
                 )
         member = event.guild.get_member(event.author)
         if member.permissions.can(8):  # admin

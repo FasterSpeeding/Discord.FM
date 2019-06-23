@@ -81,7 +81,8 @@ class ApiPlugin(Plugin):
         )
         first_message.delete()
         responses = 0
-        while lyrics and responses < (guild.lyrics_limit or 3):
+        limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+        while lyrics and responses < limit:
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
             if lyrics:
@@ -100,6 +101,11 @@ class ApiPlugin(Plugin):
         Only argument is an integer that must be between 0 and 8.
         When set to 0, the lyrics command will be disabled.
         """
+        if event.channel.is_dm:
+            return api_loop(
+                event.channel.send_message,
+                "This command cannot be used in DMs.",
+            )
         if limit is not None:
             member = event.guild.get_member(event.author)
             if member.permissions.can(32):  # manage server
@@ -134,7 +140,7 @@ class ApiPlugin(Plugin):
                 )
         else:
             guild = handle_sql(guilds.query.get, event.guild.id)
-            limit = (guild.lyrics_limit or 3)
+            limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
             api_loop(
                     event.channel.send_message,
                     f"The current limit is set to {limit}",
@@ -228,7 +234,8 @@ class ApiPlugin(Plugin):
         self.spotify_auth = r.json()["access_token"]
         self.spotify_auth_expire = time() + r.json()["expires_in"]
 
-    def spotify_react(self, data, index, **kwargs):
+    @staticmethod
+    def spotify_react(data, index, **kwargs):
         return data[index]["external_urls"]["spotify"], None
 
     @Plugin.command("youtube", "<yt_type:str> [content:str...]", aliases=["yt"], metadata={"help": "api"})
@@ -313,7 +320,8 @@ class ApiPlugin(Plugin):
                 f"Error code {r.status_code} returned.",
             )
 
-    def youtube_react(self, data, index, **kwargs):
+    @staticmethod
+    def youtube_react(data, index, **kwargs):
         return kwargs["url_format"].format(
                 data[index]["id"][kwargs["index_type"]],
             ), None

@@ -100,7 +100,8 @@ class reactors_handler(object):
             message_id = message.id
             channel_id = message.channel.id
         else:
-            assert channel_id
+            if not channel_id:
+                raise AssertionError()
             message_id = int(message)
         for reactor in args:
             self.add_argument(
@@ -120,7 +121,7 @@ class reactors_handler(object):
                 if e.code == 10008:
                     if message_id in self.events:
                         del self.events[message_id]
-                    break
+                    return
                 elif e.code == 50001:
                     if message_id in self.events:
                         del self.events[message_id]
