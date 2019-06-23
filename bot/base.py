@@ -136,7 +136,7 @@ class embed_values(config_template, feed_dict):
     color = unset(str)
 
 
-class bot(config_template, feed_dict):
+class bot_data(config_template, feed_dict):
     levels = unset(dict, default={})
     commands_require_mention = unset(bool, default=True)
     commands_mention_rules = unset(dict)
@@ -163,7 +163,7 @@ class bot(config_template, feed_dict):
 class disco(config_template, feed_dict):
     __name__ = "disco"
     token = unset(str)
-    bot = unset(bot)
+    bot = unset(bot_data)
     config = unset(str)
     shard_id = unset(int)
     shard_count = unset(int)

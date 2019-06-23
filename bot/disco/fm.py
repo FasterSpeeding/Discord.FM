@@ -249,7 +249,7 @@ class fmPlugin(Plugin):
                 title=title,
                 thumbnail=event.author.avatar_url,
             )
-            reply = api_loop(event.channel.send_message, embed=embed)
+            reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,

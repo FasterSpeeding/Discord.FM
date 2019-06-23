@@ -85,7 +85,7 @@ class status_handler(object):
         }
 
     @staticmethod
-    def post(self, service, guilds_payload):
+    def post(service, guilds_payload):
         try:
             r = post(
                 service.url,
