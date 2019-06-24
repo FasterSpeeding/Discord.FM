@@ -260,7 +260,7 @@ def handle_sql(f, *args, **kwargs):
             previous_exception = e
 
 
-for table in (friends, guilds, users, aliases):
+for table in (guilds, users, friends, aliases):
     if not engine.dialect.has_table(engine, table.__tablename__):
         log.info(f"Didn't find {table.__tablename__} "
                  "table, creating new instance.")

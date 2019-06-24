@@ -7,14 +7,15 @@ import subprocess
 import sys
 import six
 import logging
-try:
-    from pip import __path__ as pip
-except ImportError:
-    pip = None
 
 from gevent import monkey
 
 monkey.patch_all()
+
+try:
+    from pip import __path__ as pip
+except ImportError:
+    pip = None
 
 # Mapping of argument names to configuration overrides
 CONFIG_OVERRIDE_MAPPING = {

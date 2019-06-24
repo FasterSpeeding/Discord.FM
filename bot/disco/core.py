@@ -189,24 +189,26 @@ class CorePlugin(Plugin):
                             if e.code == 10008:
                                 if message_id in bot.reactor.events:
                                     del bot.reactor.events[message_id]
+                                return
+                            elif e.code == 50013:
+                                pass
                             else:
                                 raise e
+                        index = condition.function(
+                            client=self,
+                            message_id=message_id,
+                            channel_id=event.channel_id,
+                            reactor=condition.reactor,
+                            **event.kwargs,
+                        )
+                        if index is not None:
+                            bot.reactor.events[
+                                message_id
+                            ].kwargs["index"] = index
+                            event.end_time += 6
                         else:
-                            index = condition.function(
-                                client=self,
-                                message_id=message_id,
-                                channel_id=event.channel_id,
-                                reactor=condition.reactor,
-                                **event.kwargs,
-                            )
-                            if index is not None:
-                                bot.reactor.events[
-                                    message_id
-                                ].kwargs["index"] = index
-                                event.end_time += 6
-                            else:
-                                if message_id in bot.reactor.events:
-                                    del bot.reactor.events[message_id]
+                            if message_id in bot.reactor.events:
+                                del bot.reactor.events[message_id]
             elif event and time() > event.end_time:
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
@@ -220,7 +222,7 @@ class CorePlugin(Plugin):
                         self.client.api.channels_messages_create(
                             channel=event.channel_id,
                             content=("Missing permission required "
-                                     "to clear message reactions "
+                                     "to remove message reactions "
                                      "``Manage Messages``."),
                         )
                     else:
@@ -549,8 +551,9 @@ class CorePlugin(Plugin):
                 try:
                     api_loop(target_dm.send_message, embed=embed)
                 except APIException as e:
-                    if e.code == 50013:
-                        log.warning(f"Unable to exception dm: {target}")
+                    if e.code in (50013, 50001, 50007):
+                        log.warning("Unable to exception dm - "
+                                    f"{target}: {e}")
                         self.exception_dms.remove(target)
                     else:
                         raise e
@@ -571,9 +574,9 @@ class CorePlugin(Plugin):
                                 embed=embed,
                             )
                         except APIException as e:
-                            if e.code == 50013:
-                                log.warning("Unable to post in "
-                                            f"exception channel: {channel}")
+                            if e.code in (50013, 50001):
+                                log.warning("Unable to post in exception "
+                                            f"channel - {channel}: {e}")
                                 del self.exception_channels[guild]
                             else:
                                 raise e
