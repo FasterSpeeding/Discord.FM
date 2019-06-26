@@ -138,7 +138,7 @@ class CorePlugin(Plugin):
                 handle_sql(db_session.delete, guild)
                 handle_sql(db_session.flush)
 
-    @Plugin.command("reset guild", metadata={"help": "data"})
+    @Plugin.command("guild", group="reset", metadata={"help": "miscellaneous"})
     def on_guild_purge(self, event):
         """
         Used to reset any custom guild data stored by the bot (e.g. prefix)
@@ -163,6 +163,22 @@ class CorePlugin(Plugin):
             api_loop(
                 event.channel.send_message,
                 "This command can only be used by server admins.",
+            )
+
+    @Plugin.command("user", group="reset", metadata={"help": "miscellaneous"})
+    def on_user_reset_command(self, event):
+        """
+        Used to reset any user data stored by the bot (e.g. Last.fm username)
+        """
+        user = handle_sql(users.query.get, event.author.id)
+        if user:
+            handle_sql(db_session.delete, user)
+            handle_sql(db_session.flush)
+            api_loop(event.channel.send_message, "Removed user data.")
+        else:
+            api_loop(
+                event.channel.send_message,
+                ":thumbsup: Nothing to see here.",
             )
 
     @Plugin.listen("MessageReactionAdd")
@@ -447,7 +463,7 @@ class CorePlugin(Plugin):
                      "https://discordapp.com/invite/jkEXqVd"),
         )
 
-    @Plugin.command("update sites", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
     def on_update_sites_command(self, event):
         """
         Manually post the bot's stats to the enabled bot listing sites.
@@ -467,7 +483,7 @@ class CorePlugin(Plugin):
                 "No status sites are enabled in config.",
             )
 
-    @Plugin.command("update presence", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
     def on_update_presence_command(self, event):
         """
         Manually update the bot's presence.

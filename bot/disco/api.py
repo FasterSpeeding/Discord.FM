@@ -159,14 +159,9 @@ class ApiPlugin(Plugin):
         spotify_auth = getattr(self, "spotify_auth", None)
         if not spotify_auth or time() >= self.spotify_auth_expire:
             self.get_spotify_auth()
-        if sp_type not in ("track", "album", "artist", "playlist"):
-            search = f"{sp_type} {search}"
+        if not search or sp_type not in ("track", "album", "artist", "playlist"):
+            search = f"{sp_type} {search}".strip(" ")
             sp_type = "track"
-        elif search == "":
-            return api_loop(
-                event.channel.send_message,
-                "Missing search argument.",
-            )
         r = get(
             "https://api.spotify.com/v1/search",
             params={
@@ -218,6 +213,7 @@ class ApiPlugin(Plugin):
         auth = urlsafe_b64encode(
             f"{self.spotify_ID}:{self.spotify_secret}".encode()
         ).decode()
+        r_time = time()
         r = post(
             "https://accounts.spotify.com/api/token",
             data={"grant_type": "client_credentials"},
@@ -232,14 +228,14 @@ class ApiPlugin(Plugin):
                 f"Error code {r.status_code} returned by oauth flow"
             )
         self.spotify_auth = r.json()["access_token"]
-        self.spotify_auth_expire = time() + r.json()["expires_in"]
+        self.spotify_auth_expire = r_time + r.json()["expires_in"]
 
     @staticmethod
     def spotify_react(data, index, **kwargs):
         return data[index]["external_urls"]["spotify"], None
 
     @Plugin.command("youtube", "<yt_type:str> [content:str...]", aliases=["yt"], metadata={"help": "api"})
-    def on_youtube_command(self, event, yt_type, content=None):
+    def on_youtube_command(self, event, yt_type, content=""):
         """
         Search for a Youtube video.
         If the first argument is in the list
@@ -262,11 +258,8 @@ class ApiPlugin(Plugin):
                 "url": "https://www.youtube.com/playlist?list={}",
             },
         }
-        if content is None:
-            content = yt_type
-            yt_type = "video"
-        elif yt_type not in yt_types_indexs:
-            content = f"{yt_type} {content}"
+        if not content or yt_type not in yt_types_indexs:
+            content = f"{yt_type} {content}".strip(" ")
             yt_type = "video"
         r = get(
             "https://www.googleapis.com/youtube/v3/search",

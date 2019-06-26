@@ -73,7 +73,7 @@ class fmPlugin(Plugin):
             if cache_obj.expire > time():
                 del self.cache[url]
 
-    @Plugin.command("alias add", "<alias:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("add", "<alias:str...>", group="alias", metadata={"help": "last.fm"})
     def on_alias_set_command(self, event, alias):
         """
         Used to add or remove a user alias in a guild.
@@ -137,7 +137,7 @@ class fmPlugin(Plugin):
                          "already taken in this guild."),
                     )
 
-    @Plugin.command("alias list", "[target:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("list", "[target:str...]", group="alias", metadata={"help": "last.fm"})
     def on_alias_list_command(self, event, target=None):
         """
         Used to get a list of a user's aliases in a guild.
@@ -322,7 +322,7 @@ class fmPlugin(Plugin):
                 embed.add_field(
                     name=f"[{current_index + 1}] {user}",
                     value=f"Unable to access Last.fm account `{friend}`.",
-                    inline=True,
+                    inline=False,
                 )
             if current_index >= len(data) - 1:
                 break
@@ -364,7 +364,7 @@ class fmPlugin(Plugin):
             )
         handle_sql(db_session.flush)
 
-    @Plugin.command("search artists", "<artist:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("artists", "<artist:str...>", group="search", metadata={"help": "last.fm"})
     def on_search_artist_command(self, event, artist):
         """
         Search for an artist on Last.fm.
@@ -418,7 +418,7 @@ class fmPlugin(Plugin):
             **kwargs
         )
 
-    @Plugin.command("search albums", "<album:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("albums", "<album:str...>", group="search", metadata={"help": "last.fm"})
     def on_search_album_command(self, event, album):
         """
         Search for an album on Last.fm.
@@ -473,7 +473,7 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    @Plugin.command("search tracks", "<track:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("tracks", "<track:str...>", group="search", metadata={"help": "last.fm"})
     def on_search_track_command(self, event, track):
         """
         Search for a track on Last.fm.
@@ -528,7 +528,7 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    @Plugin.command("top albums", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("albums", "[username:str...]", group="top", metadata={"help": "last.fm"})
     def on_top_albums_command(self, event, username=None):
         """
         Get an account's top albums.
@@ -567,12 +567,11 @@ class fmPlugin(Plugin):
             artists=True,
             entry_format="amount",
             limit=limit,
-            inline=False,
             singular=False,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("top artists", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("artists", "[username:str...]", group="top", metadata={"help": "last.fm"})
     def on_top_artists_command(self, event, username=None):
         """
         Get an account's top artists.
@@ -610,12 +609,11 @@ class fmPlugin(Plugin):
             secondary_index="artist",
             entry_format="amount",
             limit=limit,
-            inline=False,
             singular=False,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("top period", "[period:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("period", "[period:str...]", group="top", metadata={"help": "last.fm"})
     def on_top_period_command(self, event, period=None):
         """
         Used to set the user's period for the `top` group of commands.
@@ -659,7 +657,7 @@ class fmPlugin(Plugin):
                  f"currently set to ``{data['period']}``"),
             )
 
-    @Plugin.command("top tracks", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("tracks", "[username:str...]", group="top", metadata={"help": "last.fm"})
     def on_top_tracks_command(self, event, username=None):
         """
         Get an account's top tracks.
@@ -698,7 +696,6 @@ class fmPlugin(Plugin):
             artists=True,
             entry_format="amount",
             limit=limit,
-            inline=False,
             singular=False,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
@@ -822,7 +819,6 @@ class fmPlugin(Plugin):
             artist_name="#text",
             entry_format="ago",
             limit=limit,
-            inline=False,
             cool_down=120,
             singular=False,
         )
@@ -868,7 +864,6 @@ class fmPlugin(Plugin):
             entry_format="ago",
             seperator="\n",
             limit=3,
-            inline=False,
         )
         params = {
             "method": "user.gettoptracks",
@@ -885,7 +880,6 @@ class fmPlugin(Plugin):
             artists=True,
             entry_format="amount",
             seperator="\n",
-            inline=False,
         )
         params = {
             "method": "user.gettopartists",
@@ -901,7 +895,6 @@ class fmPlugin(Plugin):
             secondary_index="artist",
             entry_format="amount",
             seperator="\n",
-            inline=False,
         )
         params = {
             "method": "user.gettopalbums",
@@ -918,28 +911,11 @@ class fmPlugin(Plugin):
             artists=True,
             entry_format="amount",
             seperator="\n",
-            inline=False,
         )
         fm_embed.set_footer(
             text=f"{round(Decimal(time() - test) * 1000)} ms",
         )
         api_loop(message.edit, " ", embed=fm_embed)
-
-    @Plugin.command("reset user", metadata={"help": "data"})
-    def on_user_reset_command(self, event):
-        """
-        Used to reset any user data stored by the bot (e.g. Last.fm username)
-        """
-        user = handle_sql(users.query.get, event.author.id)
-        if user:
-            handle_sql(db_session.delete, user)
-            handle_sql(db_session.flush)
-            api_loop(event.channel.send_message, "Removed user data.")
-        else:
-            api_loop(
-                event.channel.send_message,
-                ":thumbsup: Nothing to see here.",
-            )
 
     def generic_user_data(
             self,
@@ -1041,7 +1017,7 @@ class fmPlugin(Plugin):
             artist_name="name",
             entry_format=None,
             limit=4,
-            inline=True,
+            inline=False,
             cool_down=300,
             payload_prefix="",
             seperator="; ",
