@@ -28,8 +28,12 @@ class api_basis:
             headers: dict = None,
             payload: dict = None):
         self.url = self.url.format(**url)
-        self.headers.update({self.auth_header: auth, **(headers or {})})
-        self.payload.update(payload or {})
+        self.headers = {
+            **self.headers,
+            self.auth_header: auth,
+            **(headers or {}),
+        }
+        self.payload = {**self.payload, **(payload or {})}
 
     def to_dict(self):
         return self.__dict__
