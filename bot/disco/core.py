@@ -26,7 +26,7 @@ class CorePlugin(Plugin):
         super(CorePlugin, self).load(ctx)
         self.status = status_handler(
             self,
-            db_token=bot.local.api.dbl_token,
+            db_token=bot.local.api.discordbots_org,
             gg_token=bot.local.api.discord_bots_gg,
             user_agent=bot.local.api.user_agent,
         )

@@ -114,7 +114,7 @@ class api(config_template, feed_dict):
     )
     spotify_ID = unset(str)
     spotify_secret = unset(str)
-    dbl_token = unset(str)
+    discordbots_org = unset(str)
     discord_bots_gg = unset(str)
     discogs_key = unset(str)
     discogs_secret = unset(str)
