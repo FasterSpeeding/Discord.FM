@@ -632,7 +632,7 @@ class fmPlugin(Plugin):
         if period is not None:
             period = period.replace(" ", "").strip("s").lower()
             if period in periods.values():
-                data = self.get_user_info(event.author.id)
+                self.get_user_info(event.author.id)
                 handle_sql(
                     users.query.filter_by(
                         user_id=event.author.id,
