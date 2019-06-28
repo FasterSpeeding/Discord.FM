@@ -98,6 +98,7 @@ class fmPlugin(Plugin):
                 aliases.alias.like(alias),
             ).first)
             if data is None:
+                self.get_user(event.author.id)
                 if (handle_sql(aliases.query.filter_by(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
