@@ -14,7 +14,6 @@ from requests import get, post
 from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.react import generic_react
-from bot.util.sql import db_session, guilds, handle_sql
 
 log = logging.getLogger(__name__)
 
@@ -46,11 +45,10 @@ class ApiPlugin(Plugin):
         Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
-        guild = handle_sql(guilds.query.get, event.guild.id)
+        guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
         if not guild:
             guild = guilds(guild_id=event.guild.id)
-            handle_sql(db_session.add, guild)
-            handle_sql(db_session.flush)
+            bot.sql.add(guild)
         elif guild.lyrics_limit <= 0:
             return api_loop(
                 event.channel.send_message,
@@ -114,17 +112,16 @@ class ApiPlugin(Plugin):
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
-                guild = handle_sql(guilds.query.get, event.guild.id)
+                guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
                     guild = guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
                     )
-                    handle_sql(db_session.add, guild)
-                    handle_sql(db_session.flush)
+                    bot.sql.get(guild)
                 else:
-                    handle_sql(
-                        guilds.query.filter_by(
+                    bot.sql(
+                        bot.sql.guilds.query.filter_by(
                             guild_id=event.guild.id,
                         ).update,
                         {"lyrics_limit": limit},
@@ -139,7 +136,7 @@ class ApiPlugin(Plugin):
                     "This command is limited to server admins.",
                 )
         else:
-            guild = handle_sql(guilds.query.get, event.guild.id)
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
             api_loop(
                     event.channel.send_message,

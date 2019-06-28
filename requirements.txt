@@ -1,7 +1,6 @@
 git+https://github.com/LMByrne/disco
 requests
 lyrics-extractor
-earl-etf
 fuzzywuzzy
 python-Levenshtein
 ujson
@@ -9,3 +8,4 @@ youtube-dl
 pymysql
 pyyaml
 sqlalchemy
+pydantic

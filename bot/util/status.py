@@ -6,11 +6,8 @@ from disco.types.user import Game, Status, GameType
 from requests import post, RequestException
 
 
-from bot.base import optional
-from bot.util.sql import (
-    db_session, guilds, handle_sql,
-    SQLexception,
-)
+from bot.base import bot, optional
+from bot.util.sql import SQLexception
 
 log = logging.getLogger(__name__)
 
@@ -134,18 +131,18 @@ class status_handler(object):
             try:
                 guild_object = self.bot.client.state.guilds.get(guild, None)
                 if guild_object is not None:
-                    sql_guild = handle_sql(guilds.query.get, guild)
+                    sql_guild = bot.sql(bot.sql.guilds.query.get, guild)
                     if sql_guild is None:
-                        sql_guild = guilds(
+                        sql_guild = bot.sql.guilds(
                             guild_id=guild,
                             last_seen=datetime.now().isoformat(),
                             name=guild_object.name,
                         )
-                        handle_sql(db_session.add, sql_guild)
+                        bot.sql.add(sql_guild)
                     else:
                         try:
-                            handle_sql(
-                                guilds.query.filter_by(
+                            bot.sql(
+                                bot.sql.guilds.query.filter_by(
                                     guild_id=guild,
                                 ).update,
                                 {
@@ -157,7 +154,7 @@ class status_handler(object):
                             log.warning("Failed to post server to SQL server "
                                         f"in status: {e.previous_exception}")
                         else:
-                            handle_sql(db_session.flush)
+                            bot.sql.flush()
             except SQLexception as e:
                 log.warning(f"Failed to call SQL server: {e.msg}")
                 log.warning(str(e.original_exception))

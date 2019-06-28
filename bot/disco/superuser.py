@@ -8,7 +8,6 @@ from disco.util.logging import logging
 
 from bot.base import bot
 from bot.util.misc import api_loop
-from bot.util.sql import handle_sql, db_session
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +81,7 @@ class superuserPlugin(Plugin):
                          + plugin.__class__.__name__)
             else:
                 log.info("Caught self")
-        handle_sql(db_session.flush)
+        bot.sql.flush()
         exit(0)
 
     @Plugin.command("unload", "<plugin_name:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
