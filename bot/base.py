@@ -5,7 +5,6 @@ import os
 
 
 from requests import __version__ as __Rversion__
-from typing import List
 from pydantic import BaseModel
 from yaml import safe_load
 try:
@@ -154,16 +153,21 @@ def get_config(config="config.json"):
 
 class bot_frame:
     triggers_set = set()
-    local = config
+    config = config
     reactor = reactors_handler
     sql = sql_instance
     generic_embed_values = generic_embed_values
 
     def __init__(self, config_location=None):
-        self.local = self.local(**get_config())
-        self.sql = self.sql(self.local.sql.to_dict())
+        self.config = self.config(**get_config())
+        self.sql = self.sql(self.config.sql.to_dict())
         self.reactor = self.reactor()
-        self.generic_embed_values = self.generic_embed_values(self.local)
+        self.generic_embed_values = self.generic_embed_values(self.config)
+
+    def prefix(self):
+        return (self.config.prefix or
+                self.config.disco.bot.commands_prefix or
+                "fm.")
 
     def load_help_embeds(self, bot):
         """
@@ -205,9 +209,8 @@ class bot_frame:
                     command_name = command.group + " " + command.name
                 else:
                     command_name = command.name
-                prefix = (self.local.disco.bot.commands_prefix or "fm.")
                 self.help_embeds[array_name].add_field(
-                    name=f"{prefix}**{command_name}** {args}",
+                    name=f"{self.prefix()}**{command_name}** {args}",
                     value=doc_string.split("\n", 1)[0],
                     inline=False
                 )
@@ -230,8 +233,7 @@ class bot_frame:
                     args = command.raw_args
                 else:
                     args = str()
-                prefix = (self.local.disco.bot.commands_prefix or "fm.")
-                field_name = f"{prefix}**{command.name}** {args}"
+                field_name = f"{self.prefix()}**{command.name}** {args}"
                 if array_name in self.help_embeds:
                     matching_fields = [field for field in
                                        self.help_embeds[array_name].fields

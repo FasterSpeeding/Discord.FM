@@ -25,9 +25,9 @@ class CorePlugin(Plugin):
         super(CorePlugin, self).load(ctx)
         self.status = status_handler(
             self,
-            db_token=bot.local.api.discordbots_org,
-            gg_token=bot.local.api.discord_bots_gg,
-            user_agent=bot.local.api.user_agent,
+            db_token=bot.config.api.discordbots_org,
+            gg_token=bot.config.api.discord_bots_gg,
+            user_agent=bot.config.api.user_agent,
         )
         self.register_schedule(
             self.status.update_stats,
@@ -40,14 +40,11 @@ class CorePlugin(Plugin):
             repeat=False,
             init=False,
         )
-        bot.local.get(
+        bot.config.get(
             self,
             "exception_dms",
             "exception_channels",
         )
-        self.command_prefix = (bot.local.prefix or
-                               bot.local.disco.bot.commands_prefix or
-                               "fm.")
         bot.load_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
@@ -95,9 +92,10 @@ class CorePlugin(Plugin):
                     guild_id=event.guild.id,
                     last_seen=datetime.now().isoformat(),
                     name=event.guild.name,
+                    prefix=bot.prefix(),
                 )
                 bot.sql.add(guild)
-                self.prefixes[event.guild.id] = self.command_prefix
+                self.prefixes[event.guild.id] = bot.prefix()
 
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):
@@ -108,6 +106,7 @@ class CorePlugin(Plugin):
                     guild_id=event.guild.id,
                     last_seen=datetime.now().isoformat(),
                     name=event.guild.name,
+                    prefix=bot.prefix(),
                 )
                 bot.sql.add(guild)
             else:
@@ -258,8 +257,8 @@ class CorePlugin(Plugin):
                     continue
                 dm_default_send(event, channel, embed=embed)
         else:
-            if command.startswith(self.command_prefix):
-                command = command[len(self.command_prefix):]
+            if command.startswith(bot.prefix()):
+                command = command[len(bot.prefix()):]
             author_level = self.bot.get_level(event.author)
 
             # Check for module match.
@@ -295,7 +294,7 @@ class CorePlugin(Plugin):
                         triggers += f"**{trigger_base}{trigger}** | "
                     triggers = triggers[:-3] + "):"
                     title = {
-                        "title": (f"{self.command_prefix}{triggers}{args} "
+                        "title": (f"{bot.prefix()}{triggers}{args} "
                                   f"a command in the {array_name} module."),
                     }
                     embed = bot.generic_embed_values(
@@ -317,7 +316,7 @@ class CorePlugin(Plugin):
                 channel,
                 content=("To get started with this bot, you can set "
                          "your default last.fm username using the command "
-                         f"``{self.command_prefix}username <username>``.")
+                         f"``{bot.prefix()}username <username>``.")
             )
 
     @Plugin.command("invite", metadata={"help": "miscellaneous"})
@@ -379,11 +378,12 @@ class CorePlugin(Plugin):
             if prefix is None:
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if guild is None:
-                    prefix = self.command_prefix
+                    prefix = bot.prefix()
                     guild = bot.sql.guilds(
                         guild_id=event.guild.id,
                         last_seen=datetime.now().isoformat(),
                         name=event.guild.name,
+                        prefix=bot.prefix(),
                     )
                     bot.sql.add(guild)
                 else:
@@ -401,7 +401,7 @@ class CorePlugin(Plugin):
                             guild_id=event.guild.id,
                             last_seen=datetime.now().isoformat(),
                             name=event.guild.name,
-                            prefix=prefix,
+                            prefix=bot.prefix(),
                         )
                         bot.sql.add(guild)
                     else:
@@ -488,13 +488,13 @@ class CorePlugin(Plugin):
         if event.author.bot:
             return
         if event.channel.is_dm:
-            prefix = self.command_prefix
+            prefix = bot.prefix()
         else:
             prefix = self.prefixes.get(event.guild_id, None)
             if prefix is None:
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
                 if guild is None:
-                    prefix = self.command_prefix
+                    prefix = bot.prefix()
                     self.prefixes[event.guild_id] = prefix
                     guild = bot.sql.guilds(
                         guild_id=event.guild_id,

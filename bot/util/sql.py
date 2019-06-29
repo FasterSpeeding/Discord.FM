@@ -80,8 +80,7 @@ class guilds(Base):
         self.lyrics_limit = lyrics_limit
 
     def __repr__(self):
-        return (f"users({self.guild_id}, {self.prefix}, "
-                f"{self.last_seen}, {self.name})")
+        return (f"users({self.guild_id}: {self.name})")
 
 
 periods = {
@@ -134,7 +133,7 @@ class users(Base):
         self.period = period
 
     def __repr__(self):
-        return f"users({self.user_id}, {self.last_username}, {self.period})"
+        return f"users({self.user_id}: {self.last_username})"
 
 
 class friends(Base):
@@ -198,7 +197,7 @@ class aliases(Base):
         self.alias = alias
 
     def __repr__(self):
-        return f"aliases({self.guild_id}, {self.user_id}, {self.alias})"
+        return f"aliases({self.guild_id}: {self.alias})"
 
 
 class sql_instance:
@@ -269,7 +268,7 @@ class sql_instance:
         self.flush()
     
     def delete(self, object):
-        self.sql(self.session.delete, guild)
+        self(self.session.delete, object)
         self.flush()
     
     def flush(self):
@@ -293,11 +292,11 @@ class sql_instance:
             if not os.path.exists("data"):
                 os.makedirs("data")
             args = {}
-            server_payload = "sqlite+pysqlite:///data/data.db"
+            settings = "sqlite+pysqlite:///data/data.db"
 
         # Connect to server
         engine = spawn_engine(
-            server_payload,
+            settings,
             encoding="utf8",
             pool_recycle=3600,
             pool_pre_ping=True,
@@ -314,7 +313,7 @@ class sql_instance:
             password=None,
             database=None,
             args=None):
-        
+
         engine = self.create_engine(
             adapter,
             server,

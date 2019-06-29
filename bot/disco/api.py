@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 class ApiPlugin(Plugin):
     def load(self, ctx):
         super(ApiPlugin, self).load(ctx)
-        bot.local.api.get(
+        bot.config.api.get(
             self,
             "user_agent",
             "google_key",
@@ -47,7 +47,10 @@ class ApiPlugin(Plugin):
         self.pre_check("google_key", "google_cse_engine_ID")
         guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
         if not guild:
-            guild = guilds(guild_id=event.guild.id)
+            guild = guilds(
+                guild_id=event.guild.id,
+                prefix=bot.prefix(),
+            )
             bot.sql.add(guild)
         elif guild.lyrics_limit <= 0:
             return api_loop(
@@ -117,6 +120,7 @@ class ApiPlugin(Plugin):
                     guild = guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
+                        prefix=bot.prefix(),
                     )
                     bot.sql.get(guild)
                 else:

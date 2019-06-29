@@ -17,6 +17,7 @@ from bot.util.misc import (
     user_regex as discord_regex,
 )
 from bot.util.react import generic_react
+from bot.util.sql import periods
 
 log = logging.getLogger(__name__)
 
@@ -33,23 +34,20 @@ class fmPlugin(Plugin):
         self.mbid_reg = re.compile(
             "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}",
         )
-        bot.local.api.get(
+        bot.config.api.get(
             self,
             "discogs_secret",
             "discogs_key",
         )
         self.cache = {}
         self.cool_downs = {"fulluser": {}, "friends": []}
-        self.prefix = (bot.local.prefix or
-                       bot.local.disco.bot.commands_prefix or
-                       "fm.")
         self.s = Session()
         self.s.params = {
-            "api_key": bot.local.api.last_key,
+            "api_key": bot.config.api.last_key,
             "format": "json",
         }
         self.s.headers.update({
-            "User-Agent": bot.local.api.user_agent,
+            "User-Agent": bot.config.api.user_agent,
             "Content-Type": "application/json",
         })
         self.BASE_URL = "https://ws.audioscrobbler.com/2.0/"
@@ -60,7 +58,7 @@ class fmPlugin(Plugin):
 
     @staticmethod
     def __check__():
-        return bot.local.api.last_key
+        return bot.config.api.last_key
 
     @Plugin.schedule(60)
     def purge_cache(self):
@@ -98,7 +96,7 @@ class fmPlugin(Plugin):
                     user_id=event.author.id,
                     guild_id=event.guild.id,
                 ).count) < 5):
-                    payload = aliases(
+                    payload = bot.sql.aliases(
                         user_id=event.author.id,
                         guild_id=event.guild.id,
                         alias=alias,
@@ -229,7 +227,7 @@ class fmPlugin(Plugin):
             api_loop(
                 event.channel.send_message,
                 ("You don't have any friends, use "
-                 f"``{self.prefix}friends add`` to catch some."),
+                 f"``{bot.prefix()}friends add`` to catch some."),
             )
         else:
             title = {
@@ -340,10 +338,13 @@ class fmPlugin(Plugin):
         name = str(name) if name else target
         user = bot.sql(bot.sql.users.query.get, event.author.id)
         if not user:
-            user = users(user_id=event.author.id)
+            user = bot.sql.users(user_id=event.author.id)
             bot.sql.add(user)
         if not any([f.slave_id == target for f in user.friends]):
-            friendship = friends(master_id=event.author.id, slave_id=target)
+            friendship = bot.sql.friends(
+                master_id=event.author.id,
+                slave_id=target,
+            )
             user.friends.append(friendship)
             api_loop(
                 event.channel.send_message,
@@ -641,7 +642,7 @@ class fmPlugin(Plugin):
             else:
                 api_loop(
                     event.channel.send_message,
-                    (f"Invalid argument, see ``{self.prefix}"
+                    (f"Invalid argument, see ``{bot.prefix()}"
                      "help top period`` for more details."),
                 )
         else:
@@ -708,7 +709,7 @@ class fmPlugin(Plugin):
             user = bot.sql(bot.sql.users.query.get, event.author.id)
             if user:
                 bot.sql(
-                    users.query.filter_by(
+                    bot.sql.users.query.filter_by(
                         user_id=event.author.id,
                     ).update,
                     {"last_username": username},
@@ -922,7 +923,7 @@ class fmPlugin(Plugin):
         username = user_data["name"]
         if username is None:
             raise CommandError("User should set a last.fm account "
-                               f"using ``{self.prefix}username``")
+                               f"using ``{bot.prefix()}username``")
         inline = {
             "Playcount": user_data["playcount"],
             "Registered": strftime(
@@ -1063,7 +1064,7 @@ class fmPlugin(Plugin):
                 username = result
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
-                                   f"using ``{self.prefix}username``")
+                                   f"using ``{bot.prefix()}username``")
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):
@@ -1120,7 +1121,7 @@ class fmPlugin(Plugin):
                 raise e
         data = bot.sql(bot.sql.users.query.get, target)
         if data is None:
-            user = users(user_id=target)
+            user = bot.sql.users(user_id=target)
             bot.sql.add(user)
             data = {"user_id": target, "username": None, "period": periods[0]}
         else:
@@ -1199,7 +1200,7 @@ class fmPlugin(Plugin):
         headers = {
             "Authorization": (f"Discogs key={self.discogs_key},"
                               f" secret={self.discogs_secret}"),
-            "User-Agent": bot.local.api.user_agent,
+            "User-Agent": bot.config.api.user_agent,
             "Content-Type": "application/json",
         }
         params = {

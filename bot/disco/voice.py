@@ -59,11 +59,11 @@ class MusicPlugin(Plugin):
     def lonely_check(self):
         if getattr(self, "guilds", None):
             for guild, player in self.guilds.copy().items():
-                if not any(not user.bot and
-                           user.get_voice_state() is not None and
-                           user.get_voice_state().channel_id ==
+                if not any(not member.user.bot and
+                           member.get_voice_state() is not None and
+                           member.get_voice_state().channel_id ==
                            player.player.client.channel_id
-                           for user in self.state.guilds[
+                           for member in self.state.guilds[
                                guild].members.copy().values()):
                     try:
                         self.remove_player(guild)

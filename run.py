@@ -46,12 +46,12 @@ def disco_main():
 
     from bot.base import bot
 
-    args = bot.local.disco
+    args = bot.config.disco
 
     if pip and sys.platform == "linux" or sys.platform == "linux2":
         print("Sudo access may be required to keep youtube-dl up to date.")
-        if (any("voice" in plug for plug in bot.local.disco.plugin) or
-                any("voice" in plug for plug in bot.local.disco.bot.plugins)):
+        if (any("voice" in plug for plug in bot.config.disco.plugin) or
+                any("voice" in plug for plug in bot.config.disco.bot.plugins)):
             try:
                 subprocess.call([
                     "sudo",
