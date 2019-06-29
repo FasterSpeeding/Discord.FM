@@ -49,51 +49,51 @@ class custom_base(BaseModel):
 
 
 class api(custom_base):
-    user_agent : str = (f"Discord.FM @{__GIT__} {__VERSION__} "
-                        f"Python {python_version()} "
-                        f"requests/{__Rversion__}")
-    last_key : str = None
-    google_key : str = None
-    google_cse_engine_ID : str = ("0129851312360258"
-                                  "62960:rhlblfpn4hc")
-    spotify_ID : str = None
-    spotify_secret : str = None
-    discordbots_org : str = None
-    discord_bots_gg : str = None
-    discogs_key : str = None
-    discogs_secret : str = None
+    user_agent: str = (f"Discord.FM @{__GIT__} {__VERSION__} "
+                       f"Python {python_version()} "
+                       f"requests/{__Rversion__}")
+    last_key: str = None
+    google_key: str = None
+    google_cse_engine_ID: str = ("0129851312360258"
+                                 "62960:rhlblfpn4hc")
+    spotify_ID: str = None
+    spotify_secret: str = None
+    discordbots_org: str = None
+    discord_bots_gg: str = None
+    discogs_key: str = None
+    discogs_secret: str = None
 
 
 class sql(custom_base):
-    database : str = None
-    server : str = None
-    user : str = None
-    password : str = ""
-    adapter : str = "mysql+pymysql"
-    args : dict = {}
+    database: str = None
+    server: str = None
+    user: str = None
+    password: str = ""
+    adapter: str = "mysql+pymysql"
+    args: dict = {}
 
 
 class embed_values(custom_base):
     __name__ = "embed_values"
-    url : str = None
-    color : str = None
+    url: str = None
+    color: str = None
 
 
 class bot_data(custom_base):
-    levels : dict = {}
-    commands_require_mention : bool = True
-    commands_mention_rules : dict = None
-    commands_prefix : str = None
-    commands_allow_edit : bool = None
-    commands_level_getter : str = None
-    commands_group_abbrev : bool = None
-    plugin_config_provider : str = None
-    plugin_config_format : str = None
-    plugin_config_dir : str = None
-    http_enabled : bool =None
-    http_host : str = None
-    http_port : int = None
-    plugins : list = [
+    levels: dict = {}
+    commands_require_mention: bool = True
+    commands_mention_rules: dict = None
+    commands_prefix: str = None
+    commands_allow_edit: bool = None
+    commands_level_getter: str = None
+    commands_group_abbrev: bool = None
+    plugin_config_provider: str = None
+    plugin_config_format: str = None
+    plugin_config_dir: str = None
+    http_enabled: bool =None
+    http_host: str = None
+    http_port: int = None
+    plugins: list = [
         "bot.disco.superuser",
         "bot.disco.core",
         "bot.disco.fm",
@@ -104,8 +104,8 @@ class bot_data(custom_base):
 
 
 class disco(custom_base):
-    token : str = None
-    bot : bot_data = bot_data()
+    token: str = None
+    bot: bot_data = bot_data()
     config: str = None
     shard_id: int = None
     shard_count: int = None

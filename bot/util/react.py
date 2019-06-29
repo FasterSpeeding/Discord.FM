@@ -53,6 +53,8 @@ class reactors_handler(object):
 
     def init_event(self, message, timing, **kwargs):
         end_time = time() + timing
+        if "map" not in kwargs:
+            kwargs["map"] = reactor_function_map
         event_dict = {
             "channel_id": message.channel_id,
             "message_id": message.id,
@@ -158,53 +160,44 @@ def generic_react(
         index,
         data,
         edit_message,
+        map,
         amount=1,
         limit=100,
         **kwargs):
     remainder = (len(data) % amount)
-    if reactor == "\N{black rightwards arrow}":
-        index = right_shift(
-            index,
-            len(data),
+    function = map.get(reactor)
+    if function:
+        index = function(
+            index=index,
+            list_len=len(data),
             amount=amount,
             limit=limit,
             remainder=remainder,
-        )
-    elif reactor == "\N{Cross Mark}":
-        try:
-            api_loop(
-                client.client.api.channels_messages_delete,
-                channel_id,
-                message_id,
-            )
-        except APIException as e:
-            if e.code == 10008:
-                pass
-            else:
-                raise e
-        return None
-    elif reactor == "\N{leftwards black arrow}":
-        index = left_shift(
-            index,
-            len(data),
-            amount=amount,
-            limit=limit,
-            remainder=remainder,
+            client=client,
+            message_id=message_id,
+            channel_id=channel_id,
         )
     else:
         return
-    content, embed = edit_message(data=data, index=index, **kwargs)
-    api_loop(
-        client.client.api.channels_messages_modify,
-        channel_id,
-        message_id,
-        content=content,
-        embed=embed,
-    )
+    if index:
+        content, embed = edit_message(data=data, index=index, **kwargs)
+        api_loop(
+            client.client.api.channels_messages_modify,
+            channel_id,
+            message_id,
+            content=content,
+            embed=embed,
+        )
     return index
 
 
-def left_shift(index, list_len, remainder, amount=1, limit=100):
+def left_shift(
+        index,
+        list_len,
+        remainder,
+        amount=1,
+        limit=100,
+        **kwargs):
     if index == 0 or index < amount:
         if list_len >= limit:
             index = limit - amount
@@ -224,9 +217,37 @@ def length(item, limit=100):
     return limit
 
 
-def right_shift(index, list_len, remainder, amount=1, limit=100):
+def right_shift(
+        index,
+        list_len,
+        remainder,
+        amount=1,
+        limit=100,
+        **kwargs):
     if index >= limit - amount or index >= list_len - amount:
         index = 0
     else:
         index += amount
     return index
+
+
+def end_event(client, message_id, channel_id, **kwargs):
+    try:
+        api_loop(
+            client.client.api.channels_messages_delete,
+            channel_id,
+            message_id,
+        )
+    except APIException as e:
+        if e.code == 10008:
+            pass
+        else:
+            raise e
+    return None
+
+
+reactor_function_map = {
+    "\N{leftwards black arrow}": left_shift,
+    "\N{black rightwards arrow}": right_shift,
+    "\N{Cross Mark}": end_event,
+}
