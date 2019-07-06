@@ -5,6 +5,7 @@ from urllib.parse import quote_plus
 
 from disco.bot import Plugin
 from disco.bot.command import CommandError
+from disco.types.permissions import Permissions
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from lyrics_extractor import Song_Lyrics
@@ -108,7 +109,7 @@ class ApiPlugin(Plugin):
             )
         if limit is not None:
             member = event.guild.get_member(event.author)
-            if member.permissions.can(32):  # manage server
+            if member.permissions.can(Permissions.MANAGE_GUILD):
                 if not 0 <= limit <= 8:
                     return api_loop(
                         event.channel.send_message,

@@ -47,7 +47,7 @@ class discordbotsorg(api_basis):
         return optional(**{
             "server_count": guildCount.Count,
             "shard_count": guildCount.shardCount,
-            "shard_id": guildCount.shardId
+            "shard_id": guildCount.shardId,
         })
 
 
@@ -59,7 +59,7 @@ class discordbotsgg(api_basis):
         return optional(**{
             "server_count": guildCount.Count,
             "shards": guildCount.shardCount,
-            "shard_id": guildCount.shardId
+            "shard_id": guildCount.shardId,
         })
 
 
@@ -83,7 +83,7 @@ class status_handler(object):
         self.bot = bot
         self.bot_id = bot_id
         self.user_agent = user_agent
-        self.__tokens = {
+        self._tokens = {
             discordbotsorg: db_token,
             discordbotsgg: gg_token,
         }
@@ -121,12 +121,12 @@ class status_handler(object):
         this exists to counter the fact that state.me isn't present at start.
         """
         self.bot_id = (self.bot_id or self.bot.state.me.id)
-        for obj, token in self.__tokens.items():
+        for obj, token in self._tokens.items():
             if token is not None:
                 self.services.append(obj(
-                        url={"id": self.bot_id},
-                        auth=token,
-                        headers={"User-Agent": self.user_agent},
+                    url={"id": self.bot_id},
+                    auth=token,
+                    headers={"User-Agent": self.user_agent},
                 ))
 
     def sql_guilds_refresh(self):
@@ -168,9 +168,12 @@ class status_handler(object):
         This function updates the server amount status per interval
         and ensures the integrity of the guild data.
         """
-        guilds_len = len(self.bot.client.state.guilds)
-        guilds_payload = guildCount(guilds_len)
-        self.update_presence(guilds_len)
+        log.debug("Updating stats.")
+        guild_count = len(self.bot.client.state.guilds)
+        shard_id = self.bot.bot.client.config.shard_id
+        shard_count = self.bot.bot.client.config.shard_count
+        guilds_payload = guildCount(guild_count, shard_count, shard_id)
+        self.update_presence(guild_count)
         for service in self.services:
             self.post(service, guilds_payload)
         self.sql_guilds_refresh()

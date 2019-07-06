@@ -77,7 +77,8 @@ class MusicPlugin(Plugin):
                         continue
                     self.marked_for_delete.remove(guild)
 
-    def pre_check(self, event):
+    @staticmethod
+    def pre_check(event):
         if event.channel.is_dm:
             raise CommandError("Voice commands cannot be used "
                                "in DMs.")
@@ -101,7 +102,8 @@ class MusicPlugin(Plugin):
             "time_formated": time_formated,
         }
 
-    def minutes_format(self, seconds):
+    @staticmethod
+    def minutes_format(seconds):
         time_formated = Decimal(seconds)/60
         minutes = round(time_formated - (time_formated % 1), 0)
         seconds = format(int(round(time_formated % 1 * 60, 0)), "02d")
