@@ -12,7 +12,7 @@ except ImportError:
     from json import load
 
 
-from bot import __GIT__, __VERSION__
+from bot import __GIT__
 from bot.types.embed import generic_embed_values
 from bot.util.react import reactors_handler
 
@@ -103,7 +103,7 @@ class config_template:
 
 class api(config_template, feed_dict):
     __name__ = "api"
-    user_agent = unset(str, default=(f"Discord.FM @{__GIT__} {__VERSION__} "
+    user_agent = unset(str, default=(f"Discord.FM @{__GIT__} "
                                      f"Python {python_version()} "
                                      f"requests/{__Rversion__}"))
     last_key = unset(str)

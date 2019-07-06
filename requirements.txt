@@ -1,11 +1,12 @@
 git+https://github.com/LMByrne/disco
-requests
-lyrics-extractor
 earl-etf
 fuzzywuzzy
+lyrics-extractor
 python-Levenshtein
-ujson
-youtube-dl
+psutil
 pymysql
 pyyaml
+requests
 sqlalchemy
+ujson
+youtube-dl
