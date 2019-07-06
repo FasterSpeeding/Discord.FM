@@ -1,5 +1,7 @@
-from decimal import Decimal
+from datetime import datetime
 from time import time, strftime, gmtime
+import pytz
+import humanize
 import re
 
 
@@ -92,6 +94,7 @@ class fmPlugin(Plugin):
                 bot.sql.aliases.alias.like(alias),
             ).first)
             if data is None:
+                self.get_user(event.author.id)
                 if (bot.sql(bot.sql.aliases.query.filter_by(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
@@ -909,7 +912,7 @@ class fmPlugin(Plugin):
             seperator="\n",
         )
         fm_embed.set_footer(
-            text=f"{round(Decimal(time() - test) * 1000)} ms",
+            text=f"{round((time() - test) * 1000)} ms",
         )
         api_loop(message.edit, " ", embed=fm_embed)
 
@@ -1220,30 +1223,11 @@ class fmPlugin(Plugin):
                         f"by Discogs: {r.text}")
 
     @staticmethod
-    def time_since(time_of_event: int):
+    def time_since(time_of_event: int, timezone=pytz.UTC):
         """
         A command used get the time passed since a unix time stamp
         and output it as a human readable string.
         """
-        time_passed = Decimal(round(time()) - int(time_of_event))
-        if time_passed < 0:
-            payload = "[Unknown] "
-        if time_passed < 60:  # a minute
-            payload = f"[{time_passed} seconds ago] "
-        elif time_passed < 3600:  # an hour
-            time_formated = round(time_passed/60, 2)
-            minutes = round(time_formated - (time_formated % 1), 0)
-            seconds = format(int(round(time_formated % 1 * 60, 0)), "02d")
-            payload = f"[{minutes}.{seconds} minutes ago] "
-        elif time_passed < 86400:  # a day
-            time_formated = round(time_passed/3600, 2)
-            minutes = round(time_formated - (time_formated % 1), 0)
-            seconds = format(int(round(time_formated % 1 * 60, 0)), "02d")
-            payload = f"[{minutes}.{seconds} hours ago] "
-        elif time_passed < 2629800:  # an average month
-            payload = f"[{round(time_passed/86400, 2)} days ago] "
-        elif time_passed < 31557600:  # 365.25 days
-            payload = f"[{round(time_passed/2629800, 2)} months ago] "
-        else:
-            payload = f"[{round(time_passed/31557600, 2)} years] "
-        return payload
+        time_passed = (datetime.now(timezone) -
+                       datetime.fromtimestamp(int(time_of_event), timezone))
+        return "[" + humanize.naturaltime(time_passed) + "] "

@@ -1,4 +1,4 @@
-from decimal import Decimal
+from time import time
 
 
 from disco.bot import Plugin
@@ -8,6 +8,8 @@ from disco.util.logging import logging
 
 from bot.base import bot
 from bot.util.misc import api_loop
+from bot.util.status import status_handler, guildCount
+
 
 log = logging.getLogger(__name__)
 
@@ -19,6 +21,23 @@ class superuserPlugin(Plugin):
         self.register_schedule(
             self.__check__,
             5,
+            repeat=False,
+            init=False,
+        )
+        self.status = status_handler(
+            self,
+            db_token=bot.local.api.discordbots_org,
+            gg_token=bot.local.api.discord_bots_gg,
+            user_agent=bot.local.api.user_agent,
+        )
+        self.register_schedule(
+            self.status.update_stats,
+            300,
+            init=False,
+        )
+        self.register_schedule(
+            self.status.setup_services,
+            60,
             repeat=False,
             init=False,
         )
@@ -139,6 +158,39 @@ class superuserPlugin(Plugin):
         """
         raise Exception(message)
 
+    @Plugin.command("sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    def on_update_sites_command(self, event):
+        """
+        Manually post the bot's stats to the enabled bot listing sites.
+        """
+        if not self.status.services and self.status._tokens:
+            self.status.setup_services()
+        elif not self.status.services:
+            return api_loop(
+                event.channel.send_message,
+                "No status sites are enabled in config.",
+            )
+        guild_count = len(self.client.state.guilds)
+        shard_id = self.bot.client.config.shard_id
+        shard_count = self.bot.client.config.shard_count
+        payload = guildCount(guild_count, shard_count, shard_id)
+
+        for service in self.status.services:
+            self.status.post(service, payload)
+        guilds = [service.__name__ for service in self.status.services]
+        api_loop(
+            event.channel.send_message,
+            f"Updated stats on {guilds}.",
+        )
+
+    @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    def on_update_presence_command(self, event):
+        """
+        Manually update the bot's presence.
+        """
+        self.status.update_presence(len(self.client.state.guilds))
+        api_loop(event.channel.send_message, ":thumbsup:")
+
     @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_echo_command(self, event, payload):
         """
@@ -155,13 +207,13 @@ class superuserPlugin(Plugin):
         Test delay command.
         Accepts no arguments.
         """
+        init_time = time()
         bot_message = api_loop(
             event.channel.send_message,
             "***RADIO STATIC***",
         )
-        message_time = bot_message.timestamp.timestamp()
-        event_time = event.msg.timestamp.timestamp()
+        passed_time = time()
         api_loop(
             bot_message.edit,
-            f"Pong! {round(Decimal((message_time - event_time) * 1000))} ms"
+            f"Pong! {round((passed_time - init_time) * 1000)} ms"
         )

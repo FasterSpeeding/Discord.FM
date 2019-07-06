@@ -2,20 +2,23 @@ from datetime import datetime
 from decimal import Decimal
 from time import time
 from traceback import extract_stack
+import psutil
 
 
+from disco import VERSION as DISCO_VERSION
 from disco.bot import Plugin
 from disco.api.http import APIException
 from disco.bot.command import CommandError, CommandEvent, CommandLevels
 from disco.types.base import Unset
+from disco.types.channel import ChannelType
+from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
 from disco.util.logging import logging
 
 
-from bot import __GIT__, __VERSION__
+from bot import __GIT__
 from bot.base import bot
 from bot.util.misc import api_loop, dm_default_send, redact
-from bot.util.status import status_handler, guildCount
 
 log = logging.getLogger(__name__)
 
@@ -23,23 +26,6 @@ log = logging.getLogger(__name__)
 class CorePlugin(Plugin):
     def load(self, ctx):
         super(CorePlugin, self).load(ctx)
-        self.status = status_handler(
-            self,
-            db_token=bot.config.api.discordbots_org,
-            gg_token=bot.config.api.discord_bots_gg,
-            user_agent=bot.config.api.user_agent,
-        )
-        self.register_schedule(
-            self.status.update_stats,
-            300,
-            init=False,
-        )
-        self.register_schedule(
-            self.status.setup_services,
-            60,
-            repeat=False,
-            init=False,
-        )
         bot.config.get(
             self,
             "exception_dms",
@@ -49,6 +35,7 @@ class CorePlugin(Plugin):
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
         self.prefixes = {}
+        self.process = psutil.Process()
         try:
             for guild in bot.sql(bot.sql.guilds.query.all):
                 self.prefixes[guild.guild_id] = guild.prefix
@@ -144,7 +131,7 @@ class CorePlugin(Plugin):
                     "This command cannot be used in DMs.",
                 )
         member = event.guild.get_member(event.author)
-        if member.permissions.can(8):  # admin
+        if member.permissions.can(Permissions.ADMINISTRATOR):
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             if guild:
                 bot.sql.delete(guild)
@@ -364,7 +351,7 @@ class CorePlugin(Plugin):
         dm_default_send(
             event,
             channel,
-            content=f"You can find me (v{__VERSION__}) at {__GIT__}",
+            content=f"You can find me at {__GIT__}",
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -393,7 +380,7 @@ class CorePlugin(Plugin):
                     f"Current prefix is ``{prefix}``",
                 )
             member = event.guild.get_member(event.author)
-            if member.permissions.can(32):  # manage server
+            if member.permissions.can(Permissions.MANAGE_GUILD):
                 if (event.guild.id not in self.cool_down["prefix"] or
                         self.cool_down["prefix"][event.guild.id] <= time()):
                     if bot.sql(bot.sql.guilds.query.get, event.guild.id) is None:
@@ -456,33 +443,70 @@ class CorePlugin(Plugin):
                      "https://discordapp.com/invite/jkEXqVd"),
         )
 
-    @Plugin.command("sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
-    def on_update_sites_command(self, event):
-        """
-        Manually post the bot's stats to the enabled bot listing sites.
-        """
-        payload = guildCount(len(self.client.state.guilds))
-        if self.status.services:
-            for service in self.status.services:
-                self.status.post(service, payload)
-            guilds = [service.__name__ for service in self.status.services]
-            api_loop(
-                event.channel.send_message,
-                f"Updated stats on {guilds}.",
-            )
-        else:
-            api_loop(
-                event.channel.send_message,
-                "No status sites are enabled in config.",
-            )
+    @Plugin.command("_instance")
+    def on_info_command(self, event):
+        shard_id = self.bot.client.config.shard_id
+        shard_count = self.bot.client.config.shard_count
+        author = {
+            "name": (f"Discord.FM: Shard {shard_id} of {shard_count}"),
+            "icon": self.client.state.me.get_avatar_url(),
+            "url": __GIT__,
+        }
+        start_date = datetime.fromtimestamp(self.process.create_time())
+        uptime = datetime.now() - start_date
+        uptime = ":".join(str(uptime).split(":")[:2])
 
-    @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
-    def on_update_presence_command(self, event):
-        """
-        Manually update the bot's presence.
-        """
-        self.status.update_presence(len(self.client.state.guilds))
-        api_loop(event.channel.send_message, ":thumbsup:")
+        member_count = 0
+        for guild in self.client.state.guilds.copy().values():
+            member_count += guild.member_count
+
+        online_count = 0
+        for user in self.client.state.users.copy().values():
+            if user.presence:
+                online_count += 1
+
+        other_count = text_count = voice_count = 0
+        for channel in self.client.state.channels.copy().values():
+            if channel.type == ChannelType.GUILD_TEXT:
+                text_count += 1
+            elif channel.type == ChannelType.GUILD_VOICE:
+                voice_count += 1
+            elif channel.type != ChannelType.DM:
+                other_count += 1
+
+        voice_instances = 0
+        for instance in self.client.state.voice_states.copy().values():
+            if instance.user_id == self.client.state.me.id:
+                voice_instances += 1
+
+        memory_usage = self.process.memory_full_info().uss / 1024**2
+        cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
+        memory_percent = self.process.memory_percent()
+
+        inline_fields = {
+            "Guilds": str(len(self.client.state.guilds)),
+            "Voice Instances": str(voice_instances),
+            "Uptime": uptime,
+            "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
+                        f"\n{cpu_usage:.2f}% CPU"),
+            "Users": (f"{member_count} total\n"
+                      f"{len(self.client.state.users)} unique\n"
+                      f"{online_count} unique online"),
+            "Channels": (f"{len(self.client.state.channels)} total\n"
+                         f"{voice_count} voice\n{text_count} text\n"
+                         f"{len(self.client.state.dms)} open "
+                         f"DMs\n{other_count} other"),
+        }
+        footer = {
+            "text": f"Made with Disco v{DISCO_VERSION}",
+            "img": "http://i.imgur.com/5BFecvA.png",
+        }
+        embed = bot.generic_embed_values(
+            author=author,
+            inlines=inline_fields,
+            footer=footer,
+        )
+        api_loop(event.channel.send_message, embed=embed)
 
     def custom_prefix(self, event):
         if event.author.bot:
@@ -544,16 +568,16 @@ class CorePlugin(Plugin):
             author = {
                 "name": str(event.author),
                 "icon": event.author.get_avatar_url(size=32),
-                "author_url": ("https://discordapp.com/"
-                               f"users/{event.author.id}"),
+                "url": ("https://discordapp.com/"
+                        f"users/{event.author.id}"),
             }
             embed = bot.generic_embed_values(
-                    author=author,
-                    title={"title": f"Exception occured: {strerror}"},
-                    description=event.message.content,
-                    footer={"text": footer_text},
-                    timestamp=event.message.timestamp.isoformat(),
-                )
+                author=author,
+                title={"title": f"Exception occured: {strerror}"},
+                description=event.message.content,
+                footer={"text": footer_text},
+                timestamp=event.message.timestamp.isoformat(),
+            )
             for target in self.exception_dms.copy():
                 target_dm = self.client.api.users_me_dms_create(target)
                 try:
@@ -567,10 +591,10 @@ class CorePlugin(Plugin):
                         raise e
         if self.exception_channels:
             embed = bot.generic_embed_values(
-                    title={"title": f"Exception occured: {strerror}"},
-                    description=extract_stack(),
-                    footer={"text": event.message.content},
-                )
+                title={"title": f"Exception occured: {strerror}"},
+                description=extract_stack(),
+                footer={"text": event.message.content},
+            )
             for guild, channel in self.exception_channels.copy().items():
                 guild_obj = self.client.state.guilds.get(int(guild), None)
                 if guild_obj is not None:

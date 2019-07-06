@@ -13,7 +13,7 @@ except ImportError:
     from json import load
 
 
-from bot import __GIT__, __VERSION__
+from bot import __GIT__
 from bot.types.embed import generic_embed_values
 from bot.util.react import reactors_handler
 from bot.util.sql import sql_instance
@@ -49,7 +49,7 @@ class custom_base(BaseModel):
 
 
 class api(custom_base):
-    user_agent: str = (f"Discord.FM @{__GIT__} {__VERSION__} "
+    user_agent: str = (f"Discord.FM @{__GIT__} "
                        f"Python {python_version()} "
                        f"requests/{__Rversion__}")
     last_key: str = None
