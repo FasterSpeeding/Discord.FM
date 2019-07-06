@@ -4,6 +4,7 @@ fuzzywuzzy
 humanize
 lyrics-extractor
 python-Levenshtein
+pytz
 psutil
 pymysql
 pyyaml
