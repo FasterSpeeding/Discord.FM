@@ -102,7 +102,8 @@ class MusicPlugin(Plugin):
             "time_formated": time_formated,
         }
 
-    def minutes_format(self, seconds):
+    @staticmethod
+    def minutes_format(seconds):
         time_formated = Decimal(seconds)/60
         minutes = round(time_formated - (time_formated % 1), 0)
         seconds = format(int(round(time_formated % 1 * 60, 0)), "02d")
