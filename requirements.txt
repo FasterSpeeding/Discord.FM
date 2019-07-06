@@ -1,6 +1,7 @@
 git+https://github.com/LMByrne/disco
 earl-etf
 fuzzywuzzy
+humanize
 lyrics-extractor
 python-Levenshtein
 psutil
