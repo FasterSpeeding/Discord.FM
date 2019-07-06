@@ -452,13 +452,16 @@ class CorePlugin(Plugin):
 
     @Plugin.command("_instance")
     def on_info_command(self, event):
+        shard_id = self.bot.client.config.shard_id
+        shard_count = self.bot.client.config.shard_count
         author = {
-            "name": (f"Discord.FM: Shard {self.bot.client.config.shard_id}"),
+            "name": (f"Discord.FM: Shard {shard_id} of {shard_count}"),
             "icon": self.client.state.me.get_avatar_url(),
             "url": __GIT__,
         }
-        memory_usage = self.process.memory_full_info().uss / 1024**2
-        cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
+        start_date = datetime.fromtimestamp(self.process.create_time())
+        uptime = datetime.now() - start_date
+        uptime = ":".join(str(uptime).split(":")[:2])
 
         member_count = 0
         for guild in self.client.state.guilds.copy().values():
@@ -483,11 +486,16 @@ class CorePlugin(Plugin):
             if instance.user_id == self.client.state.me.id:
                 voice_instances += 1
 
+        memory_usage = self.process.memory_full_info().uss / 1024**2
+        cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
+        memory_percent = self.process.memory_percent()
+
         inline_fields = {
-            "Shards": str(self.bot.client.config.shard_count),
             "Guilds": str(len(self.client.state.guilds)),
             "Voice Instances": str(voice_instances),
-            "Process": f"{memory_usage:.2f} MiB\n{cpu_usage:.2f}% CPU",
+            "Uptime": uptime,
+            "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
+                        f"\n{cpu_usage:.2f}% CPU"),
             "Users": (f"{member_count} total\n"
                       f"{len(self.client.state.users)} unique\n"
                       f"{online_count} unique online"),
