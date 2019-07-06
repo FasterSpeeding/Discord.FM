@@ -182,7 +182,7 @@ class superuserPlugin(Plugin):
         api_loop(
             event.channel.send_message,
             f"Updated stats on {guilds}.",
-        )            
+        )
 
     @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
     def on_update_presence_command(self, event):

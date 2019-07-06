@@ -77,7 +77,8 @@ class MusicPlugin(Plugin):
                         continue
                     self.marked_for_delete.remove(guild)
 
-    def pre_check(self, event):
+    @staticmethod
+    def pre_check(event):
         if event.channel.is_dm:
             raise CommandError("Voice commands cannot be used "
                                "in DMs.")

@@ -10,8 +10,8 @@ from disco.bot import Plugin
 from disco.api.http import APIException
 from disco.bot.command import CommandError, CommandEvent, CommandLevels
 from disco.types.base import Unset
-from disco.types.channel import ChannelType 
-from disco.types.permissions import Permissions 
+from disco.types.channel import ChannelType
+from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
 from disco.util.logging import logging
 
@@ -511,7 +511,7 @@ class CorePlugin(Plugin):
         embed = bot.generic_embed_values(
             author=author,
             inlines=inline_fields,
-            footer = footer
+            footer=footer,
         )
         api_loop(event.channel.send_message, embed=embed)
 
