@@ -13,7 +13,7 @@ from requests import get, post
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, exception_channels, redact
 from bot.util.react import generic_react
 
 log = logging.getLogger(__name__)
@@ -205,6 +205,13 @@ class ApiPlugin(Plugin):
                 )
         else:
             log.warning(r.text)
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    ("```Spotify threw error "
+                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",
@@ -224,7 +231,14 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code != 200:
-            log.warning(r.text)
+            log.warning(redact(str(r.text)))
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    ("```Spotify OAUTH threw error "
+                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                )
             raise CommandError(
                 f"Error code {r.status_code} returned by oauth flow"
             )
@@ -308,6 +322,13 @@ class ApiPlugin(Plugin):
                 api_loop(event.channel.send_message, "Video not found.")
         else:
             log.warning(r.text)
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    ("```Youtube threw error "
+                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",

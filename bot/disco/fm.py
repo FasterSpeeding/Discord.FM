@@ -18,6 +18,7 @@ from bot.base import bot
 from bot.util.misc import (
     api_loop, AT_to_id, get_dict_item,
     redact, user_regex as discord_regex,
+    exception_channels
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
@@ -1000,6 +1001,13 @@ class fmPlugin(Plugin):
                 )
                 raise fmEntryNotFound(self.cache[url].error)
             log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    ("```Last.FM threw error "
+                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                )
             try:
                 message = ": " + r.json().get("message", ".")
             except JSONDecodeError:

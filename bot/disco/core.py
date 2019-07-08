@@ -18,7 +18,10 @@ from disco.util.logging import logging
 
 from bot import __GIT__
 from bot.base import bot
-from bot.util.misc import api_loop, dm_default_send, redact
+from bot.util.misc import (
+    api_loop, dm_default_send, exception_channels,
+    exception_dms, redact
+)
 
 log = logging.getLogger(__name__)
 
@@ -26,11 +29,6 @@ log = logging.getLogger(__name__)
 class CorePlugin(Plugin):
     def load(self, ctx):
         super(CorePlugin, self).load(ctx)
-        bot.config.get(
-            self,
-            "exception_dms",
-            "exception_channels",
-        )
         bot.load_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
@@ -567,7 +565,7 @@ class CorePlugin(Plugin):
             )
 
         strerror = redact(str(exception))
-        if self.exception_dms:
+        if bot.config.exception_dms:
             if event.channel.is_dm:
                 footer_text = "DM"
             else:
@@ -585,46 +583,22 @@ class CorePlugin(Plugin):
                 footer={"text": footer_text},
                 timestamp=event.message.timestamp.isoformat(),
             )
-            for target in self.exception_dms.copy():
-                target_dm = self.client.api.users_me_dms_create(target)
-                try:
-                    api_loop(target_dm.send_message, embed=embed)
-                except APIException as e:
-                    if e.code in (50013, 50001, 50007):
-                        log.warning("Unable to exception dm - "
-                                    f"{target}: {e}")
-                        self.exception_dms.remove(target)
-                    else:
-                        raise e
-        if self.exception_channels:
+            exception_dms(
+                self.client,
+                bot.config.exception_dms,
+                embed=embed,
+            )
+        if bot.config.exception_channels:
             embed = bot.generic_embed_values(
                 title={"title": f"Exception occured: {strerror}"},
                 description=extract_stack(),
                 footer={"text": event.message.content},
             )
-            for guild, channel in self.exception_channels.copy().items():
-                guild_obj = self.client.state.guilds.get(int(guild), None)
-                if guild_obj is not None:
-                    channel_obj = guild_obj.channels.get(channel, None)
-                    if channel_obj is not None:
-                        try:
-                            api_loop(
-                                channel_obj.send_message,
-                                embed=embed,
-                            )
-                        except APIException as e:
-                            if e.code in (50013, 50001):
-                                log.warning("Unable to post in exception "
-                                            f"channel - {channel}: {e}")
-                                del self.exception_channels[guild]
-                            else:
-                                raise e
-                    else:
-                        log.warning(f"Invalid exception channel: {channel}")
-                        del self.exception_channels[guild]
-                else:
-                    log.warning(f"Invalid exception guild: {guild}")
-                    del self.exception_channels[guild]
+            exception_channels(
+                self.client,
+                bot.config.exception_channels,
+                embed=embed,
+            )
         log.exception(exception)
 
 def event_channel_guild_check(self, event):
