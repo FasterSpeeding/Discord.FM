@@ -1,5 +1,6 @@
 from datetime import datetime
 from time import time, strftime, gmtime
+from json.decoder import JSONDecodeError
 import pytz
 import humanize
 import re
@@ -16,7 +17,7 @@ from requests.exceptions import ConnectionError as requestCError
 from bot.base import bot
 from bot.util.misc import (
     api_loop, AT_to_id, get_dict_item,
-    user_regex as discord_regex,
+    redact, user_regex as discord_regex,
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
@@ -952,6 +953,20 @@ class fmPlugin(Plugin):
         artist_data = self.get_cached(params, cool_down=3600, item="artist")
         return artist_data
 
+    class cached_object:
+        __slots__ = (
+            "exists",
+            "expire",
+            "data",
+            "error",
+        )
+
+        def __init__(self, exists, expire, data=None, error=None):
+            self.exists = exists
+            self.expire = expire
+            self.data = data
+            self.error = error
+
     def get_cached(
             self,
             params: dict,
@@ -971,31 +986,28 @@ class fmPlugin(Plugin):
                 raise CommandError("Last.FM isn't available right now.")
             if r.status_code == 200:
                 if cool_down is not None:
-                    self.cache[url] = type(
-                        "cached_object",
-                        (object, ),
-                        {
-                            "exists": True,
-                            "expire": time() + cool_down,
-                            "data": r.json(),
-                            "error": None,
-                        }
-                    )()
+                    self.cache[url] = self.cached_object(
+                        exists=True,
+                        expire=time() + cool_down,
+                        data=r.json(),
+                    )
                 return r.json()
             elif r.status_code == 404:
-                self.cache[url] = type(
-                    "cached_object",
-                    (object, ),
-                    {
-                        "exists": False,
-                        "expire": time() + cool_down,
-                        "data": None,
-                        "error": f"404 - {item} doesn't exist.",
-                    },
-                )()
+                self.cache[url] = self.cached_object(
+                    exists=False,
+                    expire=time() + 1800,
+                    error=f"404 - {item} doesn't exist.",
+                )
                 raise fmEntryNotFound(self.cache[url].error)
-            raise fmEntryNotFound(f"{r.status_code} - Last.fm "
-                                      "threw unexpected HTTP status code.")
+            log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
+            try:
+                message = ": " + r.json().get("message", ".")
+            except JSONDecodeError:
+                message = "."
+            else:
+                message = redact(message)
+            raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
+                                  f"unexpected HTTP status code{message}")
         elif self.cache[url].exists and time() <= self.cache[url].expire:
             return self.cache[url].data
         raise fmEntryNotFound(self.cache[url].error)
