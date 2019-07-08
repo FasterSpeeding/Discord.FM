@@ -130,39 +130,38 @@ class config(custom_base):
     embed_values: embed_values = embed_values()
 
 
-bindings = {
-    ".yaml": safe_load,
-    ".json": load,
-    }
-default_configs = ("config.json", "config.yaml")
-
-
-def get_config(config="config.json"):
-    if not os.path.isfile(config):
-        locations = [path for path in default_configs
-                     if os.path.isfile(path)]
-        if not locations:
-            raise Exception("Config location not found.")
-        config = locations[0]
-    handlers = [handler for type, handler in bindings.items()
-                if config.endswith(type)]
-    if not handlers:
-        raise Exception("Invalid config type.")
-    return handlers[0](open(config, "r"))
-
-
 class bot_frame:
-    triggers_set = set()
-    config = config
-    reactor = reactors_handler
-    sql = sql_instance
-    generic_embed_values = generic_embed_values
+    __slots__ = (
+        "config",
+        "reactor",
+        "sql",
+        "generic_embed_values",
+        "help_embeds",
+    )
+    cfg_bindings = {
+        ".yaml": safe_load,
+        ".json": load,
+    }
+    cfg_paths = ("config.json", "config.yaml")
 
     def __init__(self, config_location=None):
-        self.config = self.config(**get_config())
-        self.sql = self.sql(self.config.sql.to_dict())
-        self.reactor = self.reactor()
-        self.generic_embed_values = self.generic_embed_values(self.config)
+        self.config = config(**self.get_config())
+        self.sql = sql_instance(self.config.sql.to_dict())
+        self.reactor = reactors_handler()
+        self.generic_embed_values = generic_embed_values(self.config)
+
+    def get_config(self, config="config.json"):
+        if not os.path.isfile(config):
+            locations = [path for path in self.cfg_paths
+                         if os.path.isfile(path)]
+            if not locations:
+                raise Exception("Config location not found.")
+            config = locations[0]
+        handlers = [handler for type, handler in self.cfg_bindings.items()
+                    if config.endswith(type)]
+        if not handlers:
+            raise Exception("Invalid config type.")
+        return handlers[0](open(config, "r"))
 
     def prefix(self):
         return (self.config.prefix or
@@ -179,7 +178,7 @@ class bot_frame:
         With the rest of the docstring being reserved
         for when the user calls 'fm.help [command]'.
         """
-        if "help_embeds" not in dir(self):
+        if not hasattr(self, "help_embeds"):
             self.help_embeds = dict()
         arrays_to_sort = list()
         for command in bot.commands:
@@ -199,12 +198,9 @@ class bot_frame:
                         description=("Argument key: <required> [optional], "
                                      "with '...'specifying a multi-word "
                                      "argument and optional usernames "
-                                     "defaulting to a user's set username.")
+                                     "defaulting to a user's set username."),
                     )
-                if command.raw_args is not None:
-                    args = command.raw_args
-                else:
-                    args = str()
+                args = command.raw_args if command.raw_args else ""
                 if command.group:
                     command_name = command.group + " " + command.name
                 else:

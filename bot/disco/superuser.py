@@ -26,9 +26,9 @@ class superuserPlugin(Plugin):
         )
         self.status = status_handler(
             self,
-            db_token=bot.local.api.discordbots_org,
-            gg_token=bot.local.api.discord_bots_gg,
-            user_agent=bot.local.api.user_agent,
+            db_token=bot.config.api.discordbots_org,
+            gg_token=bot.config.api.discord_bots_gg,
+            user_agent=bot.config.api.user_agent,
         )
         self.register_schedule(
             self.status.update_stats,

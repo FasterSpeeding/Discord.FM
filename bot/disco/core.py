@@ -196,15 +196,16 @@ class CorePlugin(Plugin):
                             channel_id=event.channel_id,
                             reactor=condition.reactor,
                             **event.kwargs,
+                            **condition.kwargs,
                         )
-                        if index is not None:
+                        if (index is not None and
+                                message_id in bot.reactor.events):
                             bot.reactor.events[
                                 message_id
                             ].kwargs["index"] = index
-                            event.end_time += 6
-                        else:
-                            if message_id in bot.reactor.events:
-                                del bot.reactor.events[message_id]
+                            event.end_time += 10
+                        elif message_id in bot.reactor.events:
+                            del bot.reactor.events[message_id]
             elif event and time() > event.end_time:
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
@@ -262,9 +263,10 @@ class CorePlugin(Plugin):
                 if (match and (not command_obj.level or
                                author_level >= command_obj.level)):
                     break
+
             if match:
                 if command_obj.raw_args is not None:
-                    args = " " + command_obj.raw_args + ";"
+                    args = " " + command_obj.raw_args + "; "
                 else:
                     args = str()
                 array_name = command_obj.metadata.get("metadata", None)
@@ -273,15 +275,16 @@ class CorePlugin(Plugin):
                 if array_name:
                     docstring = command_obj.get_docstring()
                     docstring = docstring.replace("    ", "").strip("\n")
-                    triggers = "("
-                    trigger_base = str()
                     if command_obj.group:
-                        trigger_base += command_obj.group + " "
+                        triggers_formatted = command_obj.group + " ("
+                    else:
+                        triggers_formatted = "("
+
                     for trigger in command_obj.triggers:
-                        triggers += f"**{trigger_base}{trigger}** | "
-                    triggers = triggers[:-3] + "):"
+                        triggers_formatted += f"**{trigger}** | "
+                    triggers_formatted = triggers_formatted[:-3] + "):"
                     title = {
-                        "title": (f"{bot.prefix()}{triggers}{args} "
+                        "title": (f"{bot.prefix()}{triggers_formatted}{args} "
                                   f"a command in the {array_name} module."),
                     }
                     embed = bot.generic_embed_values(
@@ -471,7 +474,8 @@ class CorePlugin(Plugin):
                 text_count += 1
             elif channel.type == ChannelType.GUILD_VOICE:
                 voice_count += 1
-            elif channel.type != ChannelType.DM:
+            elif (channel.type != ChannelType.DM and
+                  channel.type != ChannelType.GUILD_CATEGORY):
                 other_count += 1
 
         voice_instances = 0
@@ -489,7 +493,7 @@ class CorePlugin(Plugin):
             "Uptime": uptime,
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),
-            "Users": (f"{member_count} total\n"
+            "Members": (f"{member_count} total\n"
                       f"{len(self.client.state.users)} unique\n"
                       f"{online_count} unique online"),
             "Channels": (f"{len(self.client.state.channels)} total\n"
@@ -551,14 +555,17 @@ class CorePlugin(Plugin):
                 break
 
     def exception_response(self, event, exception, respond: bool = True):
+        if isinstance(exception, APIException) and exception.code == 50013:
+            return
+
         if respond:
-            if not isinstance(exception, APIException) or exception.code != 50013:
-                api_loop(
-                    event.channel.send_message,
-                    ("Oops, looks like we've blown a fuse back "
-                     "here. Our technicians have been alerted and "
-                     "will fix the problem as soon as possible."),
-                )
+            api_loop(
+                event.channel.send_message,
+                ("Oops, looks like we've blown a fuse back "
+                 "here. Our technicians have been alerted and "
+                 "will fix the problem as soon as possible."),
+            )
+
         strerror = redact(str(exception))
         if self.exception_dms:
             if event.channel.is_dm:

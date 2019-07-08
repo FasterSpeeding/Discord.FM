@@ -189,7 +189,6 @@ class ApiPlugin(Plugin):
                     not event.channel.is_dm):
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=r.json()[sp_type+"s"]["items"],
                     index=0,
                     amount=1,
@@ -290,7 +289,6 @@ class ApiPlugin(Plugin):
                         not event.channel.is_dm):
                     bot.reactor.init_event(
                         message=reply,
-                        timing=30,
                         data=r.json()["items"],
                         index=0, amount=1,
                         index_type=yt_types_indexs[yt_type]["index"],

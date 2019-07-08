@@ -250,7 +250,6 @@ class fmPlugin(Plugin):
             if len(data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     owner=event.author.id,
                     data=data,
                     index=0,
@@ -386,7 +385,6 @@ class fmPlugin(Plugin):
             if len(artist_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=artist_data,
                     index=0,
                     amount=5,
@@ -441,7 +439,6 @@ class fmPlugin(Plugin):
             if len(album_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=album_data,
                     index=0,
                     amount=5,
@@ -496,7 +493,6 @@ class fmPlugin(Plugin):
             if len(track_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=track_data,
                     index=0,
                     amount=5,
