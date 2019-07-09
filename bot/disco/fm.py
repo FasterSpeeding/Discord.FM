@@ -118,12 +118,7 @@ class fmPlugin(Plugin):
                     )
             else:
                 if data.user_id == event.author.id:
-                    bot.sql(bot.sql.aliases.query.filter_by(
-                        user_id=event.author.id,
-                        guild_id=event.guild.id,
-                        alias=data.alias,
-                    ).delete)
-                    bot.sql.flush()
+                    bot.sql.delete(data)
                     api_loop(
                         event.channel.send_message,
                         f"Removed alias ``{data.alias}``.",
@@ -349,7 +344,7 @@ class fmPlugin(Plugin):
                 master_id=event.author.id,
                 slave_id=target,
             )
-            user.friends.append(friendship)
+            bot.sql(user.friends.append, friendship)
             api_loop(
                 event.channel.send_message,
                 f"Added user ``{name}`` to friends list.",

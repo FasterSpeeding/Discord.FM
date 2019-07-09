@@ -80,7 +80,7 @@ class CorePlugin(Plugin):
                     prefix=bot.prefix(),
                 )
                 bot.sql.add(guild)
-                self.prefixes[event.guild.id] = bot.prefix()
+                self.prefixes[event.guild.id] = guild.prefix
 
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):

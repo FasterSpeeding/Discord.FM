@@ -46,18 +46,22 @@ class ApiPlugin(Plugin):
         Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
-        guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-        if not guild:
-            guild = guilds(
-                guild_id=event.guild.id,
-                prefix=bot.prefix(),
-            )
-            bot.sql.add(guild)
-        elif guild.lyrics_limit <= 0:
-            return api_loop(
-                event.channel.send_message,
-                "This command has been disabled in this guild.",
-            )
+        if event.channel.is_dm:
+            limit = 6
+        else:
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if not guild:
+                guild = bot.sql.guilds(
+                    guild_id=event.guild.id,
+                    prefix=bot.prefix(),
+                )
+                bot.sql.add(guild)
+            elif guild.lyrics_limit <= 0:
+                return api_loop(
+                    event.channel.send_message,
+                    "This command has been disabled in this guild.",
+                )
+            limit = guild.lyrics_limit
         first_message = api_loop(
             event.channel.send_message,
             "Searching for lyrics...",
@@ -83,7 +87,7 @@ class ApiPlugin(Plugin):
         )
         first_message.delete()
         responses = 0
-        limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+        limit = limit if limit is not None else 3
         while lyrics and responses < limit:
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
@@ -118,12 +122,12 @@ class ApiPlugin(Plugin):
                     )
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
-                    guild = guilds(
+                    guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
                         prefix=bot.prefix(),
                     )
-                    bot.sql.get(guild)
+                    bot.sql.add(guild)
                 else:
                     bot.sql(
                         bot.sql.guilds.query.filter_by(
