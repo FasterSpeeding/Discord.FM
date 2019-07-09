@@ -18,7 +18,7 @@ from youtube_dl.utils import DownloadError
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, exception_channels
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class MusicPlugin(Plugin):
         super(MusicPlugin, self).load(ctx)
         bot.load_help_embeds(self)
         self.guilds = {}
-        self.cool_down = {"general": {}, "playlist": {}}
+        self.cool_down = {"playlist": {}}
         self.marked_for_delete = []
 
     def unload(self, ctx):
@@ -240,88 +240,77 @@ class MusicPlugin(Plugin):
             "sc": "scsearch:{}",
         }
         self.pre_check(event)
-        if event.guild.id not in self.cool_down:
-            self.cool_down[event.guild.id] = {}
-        if (event.author.id not in self.cool_down["general"] or
-                time() - self.cool_down["general"][event.author.id] >= 1):
-            if (event.guild.id not in self.cool_down["playlist"] or
-                    not self.cool_down["playlist"][event.guild.id]):
-                self.cool_down["general"][event.author.id] = time()
-                if event.guild.get_member(event.author).get_voice_state():
-                    self.on_join(event)
-                self.same_channel_check(event)
-                url_found = False
-                if play_type not in search_prefixs.keys():
-                    if play_type == "override":
-                        user_level = self.bot.get_level(event.author)
-                        if user_level != CommandLevels.OWNER:
-                            return api_loop(
-                                event.channel.send_message,
-                                "You don't own me",
-                            )
-                        video_url = content
-                        url_found = True
-                    elif content is not None:
-                        content = f"{play_type} {content}"
-                        play_type = "yt"
-                    else:
-                        content = play_type
-                        play_type = "yt"
-                elif play_type in search_prefixs.keys() and content is None:
+        if event.guild.get_member(event.author).get_voice_state():
+            self.on_join(event)
+        self.same_channel_check(event)
+        url_found = False
+        if play_type not in search_prefixs.keys():
+            if play_type == "override":
+                user_level = self.bot.get_level(event.author)
+                if user_level != CommandLevels.OWNER:
                     return api_loop(
                         event.channel.send_message,
-                        "Search argument missing.",
+                        "You don't own me.",
                     )
-                for key, reg in url_regs.items():
-                    if re.match(reg, content):
-                        url_found = True
-                        video_url = content
-                        play_type = key
-                        break
-                if not url_found:
-                    if play_type in search_prefixs:
-                        video_url = search_prefixs[play_type].format(content)
-                    else:
-                        video_url = search_prefixs["yt"].format(content)
-                youtubedl_object = YoutubeDLInput(video_url, command="ffmpeg")
-                try:
-                    yt_data = self.get_ytdl_values(youtubedl_object.info)
-                except DownloadError as e:
-                    return api_loop(
-                        event.channel.send_message,
-                        f"Video not avaliable: {e}",
-                    )
-                if yt_data["is_live"]:
-                    return api_loop(
-                        event.channel.send_message,
-                        "Livestreams aren't supported",
-                    )
-                if yt_data["duration"] > 3620:
-                    return api_loop(
-                        event.channel.send_message,
-                        "The maximum supported length is 1 hour.",
-                    )
-                self.get_player(event.guild.id).append(youtubedl_object)
-                api_loop(
-                    event.channel.send_message,
-                    (f"Added ``{yt_data['title']}`` by ``"
-                     f"{yt_data['uploader']}`` using ``{yt_data['source']}``.")
-                )
+                video_url = content
+                url_found = True
+            elif content is not None:
+                content = f"{play_type} {content}"
+                play_type = "yt"
             else:
-                api_loop(
-                    event.channel.send_message,
-                    "Currently adding playlist, please wait.",
-                )
-        else:
-            cool = round(
-                Decimal(
-                    1 - (time() - self.cool_down["general"][event.author.id]),
-                ),
-            )
-            api_loop(
+                content = play_type
+                play_type = "yt"
+        elif play_type in search_prefixs.keys() and content is None:
+            return api_loop(
                 event.channel.send_message,
-                f"Cool down: {cool} seconds left.",
+                "Search argument missing.",
             )
+        for key, reg in url_regs.items():
+            if re.match(reg, content):
+                url_found = True
+                video_url = content
+                play_type = key
+                break
+        if not url_found:
+            if play_type in search_prefixs:
+                video_url = search_prefixs[play_type].format(content)
+            else:
+                video_url = search_prefixs["yt"].format(content)
+        youtubedl_object = YoutubeDLInput(video_url, command="ffmpeg")
+        try:
+            yt_data = self.get_ytdl_values(youtubedl_object.info)
+        except DownloadError as e:
+            if "yt-dl.org" in str(e):
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    "Youtube-DL Error: ```" + str(e)[:1950] + "```",
+                )
+                user_out = ("Unable to fetch video: ``"
+                            f"{str(e.__context__)[:150]}``")
+            else:
+                user_out = ("Video not avaliable: ``"
+                            f"{str(e.__context__)[:150]}``")
+            return api_loop(
+                event.channel.send_message,
+                user_out,
+            )
+        if yt_data["is_live"]:
+            return api_loop(
+                event.channel.send_message,
+                "Livestreams aren't supported",
+            )
+        if yt_data["duration"] > 3620:
+            return api_loop(
+                event.channel.send_message,
+                "The maximum supported length is 1 hour.",
+            )
+        self.get_player(event.guild.id).append(youtubedl_object)
+        api_loop(
+            event.channel.send_message,
+            (f"Added ``{yt_data['title']}`` by ``"
+             f"{yt_data['uploader']}`` using ``{yt_data['source']}``.")
+        )
 
     @Plugin.command("playlist", "<to_shuffle:str> [url:str...]", metadata={"help": "voice"})
     def on_playlist_command(self, event, to_shuffle, url=""):
@@ -337,9 +326,8 @@ class MusicPlugin(Plugin):
         if to_shuffle != "shuffle" and to_shuffle != "Shuffle":
             url = f"{to_shuffle} {url}"
             to_shuffle = "no"
-        if not re.match(r"(https?://)?(www\.)?(youtube|youtu|youtube-nocookie)"
-                        r"\.(com|be)/(watch\?v=|embed/|v/|.+\?v=)?(?P<id>"
-                        r"[A-Za-z0-9\-=_]{11})", url):
+        if not re.match(r"^https?:\/\/(www.youtube.com"
+                        r"|youtube.com)\/playlist(.*)$", url):
             return api_loop(
                 event.channel.send_message,
                 "Invalid youtube playlist link.",
@@ -347,63 +335,61 @@ class MusicPlugin(Plugin):
         if event.guild.get_member(event.author).get_voice_state():
             self.on_join(event)
         self.same_channel_check(event)
-        if (event.author.id not in self.cool_down["general"] or
-                time() - self.cool_down["general"][event.author.id] >= 1):
-            if (event.guild.id not in self.cool_down["playlist"] or
-                    not self.cool_down["playlist"][event.guild.id]):
-                self.cool_down["playlist"][event.guild.id] = True
-                self.cool_down["general"][event.author.id] = time()
-                videos_added = 0
-                many_object = YoutubeDLInput.many(url, command="ffmpeg")
-                try:
-                    many_object = list(many_object)
-                except Exception as e:
-                    return api_loop(
-                        event.channel.send_message,
-                        f"Playlist not found: {e}",
-                    )
-                if to_shuffle == "shuffle" or to_shuffle == "Shuffle":
-                    shuffle(many_object)
-                message = api_loop(
+        if not self.cool_down["playlist"].get(event.guild.id, None):
+            self.cool_down["playlist"][event.guild.id] = True
+            videos_added = 0
+            many_object = YoutubeDLInput.many(url, command="ffmpeg")
+            try:
+                many_object = list(many_object)
+            except Exception as e:
+                del self.cool_down["playlist"][event.guild.id]
+                return api_loop(
                     event.channel.send_message,
-                    "Adding music from playlist.",
+                    f"Playlist not found: ``{str(e.__context__)[:150]}``",
                 )
-                for ytdl_object in many_object:
-                    try:
-                        yt_data = self.get_ytdl_values(ytdl_object.info)
-                    except DownloadError as e:
-                        continue
-                    if yt_data["is_live"]:
-                        continue
-                    elif yt_data is None or yt_data["duration"] > 3620:
-                        continue
-                    try:
-                        self.get_player(event.guild.id).append(ytdl_object)
-                    except CommandError as e:
-                        self.cool_down["playlist"][event.guild.id] = False
-                        raise e
-                    videos_added += 1
-                dropped = len(many_object) - videos_added
-                api_loop(
-                    message.edit,
-                    (f"Successfully added {videos_added} videos to queue "
-                     f"from playlist and dropped {dropped} videos."),
-                )
-                self.cool_down["playlist"][event.guild.id] = False
-            else:
-                api_loop(
-                    event.channel.send_message,
-                    "Still adding previous playlist, please wait.",
-                )
-        else:
-            cool = round(
-                Decimal(
-                    1 - (time() - self.cool_down["general"][event.author.id]),
-                ),
+            if to_shuffle == "shuffle" or to_shuffle == "Shuffle":
+                shuffle(many_object)
+            message = api_loop(
+                event.channel.send_message,
+                "Adding music from playlist.",
             )
+            for ytdl_object in many_object:
+                try:
+                    yt_data = self.get_ytdl_values(ytdl_object.info)
+                except DownloadError as e:
+                    if "yt-dl.org" in str(e):
+                        exception_channels(
+                            self.client,
+                            bot.config.exception_channels,
+                            "YT-DL Error: ```" + str(e)[:1950] + "```",
+                        )
+                        del self.cool_down["playlist"][event.guild.id]
+                        return api_loop(
+                            event.channel.send_message,
+                            ("Unable to fetch videos: ``"
+                             f"{str(e.__context__)[:150]}``"),
+                        )
+                    continue
+                if (not yt_data or yt_data.get("is_live")
+                        or yt_data["duration"] > 3620):
+                    continue
+                try:
+                    self.get_player(event.guild.id).append(ytdl_object)
+                except CommandError as e:
+                    self.cool_down["playlist"][event.guild.id] = False
+                    raise e
+                videos_added += 1
+            dropped = len(many_object) - videos_added
+            api_loop(
+                message.edit,
+                (f"Successfully added {videos_added} videos to queue "
+                 f"from playlist and dropped {dropped} videos."),
+            )
+            self.cool_down["playlist"][event.guild.id] = False
+        else:
             api_loop(
                 event.channel.send_message,
-                f"Cool down: {cool} seconds left.",
+                "Still adding previous playlist, please wait.",
             )
 
     @Plugin.command("pause", metadata={"help": "voice"})
@@ -442,19 +428,7 @@ class MusicPlugin(Plugin):
         Accepts no arguments.
         """
         self.pre_check(event)
-        if (event.author.id not in self.cool_down["general"] or
-                time() - self.cool_down["general"][event.author.id] >= 2):
-            self.get_player(event.guild.id).skip()
-            self.cool_down["general"][event.author.id] = time()
-        else:
-            cool = round(
-                Decimal(
-                    2 - (time() - self.cool_down["general"][event.author.id]),
-                ),
-            )
-            return event.channel.send_message(
-                f"Cool down: {cool} seconds left.",
-            )
+        self.get_player(event.guild.id).skip()
 
     @Plugin.command("shuffle", metadata={"help": "voice"})
     def on_shuffle(self, event):
@@ -684,6 +658,11 @@ class psuedo_queue(object):
                     piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                     self.player.queue.append(piped)
                 except AttributeError as e:
+                    exception_channels(
+                        self.client,
+                        bot.config.exception_channels,
+                        "Error loading audio: ```" + str(e)[:1950] + "```",
+                    )
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
                         log.warning(e)
                         sleep(10)
@@ -694,6 +673,11 @@ class psuedo_queue(object):
                 # except MemoryErrors as e:
                 except Exception as e:
                     log.exception(e)
+                    exception_channels(
+                        self.client,
+                        bot.config.exception_channels,
+                        "Voice error: ```" + str(e)[:1950] + "```",
+                    )
                 else:
                     self.waiting = True
                 if not self.thread.isAlive():
@@ -706,6 +690,11 @@ class psuedo_queue(object):
                 piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                 self.player.queue.append(piped)
             except AttributeError as e:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    "Error loading audio: ```" + str(e)[:1950] + "```",
+                )
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)
                 else:
@@ -714,6 +703,11 @@ class psuedo_queue(object):
                 raise e
             #    except MemoryErrors as e:
             except Exception as e:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    "Voice error: ```" + str(e)[:1950] + "```",
+                )
                 log.exception(e)
             else:
                 self.waiting = True

@@ -266,11 +266,11 @@ class sql_instance:
     def add(self, object):
         self(self.session.add, object)
         self.flush()
-    
+
     def delete(self, object):
         self(self.session.delete, object)
         self.flush()
-    
+
     def flush(self):
         self(self.session.flush)
 
@@ -327,6 +327,8 @@ class sql_instance:
         try:
             engine.execute("SELECT 1")
         except exc.OperationalError as e:
+            log.warning("Unable to connect to database, "
+                        "defaulting to sqlite: " + str(e))
             engine = self.create_engine()
 
         session = scoped_session(

@@ -1005,8 +1005,8 @@ class fmPlugin(Plugin):
                 exception_channels(
                     self.client,
                     bot.config.exception_channels,
-                    ("```Last.FM threw error "
-                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                    (f"Last.FM threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
                 )
             try:
                 message = ": " + r.json().get("message", ".")

@@ -209,8 +209,8 @@ class ApiPlugin(Plugin):
                 exception_channels(
                     self.client,
                     bot.config.exception_channels,
-                    ("```Spotify threw error "
-                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                    (f"Spotify threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
                 )
             api_loop(
                 event.channel.send_message,
@@ -236,8 +236,8 @@ class ApiPlugin(Plugin):
                 exception_channels(
                     self.client,
                     bot.config.exception_channels,
-                    ("```Spotify OAUTH threw error "
-                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                    (f"Spotify OAUTH threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
                 )
             raise CommandError(
                 f"Error code {r.status_code} returned by oauth flow"
@@ -326,8 +326,8 @@ class ApiPlugin(Plugin):
                 exception_channels(
                     self.client,
                     bot.config.exception_channels,
-                    ("```Youtube threw error "
-                     f"{r.status_code}: {redact(r.text)[:1950]}```"),
+                    (f"Youtube threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
                 )
             api_loop(
                 event.channel.send_message,
