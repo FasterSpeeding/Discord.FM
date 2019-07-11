@@ -384,7 +384,8 @@ class CorePlugin(Plugin):
             if member.permissions.can(Permissions.MANAGE_GUILD):
                 if (event.guild.id not in self.cool_down["prefix"] or
                         self.cool_down["prefix"][event.guild.id] <= time()):
-                    if bot.sql(bot.sql.guilds.query.get, event.guild.id) is None:
+                    guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+                    if guild is None:
                         guild = bot.sql.guilds(
                             guild_id=event.guild.id,
                             last_seen=datetime.now().isoformat(),
@@ -465,6 +466,7 @@ class CorePlugin(Plugin):
         for user in self.client.state.users.copy().values():
             if user.presence:
                 online_count += 1
+        online = "\nf{online_count} unique online" if online_count else ""
 
         other_count = text_count = voice_count = 0
         for channel in self.client.state.channels.copy().values():
@@ -472,8 +474,7 @@ class CorePlugin(Plugin):
                 text_count += 1
             elif channel.type == ChannelType.GUILD_VOICE:
                 voice_count += 1
-            elif (channel.type != ChannelType.DM and
-                  channel.type != ChannelType.GUILD_CATEGORY):
+            elif channel.type != ChannelType.DM:
                 other_count += 1
 
         voice_instances = 0
@@ -492,8 +493,7 @@ class CorePlugin(Plugin):
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),
             "Members": (f"{member_count} total\n"
-                      f"{len(self.client.state.users)} unique\n"
-                      f"{online_count} unique online"),
+                      f"{len(self.client.state.users)} unique" + online),
             "Channels": (f"{len(self.client.state.channels)} total\n"
                          f"{voice_count} voice\n{text_count} text\n"
                          f"{len(self.client.state.dms)} open "

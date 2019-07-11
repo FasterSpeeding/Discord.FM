@@ -90,7 +90,7 @@ class bot_data(custom_base):
     plugin_config_provider: str = None
     plugin_config_format: str = None
     plugin_config_dir: str = None
-    http_enabled: bool =None
+    http_enabled: bool = None
     http_host: str = None
     http_port: int = None
     plugins: list = [
@@ -109,6 +109,7 @@ class disco(custom_base):
     config: str = None
     shard_id: int = None
     shard_count: int = None
+    guild_subscriptions: bool = False
     max_reconnects: int = None
     log_level: str = None
     file_log_level: str = "WARNING"

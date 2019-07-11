@@ -135,6 +135,7 @@ def get(
     raise CommandError(f"{r.status_code} - {service} threw "
                            f"unexpected error: {redact(r.text)}")
 
+
 def exception_channels(client, exception_channels, *args, **kwargs):
     for guild, channel in exception_channels.copy().items():
         guild_obj = client.state.guilds.get(int(guild), None)
@@ -157,6 +158,7 @@ def exception_channels(client, exception_channels, *args, **kwargs):
         else:
             log.warning(f"Invalid exception guild: {guild}")
             del exception_channels[guild]
+
 
 def exception_dms(client, exception_dms, *args, **kwargs):
     for target in exception_dms.copy():
