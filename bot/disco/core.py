@@ -466,7 +466,7 @@ class CorePlugin(Plugin):
         for user in self.client.state.users.copy().values():
             if user.presence:
                 online_count += 1
-        online = "\nf{online_count} unique online" if online_count else ""
+        online = f"\n{online_count} unique online" if online_count else ""
 
         other_count = text_count = voice_count = 0
         for channel in self.client.state.channels.copy().values():

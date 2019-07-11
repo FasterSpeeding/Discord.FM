@@ -109,7 +109,7 @@ class disco(custom_base):
     config: str = None
     shard_id: int = None
     shard_count: int = None
-    guild_subscriptions: bool = False
+    guild_subscriptions: bool = True
     max_reconnects: int = None
     log_level: str = None
     file_log_level: str = "WARNING"
