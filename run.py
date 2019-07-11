@@ -31,7 +31,7 @@ CONFIG_OVERRIDE_MAPPING = {
 log = logging.getLogger(__name__)
 
 
-def disco_main(run=False):
+def disco_main():
     """
     Parse config.json
     creating a new :class:`Client`.
@@ -46,12 +46,12 @@ def disco_main(run=False):
 
     from bot.base import bot
 
-    args = bot.local.disco
+    args = bot.config.disco
 
     if pip and sys.platform == "linux" or sys.platform == "linux2":
         print("Sudo access may be required to keep youtube-dl up to date.")
-        if (any("voice" in plug for plug in bot.local.disco.plugin) or
-                any("voice" in plug for plug in bot.local.disco.bot.plugins)):
+        if (any("voice" in plug for plug in bot.config.disco.plugin) or
+                any("voice" in plug for plug in bot.config.disco.bot.plugins)):
             try:
                 subprocess.call([
                     "sudo",
@@ -77,10 +77,7 @@ def disco_main(run=False):
               "Linux is suggested or pip isn't installed.")
 
     # Create the base configuration object
-    if args.config:
-        config = ClientConfig.from_file(args.config)
-    else:
-        config = ClientConfig(args.to_dict())
+    config = ClientConfig(args.to_dict())
 
     for arg_key, config_key in six.iteritems(CONFIG_OVERRIDE_MAPPING):
         if getattr(args, arg_key) is not None:
@@ -112,24 +109,19 @@ def disco_main(run=False):
     # If applicable, build the bot and load plugins
     bot = None
     if args.run_bot or hasattr(config, 'bot'):
-        bot_config = (BotConfig(config.bot.to_dict()) if
-                      hasattr(config, 'bot') else BotConfig())
+        bot_config = BotConfig(args.bot.to_dict())
         if not hasattr(bot_config, 'plugins'):
             bot_config.plugins = args.plugin
         else:
             bot_config.plugins += args.plugin
 
         bot = Bot(client, bot_config)
-
-    if run:
-        (bot or client).run_forever()
-
     return (bot or client)
 
 
 if __name__ == '__main__':
-    from bot.util.sql import handle_sql, db_session
-    disco = disco_main(False)
+    from bot.base import bot
+    disco = disco_main()
     try:
         disco.run_forever()
     except KeyboardInterrupt:
@@ -139,4 +131,4 @@ if __name__ == '__main__':
             disco.rmv_plugin(plugin.__class__)
             log.info("Successfully unloaded plugin: "
                      + plugin.__class__.__name__)
-        handle_sql(db_session.flush)
+        bot.sql.flush()

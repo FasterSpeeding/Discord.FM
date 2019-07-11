@@ -1,5 +1,6 @@
 from datetime import datetime
 from time import time, strftime, gmtime
+from json.decoder import JSONDecodeError
 import pytz
 import humanize
 import re
@@ -16,13 +17,11 @@ from requests.exceptions import ConnectionError as requestCError
 from bot.base import bot
 from bot.util.misc import (
     api_loop, AT_to_id, get_dict_item,
-    user_regex as discord_regex,
+    redact, user_regex as discord_regex,
+    exception_channels
 )
 from bot.util.react import generic_react
-from bot.util.sql import (
-    aliases, db_session, friends,
-    handle_sql, periods, users
-)
+from bot.util.sql import periods
 
 log = logging.getLogger(__name__)
 
@@ -39,23 +38,20 @@ class fmPlugin(Plugin):
         self.mbid_reg = re.compile(
             "[a-z0-9]{8}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{12}",
         )
-        bot.local.api.get(
+        bot.config.api.get(
             self,
             "discogs_secret",
             "discogs_key",
         )
         self.cache = {}
         self.cool_downs = {"fulluser": {}, "friends": []}
-        self.prefix = (bot.local.prefix or
-                       bot.local.disco.bot.commands_prefix or
-                       "fm.")
         self.s = Session()
         self.s.params = {
-            "api_key": bot.local.api.last_key,
+            "api_key": bot.config.api.last_key,
             "format": "json",
         }
         self.s.headers.update({
-            "User-Agent": bot.local.api.user_agent,
+            "User-Agent": bot.config.api.user_agent,
             "Content-Type": "application/json",
         })
         self.BASE_URL = "https://ws.audioscrobbler.com/2.0/"
@@ -66,7 +62,7 @@ class fmPlugin(Plugin):
 
     @staticmethod
     def __check__():
-        return bot.local.api.last_key
+        return bot.config.api.last_key
 
     @Plugin.schedule(60)
     def purge_cache(self):
@@ -95,23 +91,22 @@ class fmPlugin(Plugin):
                  "contain Discord's reserved special characters."),
             )
         else:
-            data = handle_sql(aliases.query.filter(
-                aliases.guild_id == event.guild.id,
-                aliases.alias.like(alias),
+            data = bot.sql(bot.sql.aliases.query.filter(
+                bot.sql.aliases.guild_id == event.guild.id,
+                bot.sql.aliases.alias.like(alias),
             ).first)
             if data is None:
                 self.get_user(event.author.id)
-                if (handle_sql(aliases.query.filter_by(
+                if (bot.sql(bot.sql.aliases.query.filter_by(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
                 ).count) < 5):
-                    payload = aliases(
+                    payload = bot.sql.aliases(
                         user_id=event.author.id,
                         guild_id=event.guild.id,
                         alias=alias,
                     )
-                    handle_sql(db_session.add, payload)
-                    handle_sql(db_session.flush)
+                    bot.sql.add(payload)
                     api_loop(
                         event.channel.send_message,
                         f"Added alias ``{alias}``.",
@@ -123,12 +118,7 @@ class fmPlugin(Plugin):
                     )
             else:
                 if data.user_id == event.author.id:
-                    handle_sql(aliases.query.filter_by(
-                        user_id=event.author.id,
-                        guild_id=event.guild.id,
-                        alias=data.alias,
-                    ).delete)
-                    handle_sql(db_session.flush)
+                    bot.sql.delete(data)
                     api_loop(
                         event.channel.send_message,
                         f"Removed alias ``{data.alias}``.",
@@ -160,15 +150,15 @@ class fmPlugin(Plugin):
                 try:
                     target = AT_to_id(target)
                 except CommandError:
-                    data = handle_sql(aliases.query.filter(
-                        aliases.guild_id == event.guild.id,
-                        aliases.alias.like(target),
+                    data = bot.sql(bot.sql.aliases.query.filter(
+                        bot.sql.aliases.guild_id == event.guild.id,
+                        bot.sql.aliases.alias.like(target),
                     ).first)
                     if data is None:
                         raise CommandError("User alias not "
                                            "found in this guild.")
                     target = data.user_id
-            data = handle_sql(aliases.query.filter_by(
+            data = bot.sql(bot.sql.aliases.query.filter_by(
                 user_id=target,
                 guild_id=event.guild.id,
             ).all)
@@ -232,17 +222,17 @@ class fmPlugin(Plugin):
         Get a list of what your friends have recently listened to.
         Accepts no arguments.
         """
-        user = handle_sql(users.query.get, event.author.id)
+        user = bot.sql(bot.sql.users.query.get, event.author.id)
         if not user or not user.friends:
             api_loop(
                 event.channel.send_message,
                 ("You don't have any friends, use "
-                 f"``{self.prefix}friends add`` to catch some."),
+                 f"``{bot.prefix()}friends add`` to catch some."),
             )
         else:
             title = {
                 "title": f"{event.author} friends.",
-                "url": ("https://www.last.fm/user/{user.last_username}"
+                "url": (f"https://www.last.fm/user/{user.last_username}"
                         if user.last_username else None),
             }
             data = [f.slave_id for f in user.friends]
@@ -257,7 +247,6 @@ class fmPlugin(Plugin):
             if len(data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     owner=event.author.id,
                     data=data,
                     index=0,
@@ -287,11 +276,11 @@ class fmPlugin(Plugin):
                 user = str(user) if user else data[current_index]
                 friend = self.get_user_info(data[current_index])
                 if not friend["username"]:
-                    handle_sql(friends.query.filter_by(
+                    bot.sql(bot.sql.friends.query.filter_by(
                         master_id=owner,
                         slave_id=data[current_index]
                     ).delete)
-                    handle_sql(db_session.flush)
+                    bot.sql.flush()
                     data.pop(current_index)
                     if current_index >= len(data) - 1:
                         finished = True
@@ -346,13 +335,16 @@ class fmPlugin(Plugin):
         target = target["user_id"]
         name = self.state.users.get(int(target))
         name = str(name) if name else target
-        user = handle_sql(users.query.get, event.author.id)
+        user = bot.sql(bot.sql.users.query.get, event.author.id)
         if not user:
-            user = users(user_id=event.author.id)
-            handle_sql(db_session.add, user)
+            user = bot.sql.users(user_id=event.author.id)
+            bot.sql.add(user)
         if not any([f.slave_id == target for f in user.friends]):
-            friendship = friends(master_id=event.author.id, slave_id=target)
-            user.friends.append(friendship)
+            friendship = bot.sql.friends(
+                master_id=event.author.id,
+                slave_id=target,
+            )
+            bot.sql(user.friends.append, friendship)
             api_loop(
                 event.channel.send_message,
                 f"Added user ``{name}`` to friends list.",
@@ -360,12 +352,12 @@ class fmPlugin(Plugin):
         else:
             friendships = [f for f in user.friends if f.slave_id == target]
             for friend_obj in friendships:
-                user.friends.remove(friend_obj)
+                bot.sql(user.friends.remove, friend_obj)
             api_loop(
                 event.channel.send_message,
                 f"Removed user ``{name}`` from friends list.",
             )
-        handle_sql(db_session.flush)
+        bot.sql.flush()
 
     @Plugin.command("artists", "<artist:str...>", group="search", metadata={"help": "last.fm"})
     def on_search_artist_command(self, event, artist):
@@ -390,7 +382,6 @@ class fmPlugin(Plugin):
             if len(artist_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=artist_data,
                     index=0,
                     amount=5,
@@ -445,7 +436,6 @@ class fmPlugin(Plugin):
             if len(album_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=album_data,
                     index=0,
                     amount=5,
@@ -500,7 +490,6 @@ class fmPlugin(Plugin):
             if len(track_data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=track_data,
                     index=0,
                     amount=5,
@@ -634,13 +623,13 @@ class fmPlugin(Plugin):
             period = period.replace(" ", "").strip("s").lower()
             if period in periods.values():
                 self.get_user_info(event.author.id)
-                handle_sql(
-                    users.query.filter_by(
+                bot.sql(
+                    bot.sql.users.query.filter_by(
                         user_id=event.author.id,
                     ).update,
                     {"period": {y: x for x, y in periods.items()}[period]},
                 )
-                handle_sql(db_session.flush)
+                bot.sql.flush()
                 api_loop(
                     event.channel.send_message,
                     ("Default period for 'top' commands "
@@ -649,7 +638,7 @@ class fmPlugin(Plugin):
             else:
                 api_loop(
                     event.channel.send_message,
-                    (f"Invalid argument, see ``{self.prefix}"
+                    (f"Invalid argument, see ``{bot.prefix()}"
                      "help top period`` for more details."),
                 )
         else:
@@ -713,21 +702,21 @@ class fmPlugin(Plugin):
         """
         if username is not None:
             username = self.get_last_account(username)["user"]["name"]
-            user = handle_sql(users.query.get, event.author.id)
+            user = bot.sql(bot.sql.users.query.get, event.author.id)
             if user:
-                handle_sql(
-                    users.query.filter_by(
+                bot.sql(
+                    bot.sql.users.query.filter_by(
                         user_id=event.author.id,
                     ).update,
                     {"last_username": username},
                 )
+                bot.sql.flush()
             else:
-                user = users(
+                user = bot.sql.users(
                     user_id=event.author.id,
                     last_username=username,
                 )
-                handle_sql(db_session.add, user)
-            handle_sql(db_session.flush)
+                bot.sql.add(user)
             api_loop(
                 event.channel.send_message,
                 f"Username for ``{event.author}`` changed to ``{username}``.",
@@ -930,7 +919,7 @@ class fmPlugin(Plugin):
         username = user_data["name"]
         if username is None:
             raise CommandError("User should set a last.fm account "
-                               f"using ``{self.prefix}username``")
+                               f"using ``{bot.prefix()}username``")
         inline = {
             "Playcount": user_data["playcount"],
             "Registered": strftime(
@@ -960,6 +949,20 @@ class fmPlugin(Plugin):
         artist_data = self.get_cached(params, cool_down=3600, item="artist")
         return artist_data
 
+    class cached_object:
+        __slots__ = (
+            "exists",
+            "expire",
+            "data",
+            "error",
+        )
+
+        def __init__(self, exists, expire, data=None, error=None):
+            self.exists = exists
+            self.expire = expire
+            self.data = data
+            self.error = error
+
     def get_cached(
             self,
             params: dict,
@@ -979,31 +982,35 @@ class fmPlugin(Plugin):
                 raise CommandError("Last.FM isn't available right now.")
             if r.status_code == 200:
                 if cool_down is not None:
-                    self.cache[url] = type(
-                        "cached_object",
-                        (object, ),
-                        {
-                            "exists": True,
-                            "expire": time() + cool_down,
-                            "data": r.json(),
-                            "error": None,
-                        }
-                    )()
+                    self.cache[url] = self.cached_object(
+                        exists=True,
+                        expire=time() + cool_down,
+                        data=r.json(),
+                    )
                 return r.json()
             elif r.status_code == 404:
-                self.cache[url] = type(
-                    "cached_object",
-                    (object, ),
-                    {
-                        "exists": False,
-                        "expire": time() + cool_down,
-                        "data": None,
-                        "error": f"404 - {item} doesn't exist.",
-                    },
-                )()
+                self.cache[url] = self.cached_object(
+                    exists=False,
+                    expire=time() + 1800,
+                    error=f"404 - {item} doesn't exist.",
+                )
                 raise fmEntryNotFound(self.cache[url].error)
-            raise fmEntryNotFound(f"{r.status_code} - Last.fm "
-                                      "threw unexpected HTTP status code.")
+            log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    (f"Last.FM threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
+                )
+            try:
+                message = ": " + r.json().get("message", ".")
+            except JSONDecodeError:
+                message = "."
+            else:
+                message = redact(message)
+            raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
+                                  f"unexpected HTTP status code{message}")
         elif self.cache[url].exists and time() <= self.cache[url].expire:
             return self.cache[url].data
         raise fmEntryNotFound(self.cache[url].error)
@@ -1071,7 +1078,7 @@ class fmPlugin(Plugin):
                 username = result
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
-                                   f"using ``{self.prefix}username``")
+                                   f"using ``{bot.prefix()}username``")
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):
@@ -1114,9 +1121,9 @@ class fmPlugin(Plugin):
             target = AT_to_id(target)
         except CommandError as e:
             if guild is not None and not isinstance(guild, bool):
-                data = handle_sql(aliases.query.filter(
-                    aliases.guild_id == guild,
-                    aliases.alias.like(target)
+                data = bot.sql(bot.sql.aliases.query.filter(
+                    bot.sql.aliases.guild_id == guild,
+                    bot.sql.aliases.alias.like(target)
                     ).first)
                 if data:
                     target = data.user_id
@@ -1126,11 +1133,10 @@ class fmPlugin(Plugin):
                 raise CommandError("User aliases aren't enabled in DMs.")
             else:
                 raise e
-        data = handle_sql(users.query.get, target)
+        data = bot.sql(bot.sql.users.query.get, target)
         if data is None:
-            user = users(user_id=target)
-            handle_sql(db_session.add, user)
-            handle_sql(db_session.flush)
+            user = bot.sql.users(user_id=target)
+            bot.sql.add(user)
             data = {"user_id": target, "username": None, "period": periods[0]}
         else:
             data = {
@@ -1208,7 +1214,7 @@ class fmPlugin(Plugin):
         headers = {
             "Authorization": (f"Discogs key={self.discogs_key},"
                               f" secret={self.discogs_secret}"),
-            "User-Agent": bot.local.api.user_agent,
+            "User-Agent": bot.config.api.user_agent,
             "Content-Type": "application/json",
         }
         params = {

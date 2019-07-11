@@ -46,7 +46,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
 user_regex = re.compile(r"[<]?[@]?[!]?\d{18}[>]?")
 redact_regs = [
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
-    re.compile(r"[-._\w\d]{20,70}"),
+    re.compile(r"[-._\w\d]{20,140}"),
     re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
     re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
                r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
@@ -134,3 +134,41 @@ def get(
         raise CommandError(f"404 - {item} doesn't exist.")
     raise CommandError(f"{r.status_code} - {service} threw "
                            f"unexpected error: {redact(r.text)}")
+
+
+def exception_channels(client, exception_channels, *args, **kwargs):
+    for guild, channel in exception_channels.copy().items():
+        guild_obj = client.state.guilds.get(int(guild), None)
+        if guild_obj is not None:
+            channel_obj = guild_obj.channels.get(channel, None)
+            if channel_obj is not None:
+                try:
+                    api_loop(channel_obj.send_message, *args, **kwargs)
+                except (APIException, CommandError) as e:
+                    if (isinstance(e, CommandError) or
+                            e.code in (50013, 50001)):
+                        log.warning("Unable to post in exception "
+                                    f"channel - {channel}: {e}")
+                        del exception_channels[guild]
+                    else:
+                        raise e
+            else:
+                log.warning(f"Invalid exception channel: {channel}")
+                del exception_channels[guild]
+        else:
+            log.warning(f"Invalid exception guild: {guild}")
+            del exception_channels[guild]
+
+
+def exception_dms(client, exception_dms, *args, **kwargs):
+    for target in exception_dms.copy():
+        target_dm = client.api.users_me_dms_create(target)
+        try:
+            api_loop(target_dm.send_message, *args, **kwargs)
+        except APIException as e:
+            if e.code in (50013, 50001, 50007):
+                log.warning("Unable to send exception DM - "
+                            f"{target}: {e}")
+                exception_dms.remove(target)
+            else:
+                raise e

@@ -18,8 +18,10 @@ from disco.util.logging import logging
 
 from bot import __GIT__
 from bot.base import bot
-from bot.util.misc import api_loop, dm_default_send, redact
-from bot.util.sql import db_session, guilds, users, handle_sql
+from bot.util.misc import (
+    api_loop, dm_default_send, exception_channels,
+    exception_dms, redact
+)
 
 log = logging.getLogger(__name__)
 
@@ -27,21 +29,13 @@ log = logging.getLogger(__name__)
 class CorePlugin(Plugin):
     def load(self, ctx):
         super(CorePlugin, self).load(ctx)
-        bot.local.get(
-            self,
-            "exception_dms",
-            "exception_channels",
-        )
-        self.command_prefix = (bot.local.prefix or
-                               bot.local.disco.bot.commands_prefix or
-                               "fm.")
         bot.load_help_embeds(self)
         self.cool_down = {"prefix": {}}
         self.cache = {"prefix": {}}
         self.prefixes = {}
         self.process = psutil.Process()
         try:
-            for guild in handle_sql(guilds.query.all):
+            for guild in bot.sql(bot.sql.guilds.query.all):
                 self.prefixes[guild.guild_id] = guild.prefix
         except CommandError as e:
             log.critical("Failed to load data from guild data "
@@ -76,34 +70,34 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
         if isinstance(event.unavailable, Unset):
-            if handle_sql(
-                    guilds.query.get, event.guild.id
+            if bot.sql(
+                    bot.sql.guilds.query.get, event.guild.id
                     ) is None:
-                guild = guilds(
+                guild = bot.sql.guilds(
                     guild_id=event.guild.id,
                     last_seen=datetime.now().isoformat(),
                     name=event.guild.name,
+                    prefix=bot.prefix(),
                 )
-                db_session.add(guild)
-                handle_sql(db_session.flush)
-                self.prefixes[event.guild.id] = self.command_prefix
+                bot.sql.add(guild)
+                self.prefixes[event.guild.id] = guild.prefix
 
     @Plugin.listen("GuildUpdate")
     def on_guild_update(self, event):
         try:
-            guild = handle_sql(guilds.query.get, event.guild.id)
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             if guild is None:
                 guild = guilds(
                     guild_id=event.guild.id,
                     last_seen=datetime.now().isoformat(),
                     name=event.guild.name,
+                    prefix=bot.prefix(),
                 )
-                handle_sql(db_session.add, guild)
-                handle_sql(db_session.flush)
+                bot.sql.add(guild)
             else:
                 if guild.name != event.guild.name:
-                    handle_sql(
-                        guilds.query.filter_by(
+                    bot.sql(
+                        bot.sql.guilds.query.filter_by(
                             guild_id=event.guild.id,
                         ).update,
                         {
@@ -111,7 +105,7 @@ class CorePlugin(Plugin):
                             "last_seen": datetime.now().isoformat(),
                         },
                     )
-                    handle_sql(db_session.flush)
+                    bot.sql.flush()
         except CommandError as e:
             log.warning("Failed to update guild "
                         f"{event.guild.id} SQL entry: {e.msg}")
@@ -120,10 +114,9 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
         if isinstance(event.unavailable, Unset):
-            guild = handle_sql(guilds.query.get, event.id)
+            guild = bot.sql(bot.sql.guilds.query.get, event.id)
             if guild:
-                handle_sql(db_session.delete, guild)
-                handle_sql(db_session.flush)
+                bot.sql.delete(guild)
 
     @Plugin.command("guild", group="reset", metadata={"help": "miscellaneous"})
     def on_guild_purge(self, event):
@@ -137,10 +130,9 @@ class CorePlugin(Plugin):
                 )
         member = event.guild.get_member(event.author)
         if member.permissions.can(Permissions.ADMINISTRATOR):
-            guild = handle_sql(guilds.query.get, event.guild.id)
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             if guild:
-                handle_sql(db_session.delete, guild)
-                handle_sql(db_session.flush)
+                bot.sql.delete(guild)
                 api_loop(
                     event.channel.send_message,
                     "Guild data removed.",
@@ -157,10 +149,9 @@ class CorePlugin(Plugin):
         """
         Used to reset any user data stored by the bot (e.g. Last.fm username)
         """
-        user = handle_sql(users.query.get, event.author.id)
+        user = bot.sql(bot.sql.users.query.get, event.author.id)
         if user:
-            handle_sql(db_session.delete, user)
-            handle_sql(db_session.flush)
+            bot.sql.delete(user)
             api_loop(event.channel.send_message, "Removed user data.")
         else:
             api_loop(
@@ -203,15 +194,16 @@ class CorePlugin(Plugin):
                             channel_id=event.channel_id,
                             reactor=condition.reactor,
                             **event.kwargs,
+                            **condition.kwargs,
                         )
-                        if index is not None:
+                        if (index is not None and
+                                message_id in bot.reactor.events):
                             bot.reactor.events[
                                 message_id
                             ].kwargs["index"] = index
-                            event.end_time += 6
-                        else:
-                            if message_id in bot.reactor.events:
-                                del bot.reactor.events[message_id]
+                            event.end_time += 10
+                        elif message_id in bot.reactor.events:
+                            del bot.reactor.events[message_id]
             elif event and time() > event.end_time:
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
@@ -251,8 +243,8 @@ class CorePlugin(Plugin):
                     continue
                 dm_default_send(event, channel, embed=embed)
         else:
-            if command.startswith(self.command_prefix):
-                command = command[len(self.command_prefix):]
+            if command.startswith(bot.prefix()):
+                command = command[len(bot.prefix()):]
             author_level = self.bot.get_level(event.author)
 
             # Check for module match.
@@ -269,9 +261,10 @@ class CorePlugin(Plugin):
                 if (match and (not command_obj.level or
                                author_level >= command_obj.level)):
                     break
+
             if match:
                 if command_obj.raw_args is not None:
-                    args = " " + command_obj.raw_args + ";"
+                    args = " " + command_obj.raw_args + "; "
                 else:
                     args = str()
                 array_name = command_obj.metadata.get("metadata", None)
@@ -280,15 +273,16 @@ class CorePlugin(Plugin):
                 if array_name:
                     docstring = command_obj.get_docstring()
                     docstring = docstring.replace("    ", "").strip("\n")
-                    triggers = "("
-                    trigger_base = str()
                     if command_obj.group:
-                        trigger_base += command_obj.group + " "
+                        triggers_formatted = command_obj.group + " ("
+                    else:
+                        triggers_formatted = "("
+
                     for trigger in command_obj.triggers:
-                        triggers += f"**{trigger_base}{trigger}** | "
-                    triggers = triggers[:-3] + "):"
+                        triggers_formatted += f"**{trigger}** | "
+                    triggers_formatted = triggers_formatted[:-3] + "):"
                     title = {
-                        "title": (f"{self.command_prefix}{triggers}{args} "
+                        "title": (f"{bot.prefix()}{triggers_formatted}{args} "
                                   f"a command in the {array_name} module."),
                     }
                     embed = bot.generic_embed_values(
@@ -303,14 +297,14 @@ class CorePlugin(Plugin):
                     channel,
                     content=f"``{command}`` command not found.",
                 )
-        user_info = handle_sql(users.query.get, event.author.id)
+        user_info = bot.sql(bot.sql.users.query.get, event.author.id)
         if user_info is None or user_info.last_username is None:
             dm_default_send(
                 event,
                 channel,
                 content=("To get started with this bot, you can set "
                          "your default last.fm username using the command "
-                         f"``{self.command_prefix}username <username>``.")
+                         f"``{bot.prefix()}username <username>``.")
             )
 
     @Plugin.command("invite", metadata={"help": "miscellaneous"})
@@ -370,16 +364,16 @@ class CorePlugin(Plugin):
         """
         if not event.channel.is_dm:
             if prefix is None:
-                guild = handle_sql(guilds.query.get, event.guild.id)
+                guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if guild is None:
-                    prefix = self.command_prefix
-                    guild = guilds(
+                    prefix = bot.prefix()
+                    guild = bot.sql.guilds(
                         guild_id=event.guild.id,
                         last_seen=datetime.now().isoformat(),
                         name=event.guild.name,
+                        prefix=bot.prefix(),
                     )
-                    handle_sql(db_session.add, guild)
-                    handle_sql(db_session.flush)
+                    bot.sql.add(guild)
                 else:
                     prefix = guild.prefix
                 return api_loop(
@@ -390,17 +384,18 @@ class CorePlugin(Plugin):
             if member.permissions.can(Permissions.MANAGE_GUILD):
                 if (event.guild.id not in self.cool_down["prefix"] or
                         self.cool_down["prefix"][event.guild.id] <= time()):
-                    if handle_sql(guilds.query.get, event.guild.id) is None:
-                        guild = guilds(
+                    guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+                    if guild is None:
+                        guild = bot.sql.guilds(
                             guild_id=event.guild.id,
                             last_seen=datetime.now().isoformat(),
                             name=event.guild.name,
-                            prefix=prefix,
+                            prefix=bot.prefix(),
                         )
-                        handle_sql(db_session.add, guild)
+                        bot.sql.add(guild)
                     else:
-                        handle_sql(
-                            guilds.query.filter_by(
+                        bot.sql(
+                            bot.sql.guilds.query.filter_by(
                                 guild_id=event.guild.id
                             ).update,
                             {
@@ -408,7 +403,7 @@ class CorePlugin(Plugin):
                                 "prefix": prefix
                             },
                         )
-                    handle_sql(db_session.flush)
+                    bot.sql.flush()
                     self.prefixes[event.guild.id] = prefix
                     api_loop(
                         event.channel.send_message,
@@ -471,6 +466,7 @@ class CorePlugin(Plugin):
         for user in self.client.state.users.copy().values():
             if user.presence:
                 online_count += 1
+        online = f"\n{online_count} unique online" if online_count else ""
 
         other_count = text_count = voice_count = 0
         for channel in self.client.state.channels.copy().values():
@@ -496,9 +492,8 @@ class CorePlugin(Plugin):
             "Uptime": uptime,
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),
-            "Users": (f"{member_count} total\n"
-                      f"{len(self.client.state.users)} unique\n"
-                      f"{online_count} unique online"),
+            "Members": (f"{member_count} total\n"
+                      f"{len(self.client.state.users)} unique" + online),
             "Channels": (f"{len(self.client.state.channels)} total\n"
                          f"{voice_count} voice\n{text_count} text\n"
                          f"{len(self.client.state.dms)} open "
@@ -519,21 +514,20 @@ class CorePlugin(Plugin):
         if event.author.bot:
             return
         if event.channel.is_dm:
-            prefix = self.command_prefix
+            prefix = bot.prefix()
         else:
             prefix = self.prefixes.get(event.guild_id, None)
             if prefix is None:
-                guild = handle_sql(guilds.query.get, event.guild_id)
+                guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
                 if guild is None:
-                    prefix = self.command_prefix
+                    prefix = bot.prefix()
                     self.prefixes[event.guild_id] = prefix
-                    guild = guilds(
+                    guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         last_seen=datetime.now().isoformat(),
                         prefix=prefix,
                     )
-                    handle_sql(db_session.add, guild)
-                    handle_sql(db_session.flush)
+                    bot.sql.add(guild)
                 else:
                     prefix = guild.prefix
                     self.prefixes[event.guild_id] = guild.prefix
@@ -559,16 +553,19 @@ class CorePlugin(Plugin):
                 break
 
     def exception_response(self, event, exception, respond: bool = True):
+        if isinstance(exception, APIException) and exception.code == 50013:
+            return
+
         if respond:
-            if not isinstance(exception, APIException) or exception.code != 50013:
-                api_loop(
-                    event.channel.send_message,
-                    ("Oops, looks like we've blown a fuse back "
-                     "here. Our technicians have been alerted and "
-                     "will fix the problem as soon as possible."),
-                )
+            api_loop(
+                event.channel.send_message,
+                ("Oops, looks like we've blown a fuse back "
+                 "here. Our technicians have been alerted and "
+                 "will fix the problem as soon as possible."),
+            )
+
         strerror = redact(str(exception))
-        if self.exception_dms:
+        if bot.config.exception_dms:
             if event.channel.is_dm:
                 footer_text = "DM"
             else:
@@ -586,46 +583,22 @@ class CorePlugin(Plugin):
                 footer={"text": footer_text},
                 timestamp=event.message.timestamp.isoformat(),
             )
-            for target in self.exception_dms.copy():
-                target_dm = self.client.api.users_me_dms_create(target)
-                try:
-                    api_loop(target_dm.send_message, embed=embed)
-                except APIException as e:
-                    if e.code in (50013, 50001, 50007):
-                        log.warning("Unable to exception dm - "
-                                    f"{target}: {e}")
-                        self.exception_dms.remove(target)
-                    else:
-                        raise e
-        if self.exception_channels:
+            exception_dms(
+                self.client,
+                bot.config.exception_dms,
+                embed=embed,
+            )
+        if bot.config.exception_channels:
             embed = bot.generic_embed_values(
                 title={"title": f"Exception occured: {strerror}"},
                 description=extract_stack(),
                 footer={"text": event.message.content},
             )
-            for guild, channel in self.exception_channels.copy().items():
-                guild_obj = self.client.state.guilds.get(int(guild), None)
-                if guild_obj is not None:
-                    channel_obj = guild_obj.channels.get(channel, None)
-                    if channel_obj is not None:
-                        try:
-                            api_loop(
-                                channel_obj.send_message,
-                                embed=embed,
-                            )
-                        except APIException as e:
-                            if e.code in (50013, 50001):
-                                log.warning("Unable to post in exception "
-                                            f"channel - {channel}: {e}")
-                                del self.exception_channels[guild]
-                            else:
-                                raise e
-                    else:
-                        log.warning(f"Invalid exception channel: {channel}")
-                        del self.exception_channels[guild]
-                else:
-                    log.warning(f"Invalid exception guild: {guild}")
-                    del self.exception_channels[guild]
+            exception_channels(
+                self.client,
+                bot.config.exception_channels,
+                embed=embed,
+            )
         log.exception(exception)
 
 def event_channel_guild_check(self, event):

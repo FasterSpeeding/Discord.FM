@@ -9,7 +9,6 @@ from disco.util.logging import logging
 from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.status import status_handler, guildCount
-from bot.util.sql import handle_sql, db_session
 
 
 log = logging.getLogger(__name__)
@@ -27,9 +26,9 @@ class superuserPlugin(Plugin):
         )
         self.status = status_handler(
             self,
-            db_token=bot.local.api.discordbots_org,
-            gg_token=bot.local.api.discord_bots_gg,
-            user_agent=bot.local.api.user_agent,
+            db_token=bot.config.api.discordbots_org,
+            gg_token=bot.config.api.discord_bots_gg,
+            user_agent=bot.config.api.user_agent,
         )
         self.register_schedule(
             self.status.update_stats,
@@ -101,7 +100,7 @@ class superuserPlugin(Plugin):
                          + plugin.__class__.__name__)
             else:
                 log.info("Caught self")
-        handle_sql(db_session.flush)
+        bot.sql.flush()
         exit(0)
 
     @Plugin.command("unload", "<plugin_name:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})

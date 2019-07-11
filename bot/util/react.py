@@ -12,7 +12,15 @@ from bot.util.misc import api_loop
 log = logging.getLogger(__name__)
 
 
-class reactor_condition:  # implement this as well.
+class reactor_condition:
+    __slots__ = (
+        "auth",
+        "function",
+        "owner_id",
+        "reactor",
+        "kwargs",
+    )
+
     def __init__(
             self,
             reactor,
@@ -20,14 +28,22 @@ class reactor_condition:  # implement this as well.
             owner_id: int,
             owner_only: bool = True,
             **kwargs):
-        self.auth = owner_only  # rename that
+        self.auth = owner_only
         self.function = function
         self.owner_id = owner_id
         self.reactor = reactor
         self.kwargs = kwargs
 
 
-class reactor_object:  # implement this
+class reactor_object:
+    __slots__ = (
+        "channel_id",
+        "message_id",
+        "end_time",
+        "conditions",
+        "kwargs",
+    )
+
     def __init__(
             self,
             channel_id: int,
@@ -49,18 +65,18 @@ class reactor_object:  # implement this
 class reactors_handler(object):
     def __init__(self):
         self.events = dict()
-        self.__name__ = "reactor"
 
-    def init_event(self, message, timing, **kwargs):
+    def init_event(self, message, timing=45, conditions=None, **kwargs):
         end_time = time() + timing
-        event_dict = {
-            "channel_id": message.channel_id,
-            "message_id": message.id,
-            "end_time": end_time,
-            "conditions": [],
-            "kwargs": kwargs,
-        }
-        self.events[message.id] = type("message_id", (object,), event_dict)()
+        if "reactor_map" not in kwargs:
+            kwargs["reactor_map"] = reactor_function_map
+        self.events[message.id] = reactor_object(
+            channel_id=message.channel_id,
+            message_id=message.id,
+            end_time=end_time,
+            conditions=conditions,
+            **kwargs,
+        )
 
     def add_argument(
             self,
@@ -72,17 +88,13 @@ class reactors_handler(object):
             **kwargs):
         if message_id in self.events:
             self.events[message_id].conditions.append(
-                type(
-                    "reactor condition",
-                    (object, ),
-                    {
-                        "reactor": reactor,
-                        "function": function,
-                        "owner_id": owner_id,
-                        "auth": owner_only,
-                        "kwargs": kwargs,
-                    },
-                    )()
+                reactor_condition(
+                    reactor=reactor,
+                    function=function,
+                    owner_id=owner_id,
+                    auth=owner_only,
+                    **kwargs,
+                )
             )
         else:
             raise IndexError("Message ID not present in list.")
@@ -150,7 +162,6 @@ class reactors_handler(object):
 
 
 def generic_react(
-        self,
         client,
         message_id,
         channel_id,
@@ -158,53 +169,44 @@ def generic_react(
         index,
         data,
         edit_message,
+        reactor_map,
         amount=1,
         limit=100,
         **kwargs):
     remainder = (len(data) % amount)
-    if reactor == "\N{black rightwards arrow}":
-        index = right_shift(
-            index,
-            len(data),
+    function = reactor_map.get(reactor)
+    if function:
+        index = function(
+            index=index,
+            list_len=len(data),
             amount=amount,
             limit=limit,
             remainder=remainder,
-        )
-    elif reactor == "\N{Cross Mark}":
-        try:
-            api_loop(
-                client.client.api.channels_messages_delete,
-                channel_id,
-                message_id,
-            )
-        except APIException as e:
-            if e.code == 10008:
-                pass
-            else:
-                raise e
-        return None
-    elif reactor == "\N{leftwards black arrow}":
-        index = left_shift(
-            index,
-            len(data),
-            amount=amount,
-            limit=limit,
-            remainder=remainder,
+            client=client,
+            message_id=message_id,
+            channel_id=channel_id,
         )
     else:
         return
-    content, embed = edit_message(data=data, index=index, **kwargs)
-    api_loop(
-        client.client.api.channels_messages_modify,
-        channel_id,
-        message_id,
-        content=content,
-        embed=embed,
-    )
+    if index:
+        content, embed = edit_message(data=data, index=index, **kwargs)
+        api_loop(
+            client.client.api.channels_messages_modify,
+            channel_id,
+            message_id,
+            content=content,
+            embed=embed,
+        )
     return index
 
 
-def left_shift(index, list_len, remainder, amount=1, limit=100):
+def left_shift(
+        index,
+        list_len,
+        remainder,
+        amount=1,
+        limit=100,
+        **kwargs):
     if index == 0 or index < amount:
         if list_len >= limit:
             index = limit - amount
@@ -224,9 +226,36 @@ def length(item, limit=100):
     return limit
 
 
-def right_shift(index, list_len, remainder, amount=1, limit=100):
+def right_shift(
+        index,
+        list_len,
+        remainder,
+        amount=1,
+        limit=100,
+        **kwargs):
     if index >= limit - amount or index >= list_len - amount:
         index = 0
     else:
         index += amount
     return index
+
+
+def end_event(client, message_id, channel_id, **kwargs):
+    try:
+        api_loop(
+            client.client.api.channels_messages_delete,
+            channel_id,
+            message_id,
+        )
+    except APIException as e:
+        if e.code == 10008:
+            pass
+        else:
+            raise e
+
+
+reactor_function_map = {
+    "\N{leftwards black arrow}": left_shift,
+    "\N{black rightwards arrow}": right_shift,
+    "\N{Cross Mark}": end_event,
+}

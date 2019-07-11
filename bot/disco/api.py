@@ -13,9 +13,8 @@ from requests import get, post
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, exception_channels, redact
 from bot.util.react import generic_react
-from bot.util.sql import db_session, guilds, handle_sql
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ log = logging.getLogger(__name__)
 class ApiPlugin(Plugin):
     def load(self, ctx):
         super(ApiPlugin, self).load(ctx)
-        bot.local.api.get(
+        bot.config.api.get(
             self,
             "user_agent",
             "google_key",
@@ -47,16 +46,22 @@ class ApiPlugin(Plugin):
         Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
-        guild = handle_sql(guilds.query.get, event.guild.id)
-        if not guild:
-            guild = guilds(guild_id=event.guild.id)
-            handle_sql(db_session.add, guild)
-            handle_sql(db_session.flush)
-        elif guild.lyrics_limit <= 0:
-            return api_loop(
-                event.channel.send_message,
-                "This command has been disabled in this guild.",
-            )
+        if event.channel.is_dm:
+            limit = 6
+        else:
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if not guild:
+                guild = bot.sql.guilds(
+                    guild_id=event.guild.id,
+                    prefix=bot.prefix(),
+                )
+                bot.sql.add(guild)
+            elif guild.lyrics_limit <= 0:
+                return api_loop(
+                    event.channel.send_message,
+                    "This command has been disabled in this guild.",
+                )
+            limit = guild.lyrics_limit
         first_message = api_loop(
             event.channel.send_message,
             "Searching for lyrics...",
@@ -82,7 +87,7 @@ class ApiPlugin(Plugin):
         )
         first_message.delete()
         responses = 0
-        limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+        limit = limit if limit is not None else 3
         while lyrics and responses < limit:
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
@@ -115,17 +120,17 @@ class ApiPlugin(Plugin):
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
-                guild = handle_sql(guilds.query.get, event.guild.id)
+                guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
-                    guild = guilds(
+                    guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
+                        prefix=bot.prefix(),
                     )
-                    handle_sql(db_session.add, guild)
-                    handle_sql(db_session.flush)
+                    bot.sql.add(guild)
                 else:
-                    handle_sql(
-                        guilds.query.filter_by(
+                    bot.sql(
+                        bot.sql.guilds.query.filter_by(
                             guild_id=event.guild.id,
                         ).update,
                         {"lyrics_limit": limit},
@@ -140,7 +145,7 @@ class ApiPlugin(Plugin):
                     "This command is limited to server admins.",
                 )
         else:
-            guild = handle_sql(guilds.query.get, event.guild.id)
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
             api_loop(
                     event.channel.send_message,
@@ -188,7 +193,6 @@ class ApiPlugin(Plugin):
                     not event.channel.is_dm):
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=r.json()[sp_type+"s"]["items"],
                     index=0,
                     amount=1,
@@ -205,6 +209,13 @@ class ApiPlugin(Plugin):
                 )
         else:
             log.warning(r.text)
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    (f"Spotify threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",
@@ -224,7 +235,14 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code != 200:
-            log.warning(r.text)
+            log.warning(redact(str(r.text)))
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    (f"Spotify OAUTH threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
+                )
             raise CommandError(
                 f"Error code {r.status_code} returned by oauth flow"
             )
@@ -289,7 +307,6 @@ class ApiPlugin(Plugin):
                         not event.channel.is_dm):
                     bot.reactor.init_event(
                         message=reply,
-                        timing=30,
                         data=r.json()["items"],
                         index=0, amount=1,
                         index_type=yt_types_indexs[yt_type]["index"],
@@ -309,6 +326,13 @@ class ApiPlugin(Plugin):
                 api_loop(event.channel.send_message, "Video not found.")
         else:
             log.warning(r.text)
+            if bot.config.exception_channels:
+                exception_channels(
+                    self.client,
+                    bot.config.exception_channels,
+                    (f"Youtube threw error {r.status_code}: "
+                     f"```{redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",

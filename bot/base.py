@@ -1,11 +1,12 @@
 from platform import python_version
-from yaml import safe_load
 import logging
 import operator
 import os
 
 
 from requests import __version__ as __Rversion__
+from pydantic import BaseModel
+from yaml import safe_load
 try:
     from ujson import load
 except ImportError:
@@ -15,15 +16,16 @@ except ImportError:
 from bot import __GIT__
 from bot.types.embed import generic_embed_values
 from bot.util.react import reactors_handler
+from bot.util.sql import sql_instance
 
 log = logging.getLogger(__name__)
 
 
-class unset:
-    def __init__(self, unset_type, default=None):
-        self.type = unset_type
-        self.default = default
+def optional(**kwargs):
+    return {index: data for index, data in kwargs.items() if data is not None}
 
+
+class unset:
     def __nonzero__(self):
         return False
 
@@ -31,59 +33,7 @@ class unset:
         return False
 
 
-class feed_dict:
-    """Used for a config that takes in **kwargs"""
-    __intake__ = dict
-
-
-class feed_list:
-    """Used for a config that takes in *args"""
-    __intake__ = list
-
-
-def optional(**kwargs):
-    return {index: data for index, data in kwargs.items() if data is not None}
-
-
-class config_template:
-    __name__ = "Unset"
-    __unsettable__ = True
-
-    def __init__(self, **kwargs):
-        arguments = [arg for arg in dir(self) if not arg.startswith("__") and
-                     (not callable(getattr(self, arg)) or
-                     getattr(getattr(self, arg), "__unsettable__", False))]
-        for arg in arguments:
-            value = kwargs.get(arg, unset)
-            template = getattr(self, arg)
-            if value is not unset:
-                if issubclass(template.type, config_template):
-                    if isinstance(value, template.type.__intake__):
-                        if template.type.__intake__ is dict:
-                            setattr(self, arg, template.type(**value))
-                        elif template.type.__intake__ is list:
-                            setattr(self, arg, template.type(*value))
-                    elif isinstance(value, type(None)):
-                        setattr(self, arg, template.type())
-                    else:
-                        setattr(self, arg, template.type())
-                        log.warning(f"Invalid type for {self.__name__}.{arg}, "
-                                    f"needs {template.type.__intake__}.")
-                else:
-                    if isinstance(value, template.type):
-                        setattr(self, arg, value)
-                    else:
-                        setattr(self, arg, template.default)
-                        if (not isinstance(value, type(template.default))
-                                and not isinstance(value, type(None))):
-                            log.warning(f"Invalid type for {self.__name__}"
-                                        f".{arg}. Needs {template.type}")
-            else:
-                if issubclass(template.type, config_template):
-                    setattr(self, arg, template.type())
-                else:
-                    setattr(self, arg, template.default)
-
+class custom_base(BaseModel):
     def get(self, context, *args):
         for arg in args:
             local = getattr(self, arg, unset)
@@ -94,126 +44,130 @@ class config_template:
                             f"in get `{self.__name__}`.")
 
     def to_dict(self):
-        return {key: value for key, value in self.__dict__.items()
+        return {key: value for key, value in self.dict().items()
                 if value is not None}
 
-    def __repr__(self):
-        return f"<config {self.__name__}>"
+
+class api(custom_base):
+    user_agent: str = (f"Discord.FM @{__GIT__} "
+                       f"Python {python_version()} "
+                       f"requests/{__Rversion__}")
+    last_key: str = None
+    google_key: str = None
+    google_cse_engine_ID: str = ("0129851312360258"
+                                 "62960:rhlblfpn4hc")
+    spotify_ID: str = None
+    spotify_secret: str = None
+    discordbots_org: str = None
+    discord_bots_gg: str = None
+    discogs_key: str = None
+    discogs_secret: str = None
 
 
-class api(config_template, feed_dict):
-    __name__ = "api"
-    user_agent = unset(str, default=(f"Discord.FM @{__GIT__} "
-                                     f"Python {python_version()} "
-                                     f"requests/{__Rversion__}"))
-    last_key = unset(str)
-    google_key = unset(str)
-    google_cse_engine_ID = unset(
-        str,
-        default="012985131236025862960:rhlblfpn4hc",
-    )
-    spotify_ID = unset(str)
-    spotify_secret = unset(str)
-    discordbots_org = unset(str)
-    discord_bots_gg = unset(str)
-    discogs_key = unset(str)
-    discogs_secret = unset(str)
+class sql(custom_base):
+    database: str = None
+    server: str = None
+    user: str = None
+    password: str = ""
+    adapter: str = "mysql+pymysql"
+    args: dict = {}
 
 
-class sql(config_template, feed_dict):
-    __name__ = "sql"
-    database = unset(str)
-    server = unset(str)
-    user = unset(str)
-    password = unset(str, default="")
-    adapter = unset(str, default="mysql+pymysql")
-    args = unset(dict, default={})
-
-
-class embed_values(config_template, feed_dict):
+class embed_values(custom_base):
     __name__ = "embed_values"
-    url = unset(str)
-    color = unset(str)
+    url: str = None
+    color: str = None
 
 
-class bot_data(config_template, feed_dict):
-    levels = unset(dict, default={})
-    commands_require_mention = unset(bool, default=True)
-    commands_mention_rules = unset(dict)
-    commands_prefix = unset(str)
-    commands_allow_edit = unset(bool)
-    commands_level_getter = unset(object)  # deal with
-    commands_group_abbrev = unset(bool)
-    plugin_config_provider = unset(object)  # same
-    plugin_config_format = unset(str)
-    plugin_config_dir = unset(str)
-    http_enabled = unset(bool)
-    http_host = unset(str)
-    http_port = unset(int)
-    plugins = unset(list, default=[
+class bot_data(custom_base):
+    levels: dict = {}
+    commands_require_mention: bool = True
+    commands_mention_rules: dict = None
+    commands_prefix: str = None
+    commands_allow_edit: bool = None
+    commands_level_getter: str = None
+    commands_group_abbrev: bool = None
+    plugin_config_provider: str = None
+    plugin_config_format: str = None
+    plugin_config_dir: str = None
+    http_enabled: bool = None
+    http_host: str = None
+    http_port: int = None
+    plugins: list = [
         "bot.disco.superuser",
         "bot.disco.core",
         "bot.disco.fm",
         "bot.disco.api",
         "bot.disco.voice",
         #  "bot.disco.discogs",
-    ])
+    ]
 
 
-class disco(config_template, feed_dict):
-    __name__ = "disco"
-    token = unset(str)
-    bot = unset(bot_data)
-    config = unset(str)
-    shard_id = unset(int)
-    shard_count = unset(int)
-    max_reconnects = unset(int)
-    log_level = unset(str)
-    file_log_level = unset(str, default="WARNING")
-    manhole = unset(bool)  # manhole_enable
-    manhole_bind = unset(int)
-    plugin = unset(list, default=[])
-    run_bot = unset(bool, default=False)
-    encoder = unset(str)  # , default="etf" # etc has weird guild issues.
-    shard_auto = unset(bool, default=False)
+class disco(custom_base):
+    token: str = None
+    bot: bot_data = bot_data()
+    config: str = None
+    shard_id: int = None
+    shard_count: int = None
+    guild_subscriptions: bool = False
+    max_reconnects: int = None
+    log_level: str = None
+    file_log_level: str = "WARNING"
+    manhole: bool = None  # manhole_enable
+    manhole_bind: int = None
+    plugin: list = []
+    run_bot: bool = True
+    encoder: str = None  # , default="etf" # etc has weird guild issues.
+    shard_auto: bool = False
 
 
-class config(config_template, feed_dict):
-    __name__ = "config"
-    exception_dms = unset(list)
-    exception_channels = unset(dict)
-    prefix = unset(str, default="fm.")
-    api = unset(api)
-    disco = unset(disco)
-    sql = unset(sql)
-    embed_values = unset(embed_values)
+class config(custom_base):
+    exception_dms: list = None
+    exception_channels: dict = None
+    prefix: str = "fm."
+    api: api = api()
+    disco: disco = disco()
+    sql: sql = sql()
+    embed_values: embed_values = embed_values()
 
 
 class bot_frame:
-    triggers_set = set()
-    local = config
-    reactor = reactors_handler
-    generic_embed_values = generic_embed_values
+    __slots__ = (
+        "config",
+        "reactor",
+        "sql",
+        "generic_embed_values",
+        "help_embeds",
+    )
+    cfg_bindings = {
+        ".yaml": safe_load,
+        ".json": load,
+    }
+    cfg_paths = ("config.json", "config.yaml")
 
-    def __init__(self, config_location="config.json"):
-        if os.path.isfile(config_location):
-            if config_location.lower().endswith(".json"):
-                data = load(open(config_location, "r"))
-                self.local = self.local(**data)
-            elif config_location.lower().endswith(".yaml"):
-                data = safe_load(open(config_location, "r"))
-                self.local = self.local(**data)
-            else:
-                log.exception("Invalid config file format.")
-        elif os.path.isfile("config.yaml"):
-            self.local = self.local(**safe_load(open("config.yaml", "r")))
-        elif not config_location:
-            log.exception("Missing config file or invalid "
-                          f"location given {config_location}")
-        else:
-            self.local = self.local()
-        self.reactor = self.reactor()
-        self.generic_embed_values = self.generic_embed_values(self.local)
+    def __init__(self, config_location=None):
+        self.config = config(**self.get_config())
+        self.sql = sql_instance(self.config.sql.to_dict())
+        self.reactor = reactors_handler()
+        self.generic_embed_values = generic_embed_values(self.config)
+
+    def get_config(self, config="config.json"):
+        if not os.path.isfile(config):
+            locations = [path for path in self.cfg_paths
+                         if os.path.isfile(path)]
+            if not locations:
+                raise Exception("Config location not found.")
+            config = locations[0]
+        handlers = [handler for type, handler in self.cfg_bindings.items()
+                    if config.endswith(type)]
+        if not handlers:
+            raise Exception("Invalid config type.")
+        return handlers[0](open(config, "r"))
+
+    def prefix(self):
+        return (self.config.prefix or
+                self.config.disco.bot.commands_prefix or
+                "fm.")
 
     def load_help_embeds(self, bot):
         """
@@ -225,7 +179,7 @@ class bot_frame:
         With the rest of the docstring being reserved
         for when the user calls 'fm.help [command]'.
         """
-        if "help_embeds" not in dir(self):
+        if not hasattr(self, "help_embeds"):
             self.help_embeds = dict()
         arrays_to_sort = list()
         for command in bot.commands:
@@ -245,19 +199,15 @@ class bot_frame:
                         description=("Argument key: <required> [optional], "
                                      "with '...'specifying a multi-word "
                                      "argument and optional usernames "
-                                     "defaulting to a user's set username.")
+                                     "defaulting to a user's set username."),
                     )
-                if command.raw_args is not None:
-                    args = command.raw_args
-                else:
-                    args = str()
+                args = command.raw_args if command.raw_args else ""
                 if command.group:
                     command_name = command.group + " " + command.name
                 else:
                     command_name = command.name
-                prefix = (self.local.disco.bot.commands_prefix or "fm.")
                 self.help_embeds[array_name].add_field(
-                    name=f"{prefix}**{command_name}** {args}",
+                    name=f"{self.prefix()}**{command_name}** {args}",
                     value=doc_string.split("\n", 1)[0],
                     inline=False
                 )
@@ -280,8 +230,7 @@ class bot_frame:
                     args = command.raw_args
                 else:
                     args = str()
-                prefix = (self.local.disco.bot.commands_prefix or "fm.")
-                field_name = f"{prefix}**{command.name}** {args}"
+                field_name = f"{self.prefix()}**{command.name}** {args}"
                 if array_name in self.help_embeds:
                     matching_fields = [field for field in
                                        self.help_embeds[array_name].fields

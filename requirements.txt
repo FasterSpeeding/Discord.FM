@@ -8,7 +8,8 @@ pytz
 psutil
 pymysql
 pyyaml
-requests
 sqlalchemy
+pydantic
+requests
 ujson
 youtube-dl
