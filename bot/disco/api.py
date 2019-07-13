@@ -53,7 +53,7 @@ class ApiPlugin(Plugin):
             if not guild:
                 guild = bot.sql.guilds(
                     guild_id=event.guild.id,
-                    prefix=bot.prefix(),
+                    prefix=bot.prefix,
                 )
                 bot.sql.add(guild)
             elif guild.lyrics_limit <= 0:
@@ -125,7 +125,7 @@ class ApiPlugin(Plugin):
                     guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
-                        prefix=bot.prefix(),
+                        prefix=bot.prefix,
                     )
                     bot.sql.add(guild)
                 else:

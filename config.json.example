@@ -21,7 +21,7 @@
     "sql": {
       "database": null,
       "server": null,
-      "user": null,
+      "username": null,
       "password": null
     }
   }

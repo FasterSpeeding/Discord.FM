@@ -285,7 +285,7 @@ class sql_instance:
 
         # Pre_establish settings
         if server:
-            settings = (f"{adapter}://{username}: {password} "
+            settings = (f"{adapter}://{username}:{password}"
                         f"@{server}/{database}?charset=utf8mb4")
             args = (args or {})
         else:
@@ -295,7 +295,7 @@ class sql_instance:
             settings = "sqlite+pysqlite:///data/data.db"
 
         # Connect to server
-        engine = spawn_engine(
+        return spawn_engine(
             settings,
             encoding="utf8",
             pool_recycle=3600,
@@ -303,7 +303,6 @@ class sql_instance:
             echo=False,
             connect_args=args,
         )
-        return engine
 
     def create_engine_session_safe(
             self,

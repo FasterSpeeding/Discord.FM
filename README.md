@@ -54,7 +54,7 @@ For this to function, the SQL server will need to have a database with the name 
 "sql": {
   "database": "database_name",
   "server": "ip_address:port",
-  "user": "root",
+  "username": "root",
   "password": "password"
 }
 ```

@@ -227,7 +227,7 @@ class fmPlugin(Plugin):
             api_loop(
                 event.channel.send_message,
                 ("You don't have any friends, use "
-                 f"``{bot.prefix()}friends add`` to catch some."),
+                 f"``{bot.prefix}friends add`` to catch some."),
             )
         else:
             title = {
@@ -638,7 +638,7 @@ class fmPlugin(Plugin):
             else:
                 api_loop(
                     event.channel.send_message,
-                    (f"Invalid argument, see ``{bot.prefix()}"
+                    (f"Invalid argument, see ``{bot.prefix}"
                      "help top period`` for more details."),
                 )
         else:
@@ -919,7 +919,7 @@ class fmPlugin(Plugin):
         username = user_data["name"]
         if username is None:
             raise CommandError("User should set a last.fm account "
-                               f"using ``{bot.prefix()}username``")
+                               f"using ``{bot.prefix}username``")
         inline = {
             "Playcount": user_data["playcount"],
             "Registered": strftime(
@@ -1078,7 +1078,7 @@ class fmPlugin(Plugin):
                 username = result
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
-                                   f"using ``{bot.prefix()}username``")
+                                   f"using ``{bot.prefix}username``")
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):

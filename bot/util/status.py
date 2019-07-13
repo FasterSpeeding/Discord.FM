@@ -137,6 +137,7 @@ class status_handler(object):
                             guild_id=guild,
                             last_seen=datetime.now().isoformat(),
                             name=guild_object.name,
+                            prefix=bot.prefix,
                         )
                         bot.sql.add(sql_guild)
                     else:

@@ -67,7 +67,7 @@ class api(custom_base):
 class sql(custom_base):
     database: str = None
     server: str = None
-    user: str = None
+    username: str = None
     password: str = ""
     adapter: str = "mysql+pymysql"
     args: dict = {}
@@ -147,7 +147,7 @@ class bot_frame:
 
     def __init__(self, config_location=None):
         self.config = config(**self.get_config())
-        self.sql = sql_instance(self.config.sql.to_dict())
+        self.sql = sql_instance(**self.config.sql.to_dict())
         self.reactor = reactors_handler()
         self.generic_embed_values = generic_embed_values(self.config)
 
@@ -164,6 +164,7 @@ class bot_frame:
             raise Exception("Invalid config type.")
         return handlers[0](open(config, "r"))
 
+    @property
     def prefix(self):
         return (self.config.prefix or
                 self.config.disco.bot.commands_prefix or
@@ -207,7 +208,7 @@ class bot_frame:
                 else:
                     command_name = command.name
                 self.help_embeds[array_name].add_field(
-                    name=f"{self.prefix()}**{command_name}** {args}",
+                    name=f"{self.prefix}**{command_name}** {args}",
                     value=doc_string.split("\n", 1)[0],
                     inline=False
                 )
@@ -230,7 +231,7 @@ class bot_frame:
                     args = command.raw_args
                 else:
                     args = str()
-                field_name = f"{self.prefix()}**{command.name}** {args}"
+                field_name = f"{self.prefix}**{command.name}** {args}"
                 if array_name in self.help_embeds:
                     matching_fields = [field for field in
                                        self.help_embeds[array_name].fields
