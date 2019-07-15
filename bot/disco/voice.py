@@ -425,7 +425,7 @@ class MusicPlugin(Plugin):
             self.get_player(event.guild.id).resume()
 
     @Plugin.command("kill", metadata={"help": "voice"})
-    def on_kill(self, event):
+    def on_force_kill(self, event):
         """
         Used to reset voice instance ws connection.
         """

@@ -546,6 +546,7 @@ class fmPlugin(Plugin):
             map=("topalbums", "album"),
             name_format=("playcount", ),
             value_format=("artist", ),
+            artist_map=("artist", "name"),
             limit=limit,
             singular=False,
         )
@@ -661,6 +662,7 @@ class fmPlugin(Plugin):
             map=("toptracks", "track"),
             name_format=("playcount", ),
             value_format=("artist", ),
+            artist_map=("artist", "name"),
             limit=limit,
             singular=False,
         )
