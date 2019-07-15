@@ -130,15 +130,11 @@ class reactors_handler(object):
                     reactor,
                 )
             except APIException as e:
-                if e.code == 10008:
+                if e.code == 10008:  # Unknown message
                     if message_id in self.events:
                         del self.events[message_id]
                     return
-                elif e.code == 50001:
-                    if message_id in self.events:
-                        del self.events[message_id]
-                    raise CommandError("Missing ``add reactions`` permission.")
-                else:
+                elif e.code not in (50001, 50013): # access, permission error
                     raise e
         sleep(time)
         if message_id in self.events:
@@ -149,16 +145,8 @@ class reactors_handler(object):
                     message_id,
                 )
             except APIException as e:
-                if e.code == 10008:
-                    pass
-                elif e.code == 50013:
-                    client.client.api.channels_messages_create(
-                        channel=channel_id,
-                        content=("Missing permission required to clear "
-                                 "message reactions ``Manage Messages``."),
-                    )
-                else:
-                    raise e
+                if e.code not in (10008, 50001, 50013):
+                    raise e # Unknown message, missing access, permission
 
 
 def generic_react(
@@ -248,7 +236,7 @@ def end_event(client, message_id, channel_id, **kwargs):
             message_id,
         )
     except APIException as e:
-        if e.code == 10008:
+        if e.code == 10008:  # Unknown message
             pass
         else:
             raise e

@@ -1,8 +1,5 @@
-from datetime import datetime
 from time import time, strftime, gmtime
 from json.decoder import JSONDecodeError
-import pytz
-import humanize
 import re
 
 
@@ -18,7 +15,7 @@ from bot.base import bot
 from bot.util.misc import (
     api_loop, AT_to_id, get_dict_item,
     redact, user_regex as discord_regex,
-    exception_channels
+    exception_channels, time_since
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
@@ -301,13 +298,11 @@ class fmPlugin(Plugin):
                 self.get_fm_secondary(
                     embed=embed,
                     params=params,
-                    name=f"[{current_index + 1}] {user} ({friend})",
-                    primary_index="recenttracks",
-                    secondary_index="track",
-                    artists=True,
-                    artist_name="#text",
-                    entry_format="ago",
-                    seperator="\n",
+                    name_template=f"[{current_index + 1}] {user} ({friend})",
+                    map=("recenttracks", "track"),
+                    artist_map=("artist", "#text"),
+                    value_format=("ago", "artist"),
+                    value_clamps=("ago", ),
                     limit=limit,
                 )
             except CommandError:
@@ -532,17 +527,11 @@ class fmPlugin(Plugin):
         if username is None:
             username = event.author.id
         period = self.get_user_info(event.author.id)["period"]
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            title_template=("Top albums for {} over " +
-                            (" " + period).replace(" over", "")),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
+            description=("Top albums over" +
+                         (" " + period).replace(" over", "")),
         )
         params = {
             "method": "user.gettopalbums",
@@ -553,11 +542,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Album #{}",
-            primary_index="topalbums",
-            secondary_index="album",
-            artists=True,
-            entry_format="amount",
+            name_template="{} plays",
+            map=("topalbums", "album"),
+            name_format=("playcount", ),
+            value_format=("artist", ),
             limit=limit,
             singular=False,
         )
@@ -575,17 +563,11 @@ class fmPlugin(Plugin):
         if username is None:
             username = event.author.id
         period = self.get_user_info(event.author.id)["period"]
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            title_template=("Top artists for {} over" +
-                            (" " + period).replace(" over", "")),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
+            description=("Top artists over" +
+                         (" " + period).replace(" over", "")),
         )
         params = {
             "method": "user.gettopartists",
@@ -596,10 +578,9 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Artist #{}",
-            primary_index="topartists",
-            secondary_index="artist",
-            entry_format="amount",
+            name_template="{} plays",
+            map=("topartists", "artist"),
+            name_format=("playcount", ),
             limit=limit,
             singular=False,
         )
@@ -661,17 +642,11 @@ class fmPlugin(Plugin):
         if username is None:
             username = event.author.id
         period = self.get_user_info(event.author.id)["period"]
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            title_template=("Top tracks for {} over" +
-                            (" " + period).replace(" over", "")),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
+            description=("Top tracks over" +
+                         (" " + period).replace(" over", "")),
         )
         params = {
             "method": "user.gettoptracks",
@@ -682,11 +657,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Track #{}",
-            primary_index="toptracks",
-            secondary_index="track",
-            artists=True,
-            entry_format="amount",
+            name_template="{} plays",
+            map=("toptracks", "track"),
+            name_format=("playcount", ),
+            value_format=("artist", ),
             limit=limit,
             singular=False,
         )
@@ -745,33 +719,25 @@ class fmPlugin(Plugin):
         """
         if username is None:
             username = event.author.id
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, username = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
         )
         params = {
             "method": "user.getrecenttracks",
             "user": username,
-            "limit": 3
+            "limit": 2
         }
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Recent tracks",
-            primary_index="recenttracks",
-            secondary_index="track",
-            artists=True,
-            artist_name="#text",
-            entry_format="ago",
+            map=("recenttracks", "track"),
+            artist_map=("artist", "#text"),
+            name_format=("raw:Recent activity (", "ago", "raw:)"),
+            value_format=("artist", ),
+            singular=False,
             cool_down=30,
-            seperator="\n",
-            limit=3,
+            limit=2,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
@@ -786,15 +752,10 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, username = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
+            description="Recent tracks",
         )
         params = {
             "method": "user.getrecenttracks",
@@ -804,12 +765,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Track #{}",
-            primary_index="recenttracks",
-            secondary_index="track",
-            artists=True,
-            artist_name="#text",
-            entry_format="ago",
+            map=("recenttracks", "track"),
+            artist_map=("artist", "#text"),
+            name_format=("ago", ),
+            value_format=("artist", ),
             limit=limit,
             cool_down=120,
             singular=False,
@@ -827,15 +786,9 @@ class fmPlugin(Plugin):
         if username is None:
             username = event.author.id
         test = time()
-        footer = {
-            "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
-        }
         fm_embed, username = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
         )
         message = api_loop(event.channel.send_message, "Searching for user.")
         period = self.get_user_info(event.author.id)["period"]
@@ -848,13 +801,11 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Recent tracks",
-            primary_index="recenttracks",
-            secondary_index="track",
-            artists=True,
-            artist_name="#text",
-            entry_format="ago",
-            seperator="\n",
+            name_template="Recent tracks",
+            map=("recenttracks", "track"),
+            artist_map=("artist", "#text"),
+            value_format=("ago", "artist"),
+            value_clamps=("ago", ),
             limit=3,
         )
         params = {
@@ -866,12 +817,11 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Top tracks",
-            primary_index="toptracks",
-            secondary_index="track",
-            artists=True,
-            entry_format="amount",
-            seperator="\n",
+            name_template="Top tracks",
+            artist_map=("artist", "name"),
+            map=("toptracks", "track"),
+            value_format=("playcount", "artist"),
+            value_clamps=("playcount", ),
         )
         params = {
             "method": "user.gettopartists",
@@ -882,11 +832,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Top artists",
-            primary_index="topartists",
-            secondary_index="artist",
-            entry_format="amount",
-            seperator="\n",
+            name_template="Top artists",
+            map=("topartists", "artist"),
+            value_format=("playcount", ),
+            value_clamps=("playcount", ),
         )
         params = {
             "method": "user.gettopalbums",
@@ -897,11 +846,11 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name="Top albums",
-            primary_index="topalbums",
-            secondary_index="album",
-            artists=True,
-            entry_format="amount",
+            name_template="Top albums",
+            artist_map=("artist", "name"),
+            map=("topalbums", "album"),
+            value_format=("playcount", "artist"),
+            value_clamps=("playcount", ),
             seperator="\n",
         )
         fm_embed.set_footer(
@@ -920,22 +869,26 @@ class fmPlugin(Plugin):
         if username is None:
             raise CommandError("User should set a last.fm account "
                                f"using ``{bot.prefix}username``")
-        inline = {
-            "Playcount": user_data["playcount"],
-            "Registered": strftime(
-                "%Y-%m-%d %H:%M",
-                gmtime(user_data["registered"]["#text"]),
-            ),
-            "skip_inlines": "N/A",
-        }
+        registered = strftime(
+            "%Y-%m-%dT%H:%M:%S",
+            gmtime(user_data["registered"]["#text"]),
+        )
+    #    author = {
+    #        "name": title_template.format(user_data["name"]),
+    #        "url": user_data["url"],
+    #        "icon": user_data["image"][-1]["#text"],
+    #    }
         title = {
             "title": title_template.format(user_data["name"]),
             "url": user_data["url"],
         }
         fm_embed = bot.generic_embed_values(
             title=title,
-            thumbnail=user_data["image"][len(user_data["image"]) - 1]["#text"],
-            inlines=inline,
+            thumbnail=user_data["image"][-1]["#text"],
+    #        author=author,
+            footer={"text": (f"{user_data['playcount']} scrobbles, "
+                             f"registered:")},
+            timestamp=registered,
             **kwargs,
         )
         return fm_embed, user_data["name"]
@@ -1015,55 +968,103 @@ class fmPlugin(Plugin):
             return self.cache[url].data
         raise fmEntryNotFound(self.cache[url].error)
 
+    class fm_format_mapping:
+        @staticmethod
+        def playcount(data, **kwargs):
+            count = data.get("playcount")
+            return str(count) if count else "?"
+
+        @staticmethod
+        def artist(data, artist_map, **kwargs):
+            try:
+                artist = get_dict_item(data, artist_map)
+            except (IndexError, KeyError):
+                artist = "Unset"
+            return f"{artist} -"
+
+        @staticmethod
+        def ago(data, time_map=("date", "uts"), **kwargs):
+            try:
+                delta = str(time_since(get_dict_item(data, time_map)))
+            except (IndexError, KeyError):
+                delta = "Now"
+            return delta.capitalize()
+
+        @staticmethod
+        def count(index, **kwargs):
+            return str({index + 1})
+
+        @staticmethod
+        def raw(method, **kwargs):
+            return method.split(":", 1)[1]
+
     def get_fm_secondary(
             self,
             embed,
             params,
-            name,
-            primary_index,
-            secondary_index,
+            map,
+            name_template="{}",
             url=None,
-            artists=None,
-            artist_name="name",
-            entry_format=None,
+            name_format=None,
+            value_format=None,
+            value_clamps=None,
             limit=4,
             inline=False,
             cool_down=300,
-            payload_prefix="",
-            seperator="; ",
-            singular=True):
+            seperator="\n",
+            singular=True,
+            end_value_map=("name", ),
+            **kwargs):
         data = self.get_cached(params, url=url, cool_down=cool_down)
-        if len(data[primary_index][secondary_index]) < limit:
-            limit = len(data[primary_index][secondary_index])
-        payload = payload_prefix + ""
+        if len(get_dict_item(data, map)) < limit:
+            limit = len(get_dict_item(data, map))
         if limit != 0:
+            name = ""
+            value = ""
             for index in range(limit):
-                position = data[primary_index][secondary_index][index]
-                if entry_format is None:
-                    pass
-                elif entry_format == "ago":
-                    if "date" in data[primary_index][secondary_index][index]:
-                        payload += self.time_since(position['date']['uts'])
-                    else:
-                        payload += "[Now] "
-                elif entry_format == "amount":
-                    payload += f"[{position['playcount']}] "
-                if artists is not None:
-                    payload += f"{position['artist'][artist_name]} - "
-                payload += position["name"] + seperator
+                position = get_dict_item(data, map)[index]
+                for method in (name_format or ()):
+                    function = getattr(
+                        self.fm_format_mapping,
+                        method.split(":", 1)[0],
+                    )
+                    name += function(
+                        index=index,
+                        data=position,
+                        method=method,
+                        **kwargs,
+                    ) + " "
+                for method in (value_format or ()):
+                    function = getattr(
+                        self.fm_format_mapping,
+                        method.split(":", 1)[0],
+                    )
+                    current = function(
+                        index=index,
+                        data=position,
+                        method=method,
+                        **kwargs,
+                    )
+                    if method.split(":", 1)[0] in (value_clamps or ()):
+                        current = "[" + current + "]"
+                    value += current + " "
+                if not name:
+                    name = "Unset"
+                value += get_dict_item(position, end_value_map) + seperator
                 if not singular:
                     embed.add_field(
-                        name=f"{name.format(index + 1)}:",
-                        value=payload.strip(seperator),
+                        name=f"{name_template.format(name.strip(' '))}:",
+                        value=value.strip(seperator),
                         inline=inline,
                     )
-                    payload = str()
+                    name = ""
+                    value = ""
         else:
-            payload = "None"
-        if singular or payload == "None":
+            value = "None"
+        if singular or value == "None":
             embed.add_field(
-                name=f"{name}:",
-                value=payload.strip(seperator),
+                name=f"{name_template}:",
+                value=value.strip(seperator),
                 inline=inline,
             )
 
@@ -1232,13 +1233,3 @@ class fmPlugin(Plugin):
                 return data
             log.warning(f"{r.status_code} returned "
                         f"by Discogs: {r.text}")
-
-    @staticmethod
-    def time_since(time_of_event: int, timezone=pytz.UTC):
-        """
-        A command used get the time passed since a unix time stamp
-        and output it as a human readable string.
-        """
-        time_passed = (datetime.now(timezone) -
-                       datetime.fromtimestamp(int(time_of_event), timezone))
-        return "[" + humanize.naturaltime(time_passed) + "] "

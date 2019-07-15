@@ -213,6 +213,18 @@ class MusicPlugin(Plugin):
         self.pre_check(event)
         self.remove_player(event.guild.id)
 
+    @Plugin.command("force leave", "<guild:int>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_kill(self, event, guild):
+        """
+        Force close a guild's voice instance.
+        """
+        try:
+            self.remove_player(guild)
+        except CommandError as e:
+            api_loop(event.channel.send_message, ":confused:")
+        else:
+            api_loop(event.channel.send_message, ":thumbsup:")
+
     @Plugin.command("play", "[play_type:str] [content:str...]", metadata={"help": "voice"})
     def on_play(self, event, play_type="yt", content=None):
         """
@@ -659,7 +671,7 @@ class psuedo_queue(object):
                     self.player.queue.append(piped)
                 except AttributeError as e:
                     exception_channels(
-                        self.client,
+                        self.bot.client,
                         bot.config.exception_channels,
                         "Error loading audio: ```" + str(e)[:1950] + "```",
                     )
@@ -674,7 +686,7 @@ class psuedo_queue(object):
                 except Exception as e:
                     log.exception(e)
                     exception_channels(
-                        self.client,
+                        self.bot.client,
                         bot.config.exception_channels,
                         "Voice error: ```" + str(e)[:1950] + "```",
                     )
@@ -691,7 +703,7 @@ class psuedo_queue(object):
                 self.player.queue.append(piped)
             except AttributeError as e:
                 exception_channels(
-                    self.client,
+                    self.bot.client,
                     bot.config.exception_channels,
                     "Error loading audio: ```" + str(e)[:1950] + "```",
                 )
@@ -704,7 +716,7 @@ class psuedo_queue(object):
             #    except MemoryErrors as e:
             except Exception as e:
                 exception_channels(
-                    self.client,
+                    self.bot.client,
                     bot.config.exception_channels,
                     "Voice error: ```" + str(e)[:1950] + "```",
                 )

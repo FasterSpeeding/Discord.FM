@@ -51,10 +51,8 @@ class CorePlugin(Plugin):
                     channel=event.channel_id,
                     message=event.message_id,
                 )
-            except APIException as e:
-                if e.code == 1008 or e.code == 50013:
-                    pass
-                else:
+            except APIException as e:  # Unknown message, Missing permissions
+                if e.code not in (10008, 50013):
                     log.warning("Api exception caught while "
                                 f"unloading Core module: {e}")
             del bot.reactor.events[event.message_id]
@@ -180,13 +178,11 @@ class CorePlugin(Plugin):
                                 user=condition.owner_id,
                             )
                         except APIException as e:
-                            if e.code == 10008:
+                            if e.code == 10008:  # Unknown message
                                 if message_id in bot.reactor.events:
                                     del bot.reactor.events[message_id]
                                 return
-                            elif e.code == 50013:
-                                pass
-                            else:
+                            elif e.code != 50013:  # Missing permissions
                                 raise e
                         index = condition.function(
                             client=self,
@@ -210,17 +206,8 @@ class CorePlugin(Plugin):
                         channel=event.channel_id,
                         message=message_id,
                     )
-                except APIException as e:
-                    if e.code == 10008:
-                        pass
-                    elif e.code == 50013:
-                        self.client.api.channels_messages_create(
-                            channel=event.channel_id,
-                            content=("Missing permission required "
-                                     "to remove message reactions "
-                                     "``Manage Messages``."),
-                        )
-                    else:
+                except APIException as e:  # Unknown message, Missing permissions
+                    if e.code not in (10008, 50013):
                         raise e
                 if message_id in bot.reactor.events:
                     del bot.reactor.events[message_id]

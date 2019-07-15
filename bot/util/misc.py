@@ -1,5 +1,8 @@
+from datetime import datetime
 from time import time
 import logging
+import humanize
+import pytz
 import re
 
 
@@ -21,10 +24,10 @@ def api_loop(command, *args, log_50007=True, **kwargs):
         except requestsCError as e:
             log.info("Didn't catch error reset.")
         except APIException as e:
-            if e.code == 50013:
+            if e.code == 50013:  # Missing permissions
                 raise CommandError("Missing permissions to respond "
                                    "(possibly Embed Links).")
-            if e.code != 50007 or log_50007:
+            if e.code != 50007 or log_50007:  # Cannot send messages to user
                 log.critical(f"Api exception: {e.code}: {e}")
             raise e
 
@@ -37,7 +40,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
     try:
         api_loop(dm_channel.send_message, log_50007=False, *args, **kwargs)
     except APIException as e:
-        if e.code == 50007:  # Wasn't able to open a DM/send DM message
+        if e.code == 50007:  # Cannot send messages to user
             api_loop(event.channel.send_message, *args, **kwargs)
         else:
             raise e
@@ -145,8 +148,8 @@ def exception_channels(client, exception_channels, *args, **kwargs):
                 try:
                     api_loop(channel_obj.send_message, *args, **kwargs)
                 except (APIException, CommandError) as e:
-                    if (isinstance(e, CommandError) or
-                            e.code in (50013, 50001)):
+                    if (isinstance(e, CommandError) or  # Missing permissions, 
+                            e.code in (50013, 50001)):  # Missing access
                         log.warning("Unable to post in exception "
                                     f"channel - {channel}: {e}")
                         del exception_channels[guild]
@@ -165,10 +168,19 @@ def exception_dms(client, exception_dms, *args, **kwargs):
         target_dm = client.api.users_me_dms_create(target)
         try:
             api_loop(target_dm.send_message, *args, **kwargs)
-        except APIException as e:
-            if e.code in (50013, 50001, 50007):
+        except APIException as e: # Missing permissions, Missing access, 
+            if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
                 log.warning("Unable to send exception DM - "
                             f"{target}: {e}")
                 exception_dms.remove(target)
             else:
                 raise e
+
+def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
+    """
+    A command used get the time passed since a unix time stamp
+    and output it as a human readable string.
+    """
+    time_passed = (datetime.now(timezone) -
+                   datetime.fromtimestamp(int(time_of_event), timezone))
+    return humanize.naturaltime(time_passed)
