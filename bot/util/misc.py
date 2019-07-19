@@ -131,10 +131,13 @@ def get(
     except requestsCError as e:
         log.warning(e)
         raise CommandError(f"{service} isn't available right now.")
+
     if r.status_code < 400:
         return r.json()
-    elif r.status_code == 404:
+
+    if r.status_code == 404:
         raise CommandError(f"404 - {item} doesn't exist.")
+
     raise CommandError(f"{r.status_code} - {service} threw "
                            f"unexpected error: {redact(r.text)}")
 
@@ -148,7 +151,7 @@ def exception_channels(client, exception_channels, *args, **kwargs):
                 try:
                     api_loop(channel_obj.send_message, *args, **kwargs)
                 except (APIException, CommandError) as e:
-                    if (isinstance(e, CommandError) or  # Missing permissions, 
+                    if (isinstance(e, CommandError) or  # Missing permissions,
                             e.code in (50013, 50001)):  # Missing access
                         log.warning("Unable to post in exception "
                                     f"channel - {channel}: {e}")
@@ -168,7 +171,7 @@ def exception_dms(client, exception_dms, *args, **kwargs):
         target_dm = client.api.users_me_dms_create(target)
         try:
             api_loop(target_dm.send_message, *args, **kwargs)
-        except APIException as e: # Missing permissions, Missing access, 
+        except APIException as e: # Missing permissions, Missing access,
             if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
                 log.warning("Unable to send exception DM - "
                             f"{target}: {e}")

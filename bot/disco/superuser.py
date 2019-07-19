@@ -227,25 +227,25 @@ class superuserPlugin(Plugin):
         group="block",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"guild": "DM", "list": bot.config.blacklist})
+        context={"guild": "DM", "filter_list": bot.config.blacklist})
     @Plugin.command(
         "blacklist",
         "<guild:snowflake>",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"list": bot.config.blacklist})
+        context={"filter_list": bot.config.blacklist})
     @Plugin.command(
         "whitelist",
         "<guild:snowflake>",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"list": bot.config.whitelist})
-    def on_filter_command(self, event, guild, list):
+        context={"filter_list": bot.config.whitelist})
+    def on_filter_command(self, event, guild, filter_list):
         """
         Used to add or remove an item from the guild/DM filter.
         """
-        if guild in list:
-            list.remove(guild)
+        if guild in filter_list:
+            filter_list.remove(guild)
             return api_loop(
                 event.channel.send_message,
                 "Guild removed from filter :ok_hand:",
@@ -255,7 +255,7 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 "Guild not found :shrug:",
             )
-        list.append(guild)
+        filter_list.append(guild)
         api_loop(
             event.channel.send_message,
             "Guild added to filter :thumbsup:",

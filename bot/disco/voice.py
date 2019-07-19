@@ -59,12 +59,13 @@ class MusicPlugin(Plugin):
     def lonely_check(self):
         if getattr(self, "guilds", None):
             for guild, player in self.guilds.copy().items():
-                if not any(not member.user.bot and
-                           member.get_voice_state() is not None and
-                           member.get_voice_state().channel_id ==
-                           player.player.client.channel_id
-                           for member in self.state.guilds[
-                               guild].members.copy().values()):
+                if (guild not in self.state.guilds or
+                        not any(not member.user.bot and
+                                member.get_voice_state() is not None and
+                                member.get_voice_state().channel_id ==
+                                player.player.client.channel_id
+                                for member in self.state.guilds[
+                                  guild].members.copy().values())):
                     try:
                         self.remove_player(guild)
                     except CommandError:
@@ -113,9 +114,9 @@ class MusicPlugin(Plugin):
     def on_guild_leave(self, event):
         if isinstance(event.unavailable, Unset):
             if event.id in self.guilds:
-                if self.self.guilds[event.id].thread.isAlive():
-                    self.self.guilds[event.id].thread_end = True
-                    self.self.guilds[event.id].thread.join()
+                if self.guilds[event.id].thread.isAlive():
+                    self.guilds[event.id].thread_end = True
+                    self.guilds[event.id].thread.join()
                 del self.guilds[event.id]
 
     @Plugin.command("join", metadata={"help": "voice"})
@@ -221,7 +222,7 @@ class MusicPlugin(Plugin):
         try:
             self.remove_player(guild)
         except CommandError as e:
-            api_loop(event.channel.send_message, ":confused:")
+            api_loop(event.channel.send_message, f":confused: {e}")
         else:
             api_loop(event.channel.send_message, ":thumbsup:")
 

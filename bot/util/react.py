@@ -133,7 +133,8 @@ class reactors_handler(object):
                     if message_id in self.events:
                         del self.events[message_id]
                     return
-                elif e.code not in (50001, 50013): # access, permission error
+
+                if e.code not in (50001, 50013): # access, permission error
                     raise e
         sleep(time)
         if message_id in self.events:

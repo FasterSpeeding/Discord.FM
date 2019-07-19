@@ -182,7 +182,8 @@ class CorePlugin(Plugin):
                                 if message_id in bot.reactor.events:
                                     del bot.reactor.events[message_id]
                                 return
-                            elif e.code != 50013:  # Missing permissions
+
+                            if e.code != 50013:  # Missing permissions
                                 raise e
                         index = condition.function(
                             client=self,
@@ -500,12 +501,14 @@ class CorePlugin(Plugin):
     def custom_prefix(self, event):
         if event.author.bot:
             return
+
         if ((event.channel.is_dm and "DM" in bot.config.blacklist or
              bot.config.whitelist and event.guild_id not in bot.config.whitelist
              or bot.config.blacklist and event.guild_id in bot.config.blacklist)
             and event.author.id not in bot.config.uservetos):
             return
-        elif event.channel.is_dm:
+
+        if event.channel.is_dm:
             prefix = bot.prefix
         else:
             prefix = self.prefixes.get(event.guild_id, None)

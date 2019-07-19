@@ -299,7 +299,7 @@ class fmPlugin(Plugin):
                     embed=embed,
                     params=params,
                     name_template=f"[{current_index + 1}] {user} ({friend})",
-                    map=("recenttracks", "track"),
+                    data_map=("recenttracks", "track"),
                     artist_map=("artist", "#text"),
                     value_format=("ago", "artist"),
                     value_clamps=("ago", ),
@@ -437,7 +437,7 @@ class fmPlugin(Plugin):
                 )
         else:
             api_loop(event.channel.send_message, f"No {meta_type}s found.")
-    
+
     def search_artist_react(self, data, index, **kwargs):
         return None, self.search_embed(
             data=data,
@@ -483,11 +483,11 @@ class fmPlugin(Plugin):
             "method": "user.gettopalbums",
             "meta_type": "album",
             "secondary_kwargs": {
-                "map": ("topalbums", "album"),
+                "data_map": ("topalbums", "album"),
                 "name_format": ("playcount", "raw:plays"),
                 "value_format": ("artist", ),
                 "artist_map": ("artist", "name"),
-            }  
+            }
         })
     @Plugin.command(
         "artists",
@@ -498,7 +498,7 @@ class fmPlugin(Plugin):
             "method": "user.gettopartists",
             "meta_type": "artist",
             "secondary_kwargs": {
-                "map": ("topartists", "artist"),
+                "data_map": ("topartists", "artist"),
                 "name_format": ("playcount", "raw:plays"),
             }
         })
@@ -511,7 +511,7 @@ class fmPlugin(Plugin):
             "method": "user.gettoptracks",
             "meta_type": "track",
             "secondary_kwargs": {
-                "map": ("toptracks", "track"),
+                "data_map": ("toptracks", "track"),
                 "name_format": ("playcount", "raw:plays"),
                 "value_format": ("artist", ),
                 "artist_map": ("artist", "name"),
@@ -664,7 +664,7 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            map=("recenttracks", "track"),
+            data_map=("recenttracks", "track"),
             artist_map=("artist", "#text"),
             name_format=("raw:Recent activity (", "ago", "raw:)"),
             value_format=("artist", ),
@@ -698,7 +698,7 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            map=("recenttracks", "track"),
+            data_map=("recenttracks", "track"),
             artist_map=("artist", "#text"),
             name_format=("ago", ),
             value_format=("artist", ),
@@ -734,7 +734,7 @@ class fmPlugin(Plugin):
             embed=fm_embed,
             params=params,
             name_template="Recent tracks",
-            map=("recenttracks", "track"),
+            data_map=("recenttracks", "track"),
             artist_map=("artist", "#text"),
             value_format=("ago", "artist"),
             value_clamps=("ago", ),
@@ -751,7 +751,7 @@ class fmPlugin(Plugin):
             params=params,
             name_template="Top tracks",
             artist_map=("artist", "name"),
-            map=("toptracks", "track"),
+            data_map=("toptracks", "track"),
             value_format=("playcount", "artist"),
             value_clamps=("playcount", ),
         )
@@ -765,7 +765,7 @@ class fmPlugin(Plugin):
             embed=fm_embed,
             params=params,
             name_template="Top artists",
-            map=("topartists", "artist"),
+            data_map=("topartists", "artist"),
             value_format=("playcount", ),
             value_clamps=("playcount", ),
         )
@@ -780,7 +780,7 @@ class fmPlugin(Plugin):
             params=params,
             name_template="Top albums",
             artist_map=("artist", "name"),
-            map=("topalbums", "album"),
+            data_map=("topalbums", "album"),
             value_format=("playcount", "artist"),
             value_clamps=("playcount", ),
             seperator="\n",
@@ -862,6 +862,7 @@ class fmPlugin(Plugin):
             except requestCError as e:
                 log.warning(e)
                 raise CommandError("Last.FM isn't available right now.")
+
             if r.status_code == 200:
                 if cool_down is not None:
                     self.cache[url] = self.cached_object(
@@ -870,7 +871,8 @@ class fmPlugin(Plugin):
                         data=r.json(),
                     )
                 return r.json()
-            elif r.status_code == 404:
+
+            if r.status_code == 404:
                 self.cache[url] = self.cached_object(
                     exists=False,
                     expire=time() + 1800,
@@ -931,7 +933,7 @@ class fmPlugin(Plugin):
             self,
             embed,
             params,
-            map,
+            data_map,
             name_template="{}",
             url=None,
             name_format=None,
@@ -945,13 +947,13 @@ class fmPlugin(Plugin):
             end_value_map=("name", ),
             **kwargs):
         data = self.get_cached(params, url=url, cool_down=cool_down)
-        if len(get_dict_item(data, map)) < limit:
-            limit = len(get_dict_item(data, map))
+        if len(get_dict_item(data, data_map)) < limit:
+            limit = len(get_dict_item(data, data_map))
         if limit != 0:
             name = ""
             value = ""
             for index in range(limit):
-                position = get_dict_item(data, map)[index]
+                position = get_dict_item(data, data_map)[index]
                 for method in (name_format or ()):
                     function = getattr(
                         self.fm_format_mapping,

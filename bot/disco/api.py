@@ -74,7 +74,8 @@ class ApiPlugin(Plugin):
                 first_message.edit,
                 f"No Lyrics found for ``{content}``",
             )
-        elif len(lyrics) > 46300:
+
+        if len(lyrics) > 46300:
             return first_message.edit("I doubt that's a song.")
         footer = {
             "text": f"Requested by {event.author}",
