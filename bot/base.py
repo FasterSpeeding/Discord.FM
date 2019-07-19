@@ -81,9 +81,10 @@ class embed_values(custom_base):
 
 class bot_data(custom_base):
     levels: dict = {}
-    commands_require_mention: bool = True
+    commands_enabled: bool = False
+    commands_require_mention: bool = False
     commands_mention_rules: dict = None
-    commands_prefix: str = None
+    commands_prefix: str = "fm."
     commands_allow_edit: bool = None
     commands_level_getter: str = None
     commands_group_abbrev: bool = None
@@ -124,7 +125,9 @@ class disco(custom_base):
 class config(custom_base):
     exception_dms: list = None
     exception_channels: dict = None
-    prefix: str = "fm."
+    whitelist: list = []
+    blacklist: list = []
+    uservetos: list = []
     api: api = api()
     disco: disco = disco()
     sql: sql = sql()
@@ -166,9 +169,7 @@ class bot_frame:
 
     @property
     def prefix(self):
-        return (self.config.prefix or
-                self.config.disco.bot.commands_prefix or
-                "fm.")
+        return self.config.disco.bot.commands_prefix or "fm."
 
     def load_help_embeds(self, bot):
         """

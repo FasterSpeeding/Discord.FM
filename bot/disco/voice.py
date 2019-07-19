@@ -213,8 +213,8 @@ class MusicPlugin(Plugin):
         self.pre_check(event)
         self.remove_player(event.guild.id)
 
-    @Plugin.command("force leave", "<guild:int>", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_kill(self, event, guild):
+    @Plugin.command("force leave", "<guild:snowflake>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_force_kill(self, event, guild):
         """
         Force close a guild's voice instance.
         """
@@ -425,7 +425,7 @@ class MusicPlugin(Plugin):
             self.get_player(event.guild.id).resume()
 
     @Plugin.command("kill", metadata={"help": "voice"})
-    def on_force_kill(self, event):
+    def on_kill(self, event):
         """
         Used to reset voice instance ws connection.
         """
@@ -673,7 +673,8 @@ class psuedo_queue(object):
                     exception_channels(
                         self.bot.client,
                         bot.config.exception_channels,
-                        "Error loading audio: ```" + str(e)[:1950] + "```",
+                        (f"{self.id} - Error loading audio: ```"
+                         + str(e)[:1950] + "```"),
                     )
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
                         log.warning(e)
@@ -705,7 +706,8 @@ class psuedo_queue(object):
                 exception_channels(
                     self.bot.client,
                     bot.config.exception_channels,
-                    "Error loading audio: ```" + str(e)[:1950] + "```",
+                    (f"{self.id} - Error loading audio: ```"
+                     + str(e)[:1950] + "```"),
                 )
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)

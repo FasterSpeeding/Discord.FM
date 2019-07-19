@@ -354,33 +354,76 @@ class fmPlugin(Plugin):
             )
         bot.sql.flush()
 
-    @Plugin.command("artists", "<artist:str...>", group="search", metadata={"help": "last.fm"})
-    def on_search_artist_command(self, event, artist):
+    @Plugin.command(
+        "artists",
+        "<search:str...>",
+        group="search",
+        metadata={"help": "last.fm"},
+        context={
+            "method": "artist.search",
+            "data_map": ("results", "artistmatches", "artist"),
+            "artwork_type": "Artist",
+            "react": "search_artist_react",
+            "meta_type": "artist",
+        })
+    @Plugin.command(
+        "albums",
+        "<search:str...>",
+        group="search",
+        metadata={"help": "last.fm"},
+        context={
+            "method": "album.search",
+            "data_map": ("results", "albummatches", "album"),
+            "artwork_type": "Album",
+            "react": "search_album_react",
+            "meta_type": "album",
+        })
+    @Plugin.command(
+        "tracks",
+        "<search:str...>",
+        group="search",
+        metadata={"help": "last.fm"},
+        context={
+            "method": "track.search",
+            "data_map": ("results", "trackmatches", "track"),
+            "artwork_type": "Track",
+            "react": "search_track_react",
+            "meta_type": "track",
+        })
+    def on_search_command(
+            self,
+            event,
+            search,
+            method,
+            data_map,
+            artwork_type,
+            react,
+            meta_type):
         """
-        Search for an artist on Last.fm.
+        Search for an item on Last.fm.
         """
-        artist_data = self.get_cached({
-                "method": "artist.search",
-                "artist": artist.lower(),
+        data = self.get_cached({
+                "method": method,
+                meta_type: search.lower(),
             },
             cool_down=3600,
         )
-        artist_data = artist_data["results"]["artistmatches"]["artist"]
-        if artist_data:
-            thumbnail = self.get_artwork(artist, "Artist")
-            content, embed = self.search_artist_react(
-                artist_data,
+        data = get_dict_item(data, data_map)
+        if data:
+            thumbnail = self.get_artwork(search, artwork_type)
+            content, embed = getattr(self, react)(
+                data,
                 0,
                 thumbnail=thumbnail,
             )
             reply = api_loop(event.channel.send_message, content, embed=embed)
-            if len(artist_data) > 5 and not event.channel.is_dm:
+            if len(data) > 5 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    data=artist_data,
+                    data=data,
                     index=0,
                     amount=5,
-                    edit_message=self.search_artist_react,
+                    edit_message=getattr(self, react),
                     thumbnail=thumbnail
                 )
                 bot.reactor.add_reactors(
@@ -393,8 +436,8 @@ class fmPlugin(Plugin):
                     "\N{black rightwards arrow}",
                 )
         else:
-            api_loop(event.channel.send_message, "No artists found.")
-
+            api_loop(event.channel.send_message, f"No {meta_type}s found.")
+    
     def search_artist_react(self, data, index, **kwargs):
         return None, self.search_embed(
             data=data,
@@ -406,48 +449,6 @@ class fmPlugin(Plugin):
             item="Artist",
             **kwargs
         )
-
-    @Plugin.command("albums", "<album:str...>", group="search", metadata={"help": "last.fm"})
-    def on_search_album_command(self, event, album):
-        """
-        Search for an album on Last.fm.
-        """
-        album_data = self.get_cached({
-                "method": "album.search",
-                "album": album.lower(),
-                "limit": 30,
-            },
-            cool_down=3600,
-        )
-        album_data = album_data["results"]["albummatches"]["album"]
-        if album_data:
-            thumbnail = self.get_artwork(album, "Album")
-            content, embed = self.search_album_react(
-                album_data,
-                0,
-                thumbnail=thumbnail,
-            )
-            reply = api_loop(event.channel.send_message, content, embed=embed)
-            if len(album_data) > 5 and not event.channel.is_dm:
-                bot.reactor.init_event(
-                    message=reply,
-                    data=album_data,
-                    index=0,
-                    amount=5,
-                    edit_message=self.search_album_react,
-                    thumbnail=thumbnail,
-                )
-                bot.reactor.add_reactors(
-                    self,
-                    reply,
-                    generic_react,
-                    event.author.id,
-                    "\N{leftwards black arrow}",
-                    "\N{Cross Mark}",
-                    "\N{black rightwards arrow}",
-                )
-        else:
-            api_loop(event.channel.send_message, "No albums found.")
 
     def search_album_react(self, data, index, **kwargs):
         return None, self.search_embed(
@@ -461,48 +462,6 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    @Plugin.command("tracks", "<track:str...>", group="search", metadata={"help": "last.fm"})
-    def on_search_track_command(self, event, track):
-        """
-        Search for a track on Last.fm.
-        """
-        track_data = self.get_cached({
-                "method": "track.search",
-                "track": track.lower(),
-                "limit": 30,
-             },
-            cool_down=3600,
-        )
-        track_data = track_data["results"]["trackmatches"]["track"]
-        if track_data:
-            thumbnail = self.get_artwork(track, "Track")
-            content, embed = self.search_track_react(
-                track_data,
-                0,
-                thumbnail=thumbnail,
-            )
-            reply = api_loop(event.channel.send_message, content, embed=embed)
-            if len(track_data) > 5 and not event.channel.is_dm:
-                bot.reactor.init_event(
-                    message=reply,
-                    data=track_data,
-                    index=0,
-                    amount=5,
-                    edit_message=self.search_track_react,
-                    thumbnail=thumbnail,
-                )
-                bot.reactor.add_reactors(
-                    self,
-                    reply,
-                    generic_react,
-                    event.author.id,
-                    "\N{leftwards black arrow}",
-                    "\N{Cross Mark}",
-                    "\N{black rightwards arrow}",
-                )
-        else:
-            api_loop(event.channel.send_message, "No tracks found.")
-
     def search_track_react(self, data, index, **kwargs):
         return None, self.search_embed(
             data,
@@ -515,50 +474,61 @@ class fmPlugin(Plugin):
             **kwargs,
         )
 
-    @Plugin.command("albums", "[username:str...]", group="top", metadata={"help": "last.fm"})
-    def on_top_albums_command(self, event, username=None):
-        """
-        Get an account's top albums.
-        This command will default to the author.
-        But will target another user if their ID, @ or nickname is passed.
-        Returns the top albums of the target user's Last.FM account.
-        """
-        limit = 5
-        if username is None:
-            username = event.author.id
-        period = self.get_user_info(event.author.id)["period"]
-        fm_embed, lastname = self.generic_user_data(
-            username,
-            guild=(event.channel.is_dm or event.guild.id),
-            description=("Top albums over" +
-                         (" " + period).replace(" over", "")),
-        )
-        params = {
+    @Plugin.command(
+        "albums",
+        "[username:str...]",
+        group="top",
+        metadata={"help": "last.fm"},
+        context={
             "method": "user.gettopalbums",
-            "user": lastname,
-            "limit": limit,
-            "period": period,
-        }
-        self.get_fm_secondary(
-            embed=fm_embed,
-            params=params,
-            name_template="{} plays",
-            map=("topalbums", "album"),
-            name_format=("playcount", ),
-            value_format=("artist", ),
-            artist_map=("artist", "name"),
-            limit=limit,
-            singular=False,
-        )
-        api_loop(event.channel.send_message, embed=fm_embed)
-
-    @Plugin.command("artists", "[username:str...]", group="top", metadata={"help": "last.fm"})
-    def on_top_artists_command(self, event, username=None):
+            "meta_type": "album",
+            "secondary_kwargs": {
+                "map": ("topalbums", "album"),
+                "name_format": ("playcount", "raw:plays"),
+                "value_format": ("artist", ),
+                "artist_map": ("artist", "name"),
+            }  
+        })
+    @Plugin.command(
+        "artists",
+        "[username:str...]",
+        group="top",
+        metadata={"help": "last.fm"},
+        context={
+            "method": "user.gettopartists",
+            "meta_type": "artist",
+            "secondary_kwargs": {
+                "map": ("topartists", "artist"),
+                "name_format": ("playcount", "raw:plays"),
+            }
+        })
+    @Plugin.command(
+        "tracks",
+        "[username:str...]",
+        group="top",
+        metadata={"help": "last.fm"},
+        context={
+            "method": "user.gettoptracks",
+            "meta_type": "track",
+            "secondary_kwargs": {
+                "map": ("toptracks", "track"),
+                "name_format": ("playcount", "raw:plays"),
+                "value_format": ("artist", ),
+                "artist_map": ("artist", "name"),
+            }
+        })
+    def on_top_items_command(
+            self,
+            event,
+            method,
+            meta_type,
+            secondary_kwargs,
+            username=None):
         """
-        Get an account's top artists.
+        Get an account's top played item.
         This command will default to the author.
         But will target another user if their ID, @ or nickname is passed.
-        Returns the top artists of the target user's Last.FM account.
+        Returns the top items of the target user's Last.FM account.
         """
         limit = 5
         if username is None:
@@ -567,11 +537,11 @@ class fmPlugin(Plugin):
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            description=("Top artists over" +
+            description=(f"Top {meta_type}s over" +
                          (" " + period).replace(" over", "")),
         )
         params = {
-            "method": "user.gettopartists",
+            "method": method,
             "user": lastname,
             "limit": limit,
             "period": period,
@@ -579,11 +549,9 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name_template="{} plays",
-            map=("topartists", "artist"),
-            name_format=("playcount", ),
             limit=limit,
             singular=False,
+            **secondary_kwargs,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
@@ -630,43 +598,6 @@ class fmPlugin(Plugin):
                 ("Your default 'top' period is "
                  f"currently set to ``{data['period']}``"),
             )
-
-    @Plugin.command("tracks", "[username:str...]", group="top", metadata={"help": "last.fm"})
-    def on_top_tracks_command(self, event, username=None):
-        """
-        Get an account's top tracks.
-        This command will default to the author.
-        But will target another user if their ID, @ or nickname is passed.
-        Returns the top tracks of the target user's Last.FM account.
-        """
-        limit = 5
-        if username is None:
-            username = event.author.id
-        period = self.get_user_info(event.author.id)["period"]
-        fm_embed, lastname = self.generic_user_data(
-            username,
-            guild=(event.channel.is_dm or event.guild.id),
-            description=("Top tracks over" +
-                         (" " + period).replace(" over", "")),
-        )
-        params = {
-            "method": "user.gettoptracks",
-            "user": lastname,
-            "limit": limit,
-            "period": period,
-        }
-        self.get_fm_secondary(
-            embed=fm_embed,
-            params=params,
-            name_template="{} plays",
-            map=("toptracks", "track"),
-            name_format=("playcount", ),
-            value_format=("artist", ),
-            artist_map=("artist", "name"),
-            limit=limit,
-            singular=False,
-        )
-        api_loop(event.channel.send_message, embed=fm_embed)
 
     @Plugin.command("username", "[username:str]", metadata={"help": "last.fm"})
     def on_username_command(self, event, username: str = None):
@@ -787,7 +718,6 @@ class fmPlugin(Plugin):
         """
         if username is None:
             username = event.author.id
-        test = time()
         fm_embed, username = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
@@ -854,9 +784,6 @@ class fmPlugin(Plugin):
             value_format=("playcount", "artist"),
             value_clamps=("playcount", ),
             seperator="\n",
-        )
-        fm_embed.set_footer(
-            text=f"{round((time() - test) * 1000)} ms",
         )
         api_loop(message.edit, " ", embed=fm_embed)
 
@@ -1231,7 +1158,6 @@ class fmPlugin(Plugin):
         else:
             if r.status_code < 400:
                 data = r.json().get("results")
-                data = (data[0].get("thumb") if data else data)
-                return data
+                return (data[0].get("thumb") if data else data)
             log.warning(f"{r.status_code} returned "
                         f"by Discogs: {r.text}")

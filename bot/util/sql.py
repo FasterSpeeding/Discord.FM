@@ -17,7 +17,6 @@ from sqlalchemy.orm import (
 # from pymysql import err
 
 
-
 log = logging.getLogger(__name__)
 
 
@@ -236,13 +235,13 @@ class sql_instance:
         root_exception = None
         while True:
             if tries >= 5:
-                raise SQLTimeout(
+                raise SQLexception(
                     "Failed to access data.",
                     root_exception,
                 )
             try:
                 return function(*args, **kwargs)
-            except exc.OperationError as e:
+            except exc.OperationalError as e:
                 sleep(2)
                 tries += 1
                 root_exception = e

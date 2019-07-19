@@ -118,13 +118,14 @@ class status_handler(object):
         this exists to counter the fact that state.me isn't present at start.
         """
         self.bot_id = (self.bot_id or self.bot.state.me.id)
-        for obj, token in self._tokens.items():
+        for obj, token in self._tokens.copy().items():
             if token is not None:
                 self.services.append(obj(
                     url={"id": self.bot_id},
                     auth=token,
                     headers={"User-Agent": self.user_agent},
                 ))
+            del self._tokens[obj]
 
     def sql_guilds_refresh(self):
         for guild in self.bot.client.state.guilds.copy().keys():

@@ -38,8 +38,8 @@ class CorePlugin(Plugin):
             for guild in bot.sql(bot.sql.guilds.query.all):
                 self.prefixes[guild.guild_id] = guild.prefix
         except CommandError as e:
-            log.critical("Failed to load data from guild data "
-                         "from SQL servers, they're probably down.")
+            log.critical("Failed to load guild data from SQL "
+                         "servers, they're probably down.")
             log.exception(e.original_exception)
 
     def unload(self, ctx):
@@ -500,7 +500,12 @@ class CorePlugin(Plugin):
     def custom_prefix(self, event):
         if event.author.bot:
             return
-        if event.channel.is_dm:
+        if ((event.channel.is_dm and "DM" in bot.config.blacklist or
+             bot.config.whitelist and event.guild_id not in bot.config.whitelist
+             or bot.config.blacklist and event.guild_id in bot.config.blacklist)
+            and event.author.id not in bot.config.uservetos):
+            return
+        elif event.channel.is_dm:
             prefix = bot.prefix
         else:
             prefix = self.prefixes.get(event.guild_id, None)
@@ -519,25 +524,29 @@ class CorePlugin(Plugin):
                     prefix = guild.prefix
                     self.prefixes[event.guild_id] = guild.prefix
 
-        if event.message.content and event.message.content.startswith(prefix):
-            prefix_len = len(prefix)
-            if (len(event.message.content) > prefix_len and
-                    event.message.content[prefix_len] == " "):
-                prefix += " "
-            commands = list(self.bot.get_commands_for_message(
-                False,
-                {},
-                prefix,
-                event.message,
-            ))
-            for command, match in commands:
-                if not self.bot.check_command_permissions(command, event):
-                    continue
-                try:
-                    command.plugin.execute(CommandEvent(command, event, match))
-                except Exception as e:
-                    self.exception_response(event, e)
-                break
+        require_mention = self.bot.config.commands_require_mention
+        if not event.message.content.startswith(prefix):
+            require_mention = True
+            prefix = ""
+        elif (len(event.message.content) > len(prefix) and
+                event.message.content[len(prefix)] == " "):
+            prefix += " "
+        commands = list(self.bot.get_commands_for_message(
+            require_mention,
+            self.bot.config.commands_mention_rules,
+            prefix,
+            event.message,
+        ))
+        if not commands:
+            return
+        for command, match in commands:
+            if not self.bot.check_command_permissions(command, event):
+                continue
+            try:
+                command.plugin.execute(CommandEvent(command, event, match))
+            except Exception as e:
+                self.exception_response(event, e)
+            break
 
     def exception_response(self, event, exception, respond: bool = True):
         if isinstance(exception, APIException) and exception.code == 50013:
