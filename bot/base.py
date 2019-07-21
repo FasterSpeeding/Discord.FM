@@ -6,11 +6,14 @@ import os
 
 from requests import __version__ as __Rversion__
 from pydantic import BaseModel
-from yaml import safe_load
 try:
-    from ujson import load
+    import yaml
 except ImportError:
-    from json import load
+    yaml = None
+try:
+    import ujson as json
+except ImportError:
+    import json
 
 
 from bot import __GIT__
@@ -118,7 +121,7 @@ class disco(custom_base):
     manhole_bind: int = None
     plugin: list = []
     run_bot: bool = True
-    encoder: str = None  # , default="etf" # etc has weird guild issues.
+    encoder: str = None  # etc has weird guild issues.
     shard_auto: bool = False
 
 
@@ -143,13 +146,13 @@ class bot_frame:
         "help_embeds",
     )
     cfg_bindings = {
-        ".yaml": safe_load,
-        ".json": load,
+        ".yaml": yaml.safe_load if yaml else None,
+        ".json": json.load,
     }
     cfg_paths = ("config.json", "config.yaml")
 
-    def __init__(self, config_location=None):
-        self.config = config(**self.get_config())
+    def __init__(self, config_location="config.json", config=None):
+        self.config = config(**(config or self.get_config(config_location)))
         self.sql = sql_instance(**self.config.sql.to_dict())
         self.reactor = reactors_handler()
         self.generic_embed_values = generic_embed_values(self.config)
@@ -165,6 +168,9 @@ class bot_frame:
                     if config.endswith(type)]
         if not handlers:
             raise Exception("Invalid config type.")
+        if not handlers[0]:
+            raise Exception("Handler for file type "
+                            f"'{config.split('.')[-1]}' is not installed.")
         return handlers[0](open(config, "r"))
 
     @property
