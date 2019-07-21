@@ -151,8 +151,8 @@ class bot_frame:
     }
     cfg_paths = ("config.json", "config.yaml")
 
-    def __init__(self, config_location="config.json", config=None):
-        self.config = config(**(config or self.get_config(config_location)))
+    def __init__(self, config_location="config.json", raw_config=None):
+        self.config = config(**(raw_config or self.get_config(config_location)))
         self.sql = sql_instance(**self.config.sql.to_dict())
         self.reactor = reactors_handler()
         self.generic_embed_values = generic_embed_values(self.config)

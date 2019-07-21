@@ -334,13 +334,25 @@ class superuserPlugin(Plugin):
         Test delay command.
         Accepts no arguments.
         """
-        init_time = time()
+        websocket_ping = time()
+        try:
+            self.client.gw.ws.sock.ping()
+        except Exception as e:
+            log.warning(f"Websocket exception on ping: {e}")
+            websocket_ping = None
+        message_ping = time()
         bot_message = api_loop(
             event.channel.send_message,
             "***RADIO STATIC***",
         )
-        passed_time = time()
+        message_ping = round((time() - message_ping) * 1000)
+        if websocket_ping:
+            websocket_ping = self.client.gw.ws.last_pong_tm - websocket_ping
+            websocket_ping = round(websocket_ping * 1000)
+        message = f"Pong! :ping_pong:\nAPI: {message_ping} ms"
+        if websocket_ping and 0 < websocket_ping < 1000:
+            message += f"\nGateway: {websocket_ping} ms "
         api_loop(
             bot_message.edit,
-            f"Pong! {round((passed_time - init_time) * 1000)} ms",
+            message,
         )
