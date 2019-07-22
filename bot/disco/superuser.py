@@ -207,9 +207,10 @@ class superuserPlugin(Plugin):
         response_block = "```python\n{}\n```"
 
         code = event.codeblock
-        if (code.split("\n", 1)[0].count("python") or
-                code.split("\n", 1)[0].count("py")):
-            code = code.split("\n", 1)[1]
+        split = code.split("\n", 1)
+        if (len(split) > 1 and ("python" in split[0] or
+                                "py" in split[0])):
+            code = split[1]
 
         try:
             result = eval(code, ctx)
