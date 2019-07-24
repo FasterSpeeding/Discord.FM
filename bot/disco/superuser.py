@@ -198,8 +198,8 @@ class superuserPlugin(Plugin):
         Used to evaluate raw python3 code.
         The available classes are:
         "bot", "state", "client", "event", "sql" and "config".
-		To get an output, you have to assign the data to a variable
-		with "out"/"output" being preferred over other variables.
+        To get an output, you have to assign the data to a variable
+        with "out"/"output" being preferred over other variables.
         """
         ctx = {
             "bot": self.bot,
@@ -226,14 +226,15 @@ class superuserPlugin(Plugin):
             del ctx["results"]["ctx"]
             result = ctx["results"].get("output") or ctx["results"].get("out")
             if (not result and {key for key in ctx["results"]
-								if not key.startswith("_")}):
+                                if not key.startswith("_")}):
                 result = list(ctx["results"].values())[0]  # assumptions have
             elif not result:  # been made about how python populates local()
                 result = "None"
             response = response_block.format(str(result))
         if len(response) > 2000:
             attachments = [["output.txt", str(result)], ]
-            response = "It's dangerous to go without the full response! Take this."
+            response = ("It's dangerous to go without "
+                        "the full response! Take this.")
         api_loop(event.channel.send_message, response, attachments=attachments)
 
     @Plugin.command(
