@@ -1,4 +1,4 @@
-git+https://github.com/LMByrne/disco
+git+https://github.com/LMByrne/disco#egg=disco-py[voice]
 fuzzywuzzy
 humanize
 lyrics-extractor

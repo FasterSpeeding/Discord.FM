@@ -50,6 +50,12 @@ class custom_base(BaseModel):
         return {key: value for key, value in self.dict().items()
                 if value is not None}
 
+    def __repr__(self):
+        return f"<PydanticModel {self.__class__.__name__}>"
+
+    def __str__(self):
+        return f"<PydanticModel {self.__class__.__name__}>"
+
 
 class api(custom_base):
     user_agent: str = (f"Discord.FM @{__GIT__} "

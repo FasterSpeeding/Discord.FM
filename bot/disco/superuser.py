@@ -1,4 +1,5 @@
 from time import time
+import textwrap
 
 
 from disco.bot import Plugin
@@ -195,6 +196,10 @@ class superuserPlugin(Plugin):
     def on_eval_command(self, event):
         """
         Used to evaluate raw python3 code.
+        The available classes are:
+        "bot", "state", "client", "event", "sql" and "config".
+		To get an output, you have to assign the data to a variable
+		with "out"/"output" being preferred over other variables.
         """
         ctx = {
             "bot": self.bot,
@@ -205,22 +210,31 @@ class superuserPlugin(Plugin):
             "config": bot.config,
         }
         response_block = "```python\n{}\n```"
-
-        code = event.codeblock
-        split = code.split("\n", 1)
-        if (len(split) > 1 and ("python" in split[0] or
-                                "py" in split[0])):
-            code = split[1]
+        code = event.codeblock.replace("py\n", "").replace("python\n", "")
+        code = (f"def func(ctx):\n  try:\n{textwrap.indent(code, '    ')}"
+                "\n  finally:\n    ctx['results'] = locals()")
+        attachments = None
 
         try:
-            result = eval(code, ctx)
+            exec(code, ctx)
+            ctx["func"](ctx)
         except Exception as e:
             response = response_block.format(
                 (type(e).__name__ + ": " + str(e))[:1980]
             )
         else:
-            response = response_block.format(str(result)[:1980])
-        return api_loop(event.channel.send_message, response)
+            del ctx["results"]["ctx"]
+            result = ctx["results"].get("output") or ctx["results"].get("out")
+            if (not result and {key for key in ctx["results"]
+								if not key.startswith("_")}):
+                result = list(ctx["results"].values())[0]  # assumptions have
+            elif not result:  # been made about how python populates local()
+                result = "None"
+            response = response_block.format(str(result))
+        if len(response) > 2000:
+            attachments = [["output.txt", str(result)], ]
+            response = "It's dangerous to go without the full response! Take this."
+        api_loop(event.channel.send_message, response, attachments=attachments)
 
     @Plugin.command(
         "dms",
