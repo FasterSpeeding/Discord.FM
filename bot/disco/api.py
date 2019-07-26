@@ -50,18 +50,16 @@ class ApiPlugin(Plugin):
             limit = 6
         else:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            if not guild:
-                guild = bot.sql.guilds(
-                    guild_id=event.guild.id,
-                    prefix=bot.prefix,
-                )
-                bot.sql.add(guild)
-            elif guild.lyrics_limit <= 0:
+            if not guild or guild.lyrics_limit is None:
+                limit = bot.config.api.default_lyrics_limit
+            else:
+                limit = guild.lyrics_limit
+            if limit <= 0:
                 return api_loop(
                     event.channel.send_message,
                     "This command has been disabled in this guild.",
                 )
-            limit = guild.lyrics_limit
+
         first_message = api_loop(
             event.channel.send_message,
             "Searching for lyrics...",
@@ -126,16 +124,11 @@ class ApiPlugin(Plugin):
                     guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
-                        prefix=bot.prefix,
                     )
                     bot.sql.add(guild)
                 else:
-                    bot.sql(
-                        bot.sql.guilds.query.filter_by(
-                            guild_id=event.guild.id,
-                        ).update,
-                        {"lyrics_limit": limit},
-                    )
+                    guild.lyrics_limit = limit
+                    bot.sql.flush()
                 api_loop(
                     event.channel.send_message,
                     f"Changed lyric response embed limit to {limit}.",
@@ -147,7 +140,10 @@ class ApiPlugin(Plugin):
                 )
         else:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+            if guild and guild.lyrics_limit is not None:
+                limit = guild.lyrics_limit
+            else:
+                limit = bot.config.api.default_lyrics_limit
             api_loop(
                     event.channel.send_message,
                     f"The current limit is set to {limit}",

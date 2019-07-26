@@ -7,14 +7,16 @@ import os
 from disco.bot.command import CommandError
 from sqlalchemy import (
     create_engine as spawn_engine, PrimaryKeyConstraint,
-    Column, exc, ForeignKey)
+    Column, exc, ForeignKey,
+)
 from sqlalchemy.dialects.mysql import (
     TEXT, BIGINT, INTEGER, VARCHAR,
 )
+from sqlalchemy.engine.url import URL as SQLurl
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
-    scoped_session, sessionmaker, relationship)
-# from pymysql import err
+    scoped_session, sessionmaker, relationship,
+)
 
 
 log = logging.getLogger(__name__)
@@ -40,24 +42,12 @@ class guilds(Base):
     prefix = Column(
         "prefix",
         TEXT,
-        nullable=False,
-        default="fm.",
-    )
-    last_seen = Column(
-        "last_seen",
-        TEXT,
-        nullable=True,
-    )
-    name = Column(
-        "name",
-        TEXT,
         nullable=True,
     )
     lyrics_limit = Column(
         "lyrics_limit",
         INTEGER,
-        nullable=False,
-        default=3,
+        nullable=True,
     )
     alias_list = relationship(
         "aliases",
@@ -68,18 +58,14 @@ class guilds(Base):
     def __init__(
             self,
             guild_id: int,
-            prefix: str = "fm.",
-            last_seen: str = None,
-            name: str = None,
-            lyrics_limit: int = 3):
+            prefix: str = None,
+            lyrics_limit: int = None):
         self.guild_id = guild_id
         self.prefix = prefix
-        self.last_seen = last_seen
-        self.name = name
         self.lyrics_limit = lyrics_limit
 
     def __repr__(self):
-        return (f"users({self.guild_id}: {self.name})")
+        return (f"guilds {self.guild_id}")
 
 
 periods = {
@@ -108,8 +94,7 @@ class users(Base):
     period = Column(
         "period",
         INTEGER,
-        nullable=False,
-        default=0,
+        nullable=True,
     )
     friends = relationship(
         "friends",
@@ -126,7 +111,7 @@ class users(Base):
             self,
             user_id: int,
             last_username: str = None,
-            period: int = 0):
+            period: int = None):
         self.user_id = user_id
         self.last_username = last_username
         self.period = period
@@ -209,21 +194,29 @@ class sql_instance:
     tables = {}
     session = None
     engine = None
+    _driver_ssl_checks = {  # starts from self.session.connection()
+        "pymysql": ("connection", "connection", "ssl"),
+        "psycopg2": ("connection", "connection", "info", "ssl_in_use"),
+    }
 
     def __init__(
             self,
-            adapter=None,
-            server=None,
+            drivername=None,
+            host=None,
+            port=None,
             username=None,
             password=None,
             database=None,
+            query=None,
             args=None):
         self.session, self.engine = self.create_engine_session_safe(
-            adapter,
-            server,
+            drivername,
+            host,
+            port,
             username,
             password,
             database,
+            query,
             args,
         )
         self.check_tables()
@@ -253,14 +246,14 @@ class sql_instance:
             setattr(self, table.__tablename__, table_copy)
 
     @staticmethod
-    def check_engine_tables(tables, engine):
-        for table in tables:
-            if not engine.dialect.has_table(engine, table.__tablename__):
-                log.info(f"Creating table {table.__tablename__}")
-                table.__table__.create(engine)
+    def check_engine_table(table, engine):
+        if not engine.dialect.has_table(engine, table.__tablename__):
+            log.info(f"Creating table {table.__tablename__}")
+            table.__table__.create(engine)
 
     def check_tables(self):
-        return self.check_engine_tables(self.__tables__, self.engine)
+        for table in self.__tables__:
+            self.check_engine_table(table, self.engine)
 
     def add(self, object):
         self(self.session.add, object)
@@ -273,19 +266,46 @@ class sql_instance:
     def flush(self):
         self(self.session.flush)
 
+    def commit(self):
+        self(self.session.commit)
+
+    def ssl_check(self):
+        driver = self.session.connection().engine.driver
+        check_map = self._driver_ssl_checks.get(driver)
+        if not check_map:
+            log.warning(f"Unknown engine {driver}, unable to get sql")
+            return
+
+        position = self.session.connection()
+        for attr in check_map:
+            if not position:
+                break
+            position = getattr(position, attr, None)
+        log.info(f"SQL SSL status: {position or 'unknown'}")
+        return position
+
     @staticmethod
     def create_engine(
-            adapter="mysql+pymysql",
-            server=None,
+            drivername=None,
+            host=None,
+            port=None,
             username=None,
             password=None,
             database=None,
+            query=None,
             args=None):
 
         # Pre_establish settings
-        if server:
-            settings = (f"{adapter}://{username}:{password}"
-                        f"@{server}/{database}?charset=utf8mb4")
+        if host:
+            settings = SQLurl(
+                drivername,
+                username,
+                password,
+                host,
+                port,
+                database,
+                query,
+            )
             args = (args or {})
         else:
             if not os.path.exists("data"):
@@ -305,19 +325,23 @@ class sql_instance:
 
     def create_engine_session_safe(
             self,
-            adapter="mysql+pymysql",
-            server=None,
+            drivername=None,
+            host=None,
+            port=None,
             username=None,
             password=None,
             database=None,
+            query=None,
             args=None):
 
         engine = self.create_engine(
-            adapter,
-            server,
+            drivername,
+            host,
+            port,
             username,
             password,
             database,
+            query,
             args,
         )
 

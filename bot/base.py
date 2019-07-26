@@ -71,15 +71,19 @@ class api(custom_base):
     discord_bots_gg: str = None
     discogs_key: str = None
     discogs_secret: str = None
+    default_lyrics_limit: int = 3
+    default_period: int = 0
 
 
 class sql(custom_base):
+    drivername: str = "mysql+pymysql"
     database: str = None
-    server: str = None
+    host: str = None
+    port: int = None
     username: str = None
-    password: str = ""
-    adapter: str = "mysql+pymysql"
-    args: dict = {}
+    password: str = None
+    query: str = "?charset=utf8mb4"
+    args: dict = None
 
 
 class embed_values(custom_base):
@@ -150,6 +154,7 @@ class bot_frame:
         "sql",
         "generic_embed_values",
         "help_embeds",
+        "prefix_cache",
     )
     cfg_bindings = {
         ".yaml": yaml.safe_load if yaml else None,
@@ -162,6 +167,7 @@ class bot_frame:
         self.sql = sql_instance(**self.config.sql.to_dict())
         self.reactor = reactors_handler()
         self.generic_embed_values = generic_embed_values(self.config)
+        self.prefix_cache = {}
 
     def get_config(self, config="config.json"):
         if not os.path.isfile(config):

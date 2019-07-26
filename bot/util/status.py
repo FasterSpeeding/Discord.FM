@@ -1,4 +1,3 @@
-from datetime import datetime
 import logging
 
 
@@ -6,8 +5,7 @@ from disco.types.user import Game, Status, GameType
 from requests import post, RequestException
 
 
-from bot.base import bot, optional
-from bot.util.sql import SQLexception
+from bot.base import optional
 
 log = logging.getLogger(__name__)
 
@@ -76,10 +74,12 @@ class status_handler(object):
             db_token=None,
             gg_token=None,
             user_agent="Discord.FM",
-            bot_id=None):
+            bot_id=None,
+            presence: str = None):
         self.bot = bot
         self.bot_id = bot_id
         self.user_agent = user_agent
+        self.presence = presence
         self._tokens = {
             discordbotsorg: db_token,
             discordbotsgg: gg_token,
@@ -105,11 +105,12 @@ class status_handler(object):
                             f"{service.__name__} ({r.status_code}): {r.text}")
 
     def update_presence(self, guilds_len):
+        presence = self.presence if self.presence else f"{guilds_len} guilds."
         self.bot.client.update_presence(
             Status.online,
             Game(
                 type=GameType.listening,
-                name=f"{guilds_len} guilds.",
+                name=presence,
             )
         )
 
@@ -127,41 +128,6 @@ class status_handler(object):
                 ))
             del self._tokens[obj]
 
-    def sql_guilds_refresh(self):
-        for guild in self.bot.client.state.guilds.copy().keys():
-            try:
-                guild_object = self.bot.client.state.guilds.get(guild, None)
-                if guild_object is not None:
-                    sql_guild = bot.sql(bot.sql.guilds.query.get, guild)
-                    if sql_guild is None:
-                        sql_guild = bot.sql.guilds(
-                            guild_id=guild,
-                            last_seen=datetime.now().isoformat(),
-                            name=guild_object.name,
-                            prefix=bot.prefix,
-                        )
-                        bot.sql.add(sql_guild)
-                    else:
-                        try:
-                            bot.sql(
-                                bot.sql.guilds.query.filter_by(
-                                    guild_id=guild,
-                                ).update,
-                                {
-                                    "last_seen": datetime.now().isoformat(),
-                                    "name": guild_object.name
-                                },
-                            )
-                        except SQLexception as e:
-                            log.warning("Failed to post server to SQL server "
-                                        f"in status: {e.previous_exception}")
-                        else:
-                            bot.sql.flush()
-            except SQLexception as e:
-                log.warning(f"Failed to call SQL server: {e.msg}")
-                log.warning(str(e.original_exception))
-                break
-
     def update_stats(self):
         """
         This function updates the server amount status per interval
@@ -175,4 +141,3 @@ class status_handler(object):
         self.update_presence(guild_count)
         for service in self.services:
             self.post(service, guilds_payload)
-        self.sql_guilds_refresh()

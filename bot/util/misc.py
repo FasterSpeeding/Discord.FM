@@ -139,7 +139,7 @@ def get(
         raise CommandError(f"404 - {item} doesn't exist.")
 
     raise CommandError(f"{r.status_code} - {service} threw "
-                           f"unexpected error: {redact(r.text)}")
+                       f"unexpected error: {redact(r.text)}")
 
 
 def exception_channels(client, exception_channels, *args, **kwargs):
@@ -171,13 +171,14 @@ def exception_dms(client, exception_dms, *args, **kwargs):
         target_dm = client.api.users_me_dms_create(target)
         try:
             api_loop(target_dm.send_message, *args, **kwargs)
-        except APIException as e: # Missing permissions, Missing access,
+        except APIException as e:  # Missing permissions, Missing access,
             if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
                 log.warning("Unable to send exception DM - "
                             f"{target}: {e}")
                 exception_dms.remove(target)
             else:
                 raise e
+
 
 def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
     """

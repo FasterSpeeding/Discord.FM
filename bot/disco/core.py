@@ -1,5 +1,4 @@
 from datetime import datetime
-from decimal import Decimal
 from time import time
 from traceback import extract_stack
 import psutil
@@ -30,13 +29,13 @@ class CorePlugin(Plugin):
     def load(self, ctx):
         super(CorePlugin, self).load(ctx)
         bot.load_help_embeds(self)
-        self.cool_down = {"prefix": {}}
-        self.cache = {"prefix": {}}
-        self.prefixes = {}
         self.process = psutil.Process()
         try:
             for guild in bot.sql(bot.sql.guilds.query.all):
-                self.prefixes[guild.guild_id] = guild.prefix
+                if guild.prefix is not None:
+                    bot.prefix_cache[guild.guild_id] = guild.prefix
+                else:
+                    bot.prefix_cache[guild.guild_id] = bot.prefix
         except CommandError as e:
             log.critical("Failed to load guild data from SQL "
                          "servers, they're probably down.")
@@ -68,50 +67,16 @@ class CorePlugin(Plugin):
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
         if isinstance(event.unavailable, Unset):
-            if bot.sql(
-                    bot.sql.guilds.query.get, event.guild.id
-                    ) is None:
-                guild = bot.sql.guilds(
-                    guild_id=event.guild.id,
-                    last_seen=datetime.now().isoformat(),
-                    name=event.guild.name,
-                    prefix=bot.prefix,
-                )
-                bot.sql.add(guild)
-                self.prefixes[event.guild.id] = guild.prefix
-
-    @Plugin.listen("GuildUpdate")
-    def on_guild_update(self, event):
-        try:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            if guild is None:
-                guild = guilds(
-                    guild_id=event.guild.id,
-                    last_seen=datetime.now().isoformat(),
-                    name=event.guild.name,
-                    prefix=bot.prefix,
-                )
-                bot.sql.add(guild)
+            if not guild or guild.prefix is None:
+                bot.prefix_cache[event.guild.id] = bot.prefix
             else:
-                if guild.name != event.guild.name:
-                    bot.sql(
-                        bot.sql.guilds.query.filter_by(
-                            guild_id=event.guild.id,
-                        ).update,
-                        {
-                            "name": event.guild.name,
-                            "last_seen": datetime.now().isoformat(),
-                        },
-                    )
-                    bot.sql.flush()
-        except CommandError as e:
-            log.warning("Failed to update guild "
-                        f"{event.guild.id} SQL entry: {e.msg}")
-            log.exception(e.original_exception)
+                bot.prefix_cache[event.guild.id] = guild.prefix
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
         if isinstance(event.unavailable, Unset):
+            bot.prefix_cache.pop(event.id, None)
             guild = bot.sql(bot.sql.guilds.query.get, event.id)
             if guild:
                 bot.sql.delete(guild)
@@ -135,7 +100,7 @@ class CorePlugin(Plugin):
                     event.channel.send_message,
                     "Guild data removed.",
                 )
-                self.prefixes.pop(event.guild.id, None)
+                bot.prefix_cache.pop(event.guild.id, None)
         else:
             api_loop(
                 event.channel.send_message,
@@ -350,71 +315,44 @@ class CorePlugin(Plugin):
         This command will default to displaying the current prefix
         and ignore perms if no args are given.
         """
-        if not event.channel.is_dm:
-            if prefix is None:
-                guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-                if guild is None:
-                    prefix = bot.prefix
-                    guild = bot.sql.guilds(
-                        guild_id=event.guild.id,
-                        last_seen=datetime.now().isoformat(),
-                        name=event.guild.name,
-                        prefix=prefix,
-                    )
-                    bot.sql.add(guild)
-                else:
-                    prefix = guild.prefix
-                return api_loop(
-                    event.channel.send_message,
-                    f"Current prefix is ``{prefix}``",
-                )
-            member = event.guild.get_member(event.author)
-            if member.permissions.can(Permissions.MANAGE_GUILD):
-                if (event.guild.id not in self.cool_down["prefix"] or
-                        self.cool_down["prefix"][event.guild.id] <= time()):
-                    guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-                    if guild is None:
-                        guild = bot.sql.guilds(
-                            guild_id=event.guild.id,
-                            last_seen=datetime.now().isoformat(),
-                            name=event.guild.name,
-                            prefix=bot.prefix,
-                        )
-                        bot.sql.add(guild)
-                    else:
-                        bot.sql(
-                            bot.sql.guilds.query.filter_by(
-                                guild_id=event.guild.id
-                            ).update,
-                            {
-                                "name": event.guild.name,
-                                "prefix": prefix
-                            },
-                        )
-                    bot.sql.flush()
-                    self.prefixes[event.guild.id] = prefix
-                    api_loop(
-                        event.channel.send_message,
-                        f"Prefix changed to ``{prefix}``",
-                    )
-                    self.cool_down["prefix"][event.guild.id] = time() + 60
-                else:
-                    cooldown = self.cool_down["prefix"][event.guild.id]
-                    cooldown = round(Decimal(cooldown - time()))
-                    return api_loop(
-                        event.channel.send_message,
-                        f"Cool down: {cooldown} seconds left."
-                    )
-            else:
-                api_loop(
-                    event.channel.send_message,
-                    ("You need to have the Guild Manage "
-                     "permission to use this command."),
-                )
-        else:
-            api_loop(
+        if event.channel.is_dm:
+            return api_loop(
                 event.channel.send_message,
                 "This command can only be used in guilds.",
+            )
+        if prefix is None:
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if not guild or guild.prefix is None:
+                prefix = bot.prefix
+            else:
+                prefix = guild.prefix
+            api_loop(
+                event.channel.send_message,
+                f"The prefix is set to ``{prefix}``",
+            )
+        else:
+            member = event.guild.get_member(event.author)
+            if not member.permissions.can(Permissions.MANAGE_GUILD):
+                return api_loop(
+                    event.channel.send_message,
+                    ("You need to have Guild Manage "
+                     "permission to use this command."),
+                )
+
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if guild is None:
+                guild = bot.sql.guilds(
+                    guild_id=event.guild.id,
+                    prefix=prefix,
+                )
+                bot.sql.add(guild)
+            else:
+                guild.prefix = prefix
+            bot.sql.flush()
+            bot.prefix_cache[event.guild.id] = prefix
+            api_loop(
+                event.channel.send_message,
+                f"Prefix changed to ``{prefix}``",
             )
 
     @Plugin.command("support", metadata={"help": "miscellaneous"})
@@ -481,7 +419,7 @@ class CorePlugin(Plugin):
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),
             "Members": (f"{member_count} total\n"
-                      f"{len(self.client.state.users)} unique" + online),
+                        f"{len(self.client.state.users)} unique" + online),
             "Channels": (f"{len(self.client.state.channels)} total\n"
                          f"{voice_count} voice\n{text_count} text\n"
                          f"{len(self.client.state.dms)} open "
@@ -505,27 +443,21 @@ class CorePlugin(Plugin):
         if ((event.channel.is_dm and "DM" in bot.config.blacklist or
              bot.config.whitelist and event.guild_id not in bot.config.whitelist
              or bot.config.blacklist and event.guild_id in bot.config.blacklist)
-            and event.author.id not in bot.config.uservetos):
+                and event.author.id not in bot.config.uservetos):
             return
 
         if event.channel.is_dm:
             prefix = bot.prefix
         else:
-            prefix = self.prefixes.get(event.guild_id, None)
+            prefix = bot.prefix_cache.get(event.guild_id, None)
             if prefix is None:
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
-                if guild is None:
+                if not guild or guild.prefix is None:
                     prefix = bot.prefix
-                    self.prefixes[event.guild_id] = prefix
-                    guild = bot.sql.guilds(
-                        guild_id=event.guild_id,
-                        last_seen=datetime.now().isoformat(),
-                        prefix=prefix,
-                    )
-                    bot.sql.add(guild)
+                    bot.prefix_cache[event.guild_id] = prefix
                 else:
                     prefix = guild.prefix
-                    self.prefixes[event.guild_id] = guild.prefix
+                    bot.prefix_cache[event.guild_id] = guild.prefix
 
         require_mention = self.bot.config.commands_require_mention
         if not event.message.content.startswith(prefix):
@@ -599,6 +531,7 @@ class CorePlugin(Plugin):
                 embed=embed,
             )
         log.exception(exception)
+
 
 def event_channel_guild_check(self, event):
     """

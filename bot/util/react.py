@@ -134,7 +134,7 @@ class reactors_handler(object):
                         del self.events[message_id]
                     return
 
-                if e.code not in (50001, 50013): # access, permission error
+                if e.code not in (50001, 50013):  # access, permission error
                     raise e
         sleep(time)
         if message_id in self.events:
@@ -146,7 +146,7 @@ class reactors_handler(object):
                 )
             except APIException as e:
                 if e.code not in (10008, 50001, 50013):
-                    raise e # Unknown message, missing access, permission
+                    raise e  # Unknown message, missing access, permission
 
 
 def generic_react(
@@ -176,7 +176,7 @@ def generic_react(
         )
     else:
         return
-    if index:
+    if index is not None:
         content, embed = edit_message(data=data, index=index, **kwargs)
         api_loop(
             client.client.api.channels_messages_modify,
