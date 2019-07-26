@@ -176,7 +176,7 @@ def generic_react(
         )
     else:
         return
-    if index:
+    if index is not None:
         content, embed = edit_message(data=data, index=index, **kwargs)
         api_loop(
             client.client.api.channels_messages_modify,

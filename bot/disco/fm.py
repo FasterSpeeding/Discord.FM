@@ -82,50 +82,52 @@ class fmPlugin(Plugin):
                 "Alias commands are guild specific.",
             )
         if len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias:
-            api_loop(
+            return api_loop(
                 event.channel.send_message,
                 ("Aliasas are limited to 20 characters and cannot "
                  "contain Discord's reserved special characters."),
             )
-        else:
-            data = bot.sql(bot.sql.aliases.query.filter(
-                bot.sql.aliases.guild_id == event.guild.id,
-                bot.sql.aliases.alias.like(alias),
-            ).first)
-            if data is None:
-                self.get_user(event.author.id)
-                if (bot.sql(bot.sql.aliases.query.filter_by(
+
+        data = bot.sql(bot.sql.aliases.query.filter(
+            bot.sql.aliases.guild_id == event.guild.id,
+            bot.sql.aliases.alias.like(alias),
+        ).first)
+        if data is None:
+            self.get_user(event.author.id)
+            if (bot.sql(bot.sql.aliases.query.filter_by(
+                user_id=event.author.id,
+                guild_id=event.guild.id,
+            ).count) < 5):
+                if not bot.sql(bot.sql.guilds.query.get, event.guild.id):
+                    bot.sql.add(bot.sql.guilds(guild_id=event.guild.id))
+                payload = bot.sql.aliases(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
-                ).count) < 5):
-                    payload = bot.sql.aliases(
-                        user_id=event.author.id,
-                        guild_id=event.guild.id,
-                        alias=alias,
-                    )
-                    bot.sql.add(payload)
-                    api_loop(
-                        event.channel.send_message,
-                        f"Added alias ``{alias}``.",
-                    )
-                else:
-                    api_loop(
-                        event.channel.send_message,
-                        "You've reached the 5 alias limit for this guild."
-                    )
+                    alias=alias,
+                )
+                bot.sql.add(payload)
+                api_loop(
+                    event.channel.send_message,
+                    f"Added alias ``{alias}``.",
+                )
             else:
-                if data.user_id == event.author.id:
-                    bot.sql.delete(data)
-                    api_loop(
-                        event.channel.send_message,
-                        f"Removed alias ``{data.alias}``.",
-                    )
-                else:
-                    api_loop(
-                        event.channel.send_message,
-                        (f"Alias ``{data.alias}`` is "
-                         "already taken in this guild."),
-                    )
+                api_loop(
+                    event.channel.send_message,
+                    "You've reached the 5 alias limit for this guild."
+                )
+        else:
+            if data.user_id == event.author.id:
+                bot.sql.delete(data)
+                api_loop(
+                    event.channel.send_message,
+                    f"Removed alias ``{data.alias}``.",
+                )
+            else:
+                api_loop(
+                    event.channel.send_message,
+                    (f"Alias ``{data.alias}`` is "
+                     "already taken in this guild."),
+                )
 
     @Plugin.command("list", "[target:str...]", group="alias", metadata={"help": "last.fm"})
     def on_alias_list_command(self, event, target=None):
@@ -136,48 +138,30 @@ class fmPlugin(Plugin):
         Returns a list of the target's alises.
         """
         if event.channel.is_dm:
-            api_loop(
+            return api_loop(
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
+        target = self.get_user_info(target or event.author.id, event.guild.id)
+        data = [alias for alias in target.aliases
+                if alias.guild_id==event.guild.id]
+        if data:
+            user = event.guild.get_member(target.user_id)
+            embed = bot.generic_embed_values(
+                title={"title": f"{user.name}'s aliases "
+                       f"in {event.guild.name}"},
+                non_inlines={str(index + 1): alias.alias for
+                             index, alias in enumerate(data)},
+            )
+            api_loop(
+                event.channel.send_message,
+                embed=embed,
+            )
         else:
-            if target is None:
-                target = event.author.id
-            else:
-                try:
-                    target = AT_to_id(target)
-                except CommandError:
-                    data = bot.sql(bot.sql.aliases.query.filter(
-                        bot.sql.aliases.guild_id == event.guild.id,
-                        bot.sql.aliases.alias.like(target),
-                    ).first)
-                    if data is None:
-                        raise CommandError("User alias not "
-                                           "found in this guild.")
-                    target = data.user_id
-            data = bot.sql(bot.sql.aliases.query.filter_by(
-                user_id=target,
-                guild_id=event.guild.id,
-            ).all)
-            user = self.client.api.guilds_members_get(event.guild.id, target)
-            if data:
-                inline = {
-                    str(index + 1): alias.alias for
-                    index, alias in enumerate(data)}
-                embed = bot.generic_embed_values(
-                    title={"title": f"{user.name}'s aliases "
-                           "in {event.guild.name}"},
-                    non_inlines=inline,
-                )
-                api_loop(
-                    event.channel.send_message,
-                    embed=embed,
-                )
-            else:
-                api_loop(
-                    event.channel.send_message,
-                    "User doesn't have any aliases set in this guild.",
-                )
+            api_loop(
+                event.channel.send_message,
+                "User doesn't have any aliases set in this guild.",
+            )
 
     @Plugin.command("artist info", "<artist:str...>", metadata={"help": "last.fm"})
     def on_artist_command(self, event, artist):
@@ -272,14 +256,14 @@ class fmPlugin(Plugin):
                 user = self.state.users.get(int(data[current_index]))
                 user = str(user) if user else data[current_index]
                 friend = self.get_user_info(data[current_index])
-                if not friend["username"]:
+                if not friend.last_username:
                     bot.sql(bot.sql.friends.query.filter_by(
                         master_id=owner,
                         slave_id=data[current_index]
                     ).delete)
                     bot.sql.flush()
                     data.pop(current_index)
-                    if current_index >= len(data) - 1:
+                    if current_index >= len(data):
                         finished = True
                         break
                 else:
@@ -287,7 +271,7 @@ class fmPlugin(Plugin):
                     break
             if finished:
                 break
-            friend = friend["username"]
+            friend = friend.last_username
             limit = 2
             params = {
                 "method": "user.getrecenttracks",
@@ -298,9 +282,10 @@ class fmPlugin(Plugin):
                 self.get_fm_secondary(
                     embed=embed,
                     params=params,
-                    name_template=f"[{current_index + 1}] {user} ({friend})",
                     data_map=("recenttracks", "track"),
                     artist_map=("artist", "#text"),
+                    name_format=(f"raw:[{current_index + 1}]"
+                                 f" {user} ({friend})", ),
                     value_format=("ago", "artist"),
                     value_clamps=("ago", ),
                     limit=limit,
@@ -324,10 +309,10 @@ class fmPlugin(Plugin):
         This command accepts either a Discord user ID or @user
         """
         target = self.get_user_info(target, event.guild.id)
-        if not target["username"]:
+        if not target.last_username:
             raise CommandError("Target user doesn't have "
                                "a Last.FM account setup.")
-        target = target["user_id"]
+        target = target.user_id
         name = self.state.users.get(int(target))
         name = str(name) if name else target
         user = bot.sql(bot.sql.users.query.get, event.author.id)
@@ -533,12 +518,12 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
-        period = self.get_user_info(event.author.id)["period"]
+        period = self.get_period(event.author.id)
         fm_embed, lastname = self.generic_user_data(
             username,
             guild=(event.channel.is_dm or event.guild.id),
-            description=(f"Top {meta_type}s over" +
-                         (" " + period).replace(" over", "")),
+            description=(f"Top {meta_type}s "
+                         f"{self.beautify_period(period, over=True)}."),
         )
         params = {
             "method": method,
@@ -573,17 +558,20 @@ class fmPlugin(Plugin):
             period = period.replace(" ", "").strip("s").lower()
             if period in periods.values():
                 self.get_user_info(event.author.id)
-                bot.sql(
-                    bot.sql.users.query.filter_by(
+                user = bot.sql(bot.sql.users.query.get, event.author.id)
+                if not user:
+                    user = bot.sql.users(
                         user_id=event.author.id,
-                    ).update,
-                    {"period": {y: x for x, y in periods.items()}[period]},
-                )
-                bot.sql.flush()
+                        period = {y: x for x, y in periods.items()}[period],
+                    )
+                    bot.sql.add(user)
+                else:
+                    user.period = {y: x for x, y in periods.items()}[period]
+                    bot.sql.flush()
                 api_loop(
                     event.channel.send_message,
-                    ("Default period for 'top' commands "
-                     f"updated to ``{period}``."),
+                    ("Default period for 'top' commands updated"
+                     f" to ``{self.beautify_period(period)}``."),
                 )
             else:
                 api_loop(
@@ -592,11 +580,11 @@ class fmPlugin(Plugin):
                      "help top period`` for more details."),
                 )
         else:
-            data = self.get_user_info(event.author.id)
+            period = self.get_period(event.author.id)
             api_loop(
                 event.channel.send_message,
-                ("Your default 'top' period is "
-                 f"currently set to ``{data['period']}``"),
+                ("Your default 'top' period is currently "
+                 f"set to ``{self.beautify_period(period)}``."),
             )
 
     @Plugin.command("username", "[username:str]", metadata={"help": "last.fm"})
@@ -611,12 +599,7 @@ class fmPlugin(Plugin):
             username = self.get_last_account(username)["user"]["name"]
             user = bot.sql(bot.sql.users.query.get, event.author.id)
             if user:
-                bot.sql(
-                    bot.sql.users.query.filter_by(
-                        user_id=event.author.id,
-                    ).update,
-                    {"last_username": username},
-                )
+                user.last_username = username
                 bot.sql.flush()
             else:
                 user = bot.sql.users(
@@ -629,7 +612,7 @@ class fmPlugin(Plugin):
                 f"Username for ``{event.author}`` changed to ``{username}``.",
             )
         else:
-            username = self.get_user_info(event.author.id)["username"]
+            username = self.get_user_info(event.author.id).last_username
             if not username:
                 api_loop(
                     event.channel.send_message,
@@ -723,7 +706,7 @@ class fmPlugin(Plugin):
             guild=(event.channel.is_dm or event.guild.id),
         )
         message = api_loop(event.channel.send_message, "Searching for user.")
-        period = self.get_user_info(event.author.id)["period"]
+        period = self.get_period(event.author.id)
         params = {
             "method": "user.getrecenttracks",
             "user": username,
@@ -733,9 +716,9 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name_template="Recent tracks",
             data_map=("recenttracks", "track"),
             artist_map=("artist", "#text"),
+            name_format=("raw:Recent tracks", ),
             value_format=("ago", "artist"),
             value_clamps=("ago", ),
             limit=3,
@@ -749,9 +732,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name_template="Top tracks",
             artist_map=("artist", "name"),
             data_map=("toptracks", "track"),
+            name_format=("raw:Top tracks "
+                         f"{self.beautify_period(period, over=True)}", ),
             value_format=("playcount", "artist"),
             value_clamps=("playcount", ),
         )
@@ -764,8 +748,9 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name_template="Top artists",
             data_map=("topartists", "artist"),
+            name_format=("raw:Top artists "
+                         f"{self.beautify_period(period, over=True)}", ),
             value_format=("playcount", ),
             value_clamps=("playcount", ),
         )
@@ -778,9 +763,10 @@ class fmPlugin(Plugin):
         self.get_fm_secondary(
             embed=fm_embed,
             params=params,
-            name_template="Top albums",
             artist_map=("artist", "name"),
             data_map=("topalbums", "album"),
+            name_format=("raw:Top albums "
+                         f"{self.beautify_period(period, over=True)}", ),
             value_format=("playcount", "artist"),
             value_clamps=("playcount", ),
             seperator="\n",
@@ -934,7 +920,6 @@ class fmPlugin(Plugin):
             embed,
             params,
             data_map,
-            name_template="{}",
             url=None,
             name_format=None,
             value_format=None,
@@ -954,17 +939,18 @@ class fmPlugin(Plugin):
             value = ""
             for index in range(limit):
                 position = get_dict_item(data, data_map)[index]
-                for method in (name_format or ()):
-                    function = getattr(
-                        self.fm_format_mapping,
-                        method.split(":", 1)[0],
-                    )
-                    name += function(
-                        index=index,
-                        data=position,
-                        method=method,
-                        **kwargs,
-                    ) + " "
+                if not singular or not name:
+                    for method in (name_format or ()):
+                        function = getattr(
+                            self.fm_format_mapping,
+                            method.split(":", 1)[0],
+                        )
+                        name += function(
+                            index=index,
+                            data=position,
+                            method=method,
+                            **kwargs,
+                        ) + " "
                 for method in (value_format or ()):
                     function = getattr(
                         self.fm_format_mapping,
@@ -984,17 +970,18 @@ class fmPlugin(Plugin):
                 value += get_dict_item(position, end_value_map) + seperator
                 if not singular:
                     embed.add_field(
-                        name=f"{name_template.format(name.strip(' '))}:",
+                        name=f"{name.strip(' ')}:",
                         value=value.strip(seperator),
                         inline=inline,
                     )
                     name = ""
                     value = ""
         else:
+            name = "None"
             value = "None"
         if singular or value == "None":
             embed.add_field(
-                name=f"{name_template}:",
+                name=f"{name.strip(' ')}:",
                 value=value.strip(seperator),
                 inline=inline,
             )
@@ -1002,7 +989,7 @@ class fmPlugin(Plugin):
     def get_user(self, username: str, guild: int = None):
         username = str(username)
         try:
-            result = self.get_user_info(username, guild=guild)["username"]
+            result = self.get_user_info(username, guild=guild).last_username
         except CommandError:
             pass
         else:
@@ -1067,16 +1054,28 @@ class fmPlugin(Plugin):
                 raise e
         data = bot.sql(bot.sql.users.query.get, target)
         if data is None:
-            user = bot.sql.users(user_id=target)
-            bot.sql.add(user)
-            data = {"user_id": target, "username": None, "period": periods[0]}
-        else:
-            data = {
-                "user_id": data.user_id,
-                "username": data.last_username,
-                "period": periods[data.period],
-            }
+            return bot.sql.users(
+                user_id=target,
+            )
         return data
+
+    @staticmethod
+    def beautify_period(period, over=False):
+        if period[0] != "1":
+            period = period.replace("month", " months")
+        else:
+            period = period.replace("month", " month")
+        if over:
+            period = "over" + (" " + period).replace(" over", "")
+        period = period.replace("day", " days")
+        return period
+
+    def get_period(self, user):
+        user = self.get_user_info(user)
+        period = periods.get(user.period, None)
+        if period is None:
+            period = periods.get(bot.config.api.default_period)
+        return period
 
     @staticmethod
     def search_embed(
