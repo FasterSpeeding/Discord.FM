@@ -13,16 +13,6 @@
       "spotify_secret": null,
       "discogs_key": null,
       "discogs_secret": null
-    },
-    "embed_values": {
-      "url": null,
-      "color": "000089"
-    },
-    "sql": {
-      "database": null,
-      "server": null,
-      "username": null,
-      "password": null
     }
   }
 }

@@ -53,7 +53,8 @@ For this to function, the SQL server will need to have a database with the name 
 ```json
 "sql": {
   "database": "database_name",
-  "server": "ip_address:port",
+  "host": "server_address",
+  "port": 3015,
   "username": "root",
   "password": "password"
 }
