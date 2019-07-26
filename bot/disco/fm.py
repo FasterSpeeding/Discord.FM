@@ -881,7 +881,7 @@ class fmPlugin(Plugin):
                 message = redact(message)
             raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
                                   f"unexpected HTTP status code{message}")
-        elif self.cache[url].exists and time() <= self.cache[url].expire:
+        if self.cache[url].exists and time() <= self.cache[url].expire:
             return self.cache[url].data
         raise fmEntryNotFound(self.cache[url].error)
 
