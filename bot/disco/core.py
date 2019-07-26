@@ -419,7 +419,7 @@ class CorePlugin(Plugin):
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),
             "Members": (f"{member_count} total\n"
-                      f"{len(self.client.state.users)} unique" + online),
+                        f"{len(self.client.state.users)} unique" + online),
             "Channels": (f"{len(self.client.state.channels)} total\n"
                          f"{voice_count} voice\n{text_count} text\n"
                          f"{len(self.client.state.dms)} open "
@@ -443,7 +443,7 @@ class CorePlugin(Plugin):
         if ((event.channel.is_dm and "DM" in bot.config.blacklist or
              bot.config.whitelist and event.guild_id not in bot.config.whitelist
              or bot.config.blacklist and event.guild_id in bot.config.blacklist)
-            and event.author.id not in bot.config.uservetos):
+                and event.author.id not in bot.config.uservetos):
             return
 
         if event.channel.is_dm:
@@ -531,6 +531,7 @@ class CorePlugin(Plugin):
                 embed=embed,
             )
         log.exception(exception)
+
 
 def event_channel_guild_check(self, event):
     """

@@ -222,7 +222,6 @@ class sql_instance:
         self.check_tables()
         self.spwan_binded_tables()
 
-
     @staticmethod
     def __call__(function, *args, **kwargs):
         tries = 0

@@ -144,7 +144,7 @@ class fmPlugin(Plugin):
             )
         target = self.get_user_info(target or event.author.id, event.guild.id)
         data = [alias for alias in target.aliases
-                if alias.guild_id==event.guild.id]
+                if alias.guild_id == event.guild.id]
         if data:
             user = event.guild.get_member(target.user_id)
             embed = bot.generic_embed_values(
@@ -562,7 +562,7 @@ class fmPlugin(Plugin):
                 if not user:
                     user = bot.sql.users(
                         user_id=event.author.id,
-                        period = {y: x for x, y in periods.items()}[period],
+                        period={y: x for x, y in periods.items()}[period],
                     )
                     bot.sql.add(user)
                 else:
@@ -800,7 +800,7 @@ class fmPlugin(Plugin):
         fm_embed = bot.generic_embed_values(
             title=title,
             thumbnail=user_data["image"][-1]["#text"],
-    #        author=author,
+            #  author=author,
             footer={"text": (f"{user_data['playcount']} scrobbles, "
                              f"registered:")},
             timestamp=registered,
