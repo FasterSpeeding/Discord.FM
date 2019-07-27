@@ -25,11 +25,18 @@ class superuserPlugin(Plugin):
             repeat=False,
             init=False,
         )
+        presence = bot.config.presence.format(
+            count="{count}",
+            shardcount="{shardcount}",
+            prefix=bot.prefix,
+        )
         self.status = status_handler(
             self,
             db_token=bot.config.api.discordbots_org,
             gg_token=bot.config.api.discord_bots_gg,
+            boats_token=bot.config.api.discordboats,
             user_agent=bot.config.api.user_agent,
+            presence=presence,
         )
         self.register_schedule(
             self.status.update_stats,
@@ -189,7 +196,10 @@ class superuserPlugin(Plugin):
         """
         Manually update the bot's presence.
         """
-        self.status.update_presence(len(self.client.state.guilds))
+        guild_count = len(self.client.state.guilds)
+        shard_count = self.bot.client.config.shard_count
+        payload = guildCount(guild_count, shard_count)
+        self.status.update_presence(payload)
         api_loop(event.channel.send_message, ":thumbsup:")
 
     @Plugin.command("eval", level=CommandLevels.OWNER, metadata={"help": "owner"})
@@ -197,7 +207,7 @@ class superuserPlugin(Plugin):
         """
         Used to evaluate raw python3 code.
         The available classes are:
-        "bot", "state", "client", "event", "sql" and "config".
+        "bot", "state", "client", "event", "sql", "config" and "prefix_cache".
         To get an output, you have to assign the data to a variable
         with "out"/"output" being preferred over other variables.
         """
@@ -208,6 +218,7 @@ class superuserPlugin(Plugin):
             "event": event,
             "sql": bot.sql,
             "config": bot.config,
+            "prefix_cache": bot.prefix_cache,
         }
         response_block = "```python\n{}\n```"
         code = event.codeblock.replace("py\n", "").replace("python\n", "")

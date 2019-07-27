@@ -266,31 +266,26 @@ class CorePlugin(Plugin):
         Get a bot invite link from me.
         This command will send the author a bot invite link in a DM.
         """
-        if not event.channel.is_dm:
-            channel = event.author.open_dm()
-        else:
-            channel = event.channel
-        dm_default_send(
-            event,
-            channel,
-            content=(f"https://discordapp.com/oauth2/authorize?client_id="
-                     f"{self.state.me.id}&scope=bot&permissions={104197184}")
+        api_loop(
+            event.channel.send_message,
+            ("https://discordapp.com/oauth2/authorize?client_id="
+             f"{self.state.me.id}&scope=bot&permissions={104197184}"),
         )
 
     @Plugin.command("vote", metadata={"help": "miscellaneous"})
     def on_vote_command(self, event):
         """
-        Get a link to upvote this bot on Discordbots.org.
+        Get a link to upvote this bot on a bot listing site.
         """
-        if not event.channel.is_dm:
-            channel = event.author.open_dm()
-        else:
-            channel = event.channel
-        dm_default_send(
-            event,
-            channel,
-            content=("You can upvote me at https://"
-                     "discordbots.org/bot/560984860634644482/vote"),
+        if not bot.config.vote_link:
+            return api_loop(
+                event.channel.send_message,
+                "No vote link is currently setup."
+            )
+
+        api_loop(
+            event.channel.send_message,
+            f"You can upvote me at {bot.config.vote_link}",
         )
 
     @Plugin.command("git", metadata={"help": "miscellaneous"})
@@ -298,14 +293,9 @@ class CorePlugin(Plugin):
         """
         Get a link to this bot's github repo.
         """
-        if not event.channel.is_dm:
-            channel = event.author.open_dm()
-        else:
-            channel = event.channel
-        dm_default_send(
-            event,
-            channel,
-            content=f"You can find me at {__GIT__}",
+        api_loop(
+            event.channel.send_message,
+            f"You can find me at {__GIT__}",
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -360,15 +350,15 @@ class CorePlugin(Plugin):
         """
         Get Support server invite.
         """
-        if not event.channel.is_dm:
-            channel = event.author.open_dm()
-        else:
-            channel = event.channel
-        dm_default_send(
-            event,
-            channel,
-            content=("To join my support server, use "
-                     "https://discordapp.com/invite/jkEXqVd"),
+        if not bot.config.support_invite:
+            return api_loop(
+                event.channel.send_message,
+                "No support server is currently setup.",
+            )
+
+        api_loop(
+            event.channel.send_message,
+            f"To join my support server, use {bot.config.support_invite}",
         )
 
     @Plugin.command("_instance")
@@ -403,18 +393,13 @@ class CorePlugin(Plugin):
             elif channel.type != ChannelType.DM:
                 other_count += 1
 
-        voice_instances = 0
-        for instance in self.client.state.voice_states.copy().values():
-            if instance.user_id == self.client.state.me.id:
-                voice_instances += 1
-
         memory_usage = self.process.memory_full_info().uss / 1024**2
         cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
         memory_percent = self.process.memory_percent()
 
         inline_fields = {
             "Guilds": str(len(self.client.state.guilds)),
-            "Voice Instances": str(voice_instances),
+            "Voice Instances": str(len(self.client.state.voice_clients)),
             "Uptime": uptime,
             "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                         f"\n{cpu_usage:.2f}% CPU"),

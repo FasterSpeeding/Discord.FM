@@ -58,11 +58,31 @@ class discordbotsgg(api_basis):
         })
 
 
+class discordboats(api_basis):
+    __name__ = "discord.boats"
+    url = "https://discord.boats/api/v2/bot/{id}"
+
+    def __call__(self, guildCount):
+        return optional(**{
+            "server_count": guildCount.Count,
+        })
+
+
 class guildCount:
+    __slots__ = (
+        "Count",
+        "shardCount",
+        "shardId",
+    )
+
     def __init__(self, Count, shardCount=None, shardId=None):
         setattr(self, "Count", Count)
         setattr(self, "shardCount", shardCount)
         setattr(self, "shardId", shardId)
+
+    def to_dict(self):
+        return {key.lower(): getattr(self, key, None)
+                for key in self.__slots__}
 
 
 class status_handler(object):
@@ -73,9 +93,10 @@ class status_handler(object):
             bot,
             db_token=None,
             gg_token=None,
+            boats_token=None,
             user_agent="Discord.FM",
             bot_id=None,
-            presence: str = None):
+            presence="{count} guilds."):
         self.bot = bot
         self.bot_id = bot_id
         self.user_agent = user_agent
@@ -83,6 +104,7 @@ class status_handler(object):
         self._tokens = {
             discordbotsorg: db_token,
             discordbotsgg: gg_token,
+            discordboats: boats_token,
         }
 
     @staticmethod
@@ -104,15 +126,16 @@ class status_handler(object):
                 log.warning("Failed to post guild count to "
                             f"{service.__name__} ({r.status_code}): {r.text}")
 
-    def update_presence(self, guilds_len):
-        presence = self.presence if self.presence else f"{guilds_len} guilds."
-        self.bot.client.update_presence(
-            Status.online,
-            Game(
-                type=GameType.listening,
-                name=presence,
+    def update_presence(self, guilds_payload):
+        if self.presence:
+            presence = self.presence.format(**guilds_payload.to_dict())
+            self.bot.client.update_presence(
+                Status.online,
+                Game(
+                    type=GameType.listening,
+                    name=presence,
+                )
             )
-        )
 
     def setup_services(self):
         """
@@ -138,6 +161,6 @@ class status_handler(object):
         shard_id = self.bot.bot.client.config.shard_id
         shard_count = self.bot.bot.client.config.shard_count
         guilds_payload = guildCount(guild_count, shard_count, shard_id)
-        self.update_presence(guild_count)
+        self.update_presence(guilds_payload)
         for service in self.services:
             self.post(service, guilds_payload)

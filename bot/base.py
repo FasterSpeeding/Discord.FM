@@ -69,6 +69,7 @@ class api(custom_base):
     spotify_secret: str = None
     discordbots_org: str = None
     discord_bots_gg: str = None
+    discordboats: str = None
     discogs_key: str = None
     discogs_secret: str = None
     default_lyrics_limit: int = 3
@@ -138,6 +139,9 @@ class disco(custom_base):
 class config(custom_base):
     exception_dms: list = None
     exception_channels: dict = None
+    presence: str = "{count} guilds | {prefix}help"
+    support_invite: str = None
+    vote_link: str = None
     whitelist: list = []
     blacklist: list = []
     uservetos: list = []
