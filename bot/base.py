@@ -4,6 +4,7 @@ import operator
 import os
 
 
+from disco.types.message import MessageEmbed
 from requests import __version__ as __Rversion__
 from pydantic import BaseModel
 try:
@@ -17,7 +18,6 @@ except ImportError:
 
 
 from bot import __GIT__
-from bot.types.embed import generic_embed_values
 from bot.util.react import reactors_handler
 from bot.util.sql import sql_instance
 
@@ -91,6 +91,7 @@ class embed_values(custom_base):
     __name__ = "embed_values"
     url: str = None
     color: str = None
+    type: str = None
 
 
 class bot_data(custom_base):
@@ -124,7 +125,7 @@ class disco(custom_base):
     config: str = None
     shard_id: int = None
     shard_count: int = None
-    guild_subscriptions: bool = False
+    guild_subscriptions: bool = True
     max_reconnects: int = None
     log_level: str = None
     file_log_level: str = "WARNING"
@@ -137,10 +138,11 @@ class disco(custom_base):
 
 
 class config(custom_base):
-    exception_dms: list = None
-    exception_channels: dict = None
+    exception_dms: list = []
+    exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
     support_invite: str = None
+    monitor_usage: bool = False
     vote_link: str = None
     whitelist: list = []
     blacklist: list = []
@@ -154,40 +156,74 @@ class config(custom_base):
 class bot_frame:
     __slots__ = (
         "config",
-        "reactor",
-        "sql",
-        "generic_embed_values",
+        "config_meta",
         "help_embeds",
         "prefix_cache",
+        "reactor",
+        "sql",
     )
-    cfg_bindings = {
+    cfg_read = {
         ".yaml": yaml.safe_load if yaml else None,
         ".json": json.load,
     }
+    cfg_write = {
+        ".yaml": yaml.dump if yaml else None,
+        ".json": json.dump,
+    }
     cfg_paths = ("config.json", "config.yaml")
 
-    def __init__(self, config_location="config.json", raw_config=None):
-        self.config = config(**(raw_config or self.get_config(config_location)))
+    def __init__(self, config_path=None, raw_config=None):
+        self.config = config(**(raw_config or self.get_config(config_path)))
         self.sql = sql_instance(**self.config.sql.to_dict())
         self.reactor = reactors_handler()
-        self.generic_embed_values = generic_embed_values(self.config)
         self.prefix_cache = {}
 
-    def get_config(self, config="config.json"):
-        if not os.path.isfile(config):
+    def generic_embed(self, **kwargs):
+        for key, value in self.config.embed_values.to_dict().items():
+            if key not in kwargs:
+                kwargs[key] = value
+        timestamp = kwargs.pop("timestamp", None)
+        embed = MessageEmbed(kwargs)
+    #    for field in embed.field:
+    #        field.name = field.name[:256]
+    #        field.value = field.value[:2048]
+        if timestamp:
+            embed.timestamp = timestamp
+        return embed
+
+    def get_config(self, config_path=None):
+        meta_path = getattr(self, "config_meta", None)
+        if (not (config_path or meta_path) or
+                not os.path.isfile(config_path or meta_path)):
             locations = [path for path in self.cfg_paths
                          if os.path.isfile(path)]
             if not locations:
                 raise Exception("Config location not found.")
-            config = locations[0]
-        handlers = [handler for type, handler in self.cfg_bindings.items()
-                    if config.endswith(type)]
+            config_path = locations[0]
+        else:
+            config_path = config_path or meta_path
+        handlers = [handler for type, handler in self.cfg_read.items()
+                    if config_path.endswith(type)]
         if not handlers:
             raise Exception("Invalid config type.")
         if not handlers[0]:
             raise Exception("Handler for file type "
-                            f"'{config.split('.')[-1]}' is not installed.")
-        return handlers[0](open(config, "r"))
+                            f"'{config_path.split('.')[-1]}' is not present.")
+        data = handlers[0](open(config_path, "r"))
+        self.config_meta = config_path
+        return data
+
+    def overwrite_config(self, data, location_overwrite=None):
+        config_path = location_overwrite or self.config_meta
+        if not os.path.isfile(config_path):
+            raise Exception("Config location not found.")
+        handlers = [handler for type, handler in self.cfg_write.items()
+                    if config_path.endswith(type)]
+        if not handlers or not handlers[0]:
+            raise Exception("Invalid config type of handler for file type "
+                            f"'{config_path.split('.')[-1]}' is not present.")
+        with open(config_path, "w") as file:
+            handlers[0](data, file, indent=4)
 
     @property
     def prefix(self):
@@ -215,11 +251,8 @@ class bot_frame:
                 if not doc_string:
                     doc_string = "Null"
                 if array_name not in self.help_embeds:
-                    title = {
-                        "title": f"{array_name.capitalize()} module commands.",
-                    }
-                    self.help_embeds[array_name] = self.generic_embed_values(
-                        title=title,
+                    self.help_embeds[array_name] = self.generic_embed(
+                        title=f"{array_name.capitalize()} module commands.",
                         description=("Argument key: <required> [optional], "
                                      "with '...'specifying a multi-word "
                                      "argument and optional usernames "

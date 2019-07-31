@@ -1,10 +1,13 @@
 from time import time
+import base64
 import textwrap
 
 
+from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandLevels
 from disco.util.logging import logging
+from requests import get
 
 
 from bot.base import bot
@@ -383,3 +386,61 @@ class superuserPlugin(Plugin):
             bot_message.edit,
             message,
         )
+
+    @Plugin.command("register error webhook", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_register_error_webhook_command(self, event):
+        """
+        Used to register a webhook in the current channel for error messages.
+        """
+        #  attempt to get bot's current avatar as base64.
+        url = self.state.me.get_avatar_url(fmt="png")
+        try:
+            r = get(url)
+            avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
+                      + base64.b64encode(r.content).decode("utf-8"))
+        except Exception as e:
+            log.warning(f"failed to get webhook image {e}")
+            avatar = None
+
+        #  create webhook
+        try:
+            webhook = event.channel.create_webhook(
+                self.state.me.username,
+                avatar,
+            )
+        except APIException as e:
+            event.channel.send_message(f"Unable to make webhook: ```{e.msg}```")
+        else:
+            #  save webhook to config
+            config = bot.get_config()
+            if "exception_webhooks" not in config:
+                config["exception_webhooks"] = {}
+            config["exception_webhooks"][webhook.id] = webhook.token
+            bot.config.exception_webhooks[webhook.id] = webhook.token
+            bot.overwrite_config(config)
+            api_loop(
+                event.channel.send_message,
+                f":thumbsup:",
+            )
+
+    @Plugin.command("register error dm", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_register_error_dm_message(self, event):
+        """
+        Used to register the current user's DMs for error messages.
+        """
+        if event.author.id in bot.config.exception_dms:
+            api_loop(
+                event.channel.send_message,
+                f"You're already registered :ok_hand:",
+            )
+        else:
+            config = bot.get_config()
+            if "exception_dms" not in config:
+                config["exception_dms"] = []
+            config["exception_dms"].append(event.author.id)
+            bot.overwrite_config(config)
+            bot.config.exception_dms.append(event.author.id)
+            api_loop(
+                event.channel.send_message,
+                f":thumbsup:",
+            )

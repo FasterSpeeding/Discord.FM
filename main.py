@@ -5,7 +5,6 @@ creating and running bots/clients.
 import os
 import subprocess
 import sys
-import six
 import logging
 
 from gevent import monkey
@@ -17,17 +16,6 @@ try:
 except ImportError:
     pip = None
 
-# Mapping of argument names to configuration overrides
-CONFIG_OVERRIDE_MAPPING = {
-    'token': 'token',
-    'shard_id': 'shard_id',
-    'shard_count': 'shard_count',
-    'max_reconnects': 'max_reconnects',
-    'log_level': 'log_level',
-    'manhole': 'manhole_enable',
-    'manhole_bind': 'manhole_bind',
-    'encoder': 'encoder',
-}
 log = logging.getLogger(__name__)
 
 
@@ -40,6 +28,7 @@ def disco_main():
     :class:`Client`
         A new Client from the provided command line arguments
     """
+    from disco.cli import CONFIG_OVERRIDE_MAPPING
     from disco.client import Client, ClientConfig
     from disco.bot import Bot, BotConfig
     from disco.util.logging import setup_logging, LOG_FORMAT
@@ -52,26 +41,22 @@ def disco_main():
         print("Sudo access may be required to keep youtube-dl up to date.")
         if (any("voice" in plug for plug in bot.config.disco.plugin) or
                 any("voice" in plug for plug in bot.config.disco.bot.plugins)):
+            path = [
+                "sudo",
+                sys.executable,
+                pip[0],
+                "install",
+                "--upgrade",
+                "youtube-dl",
+            ]
             try:
-                subprocess.call([
-                    "sudo",
-                    sys.executable,
-                    pip[0],
-                    "install",
-                    "--upgrade",
-                    "youtube-dl",
-                ])
+                subprocess.call(path)
             except FileNotFoundError as e:
                 if e.filename == "sudo":
-                    subprocess.call([
-                        sys.executable,
-                        pip[0],
-                        "install",
-                        "--upgrade",
-                        "youtube-dl",
-                    ])
+                    path.pop(0)
+                    subprocess.call(path)
                 else:
-                    raise e
+                    log.warning(f"Failed to update/install yt-dl {e}")
     else:
         print(f"System {sys.platform} may not be supported, "
               "Linux is suggested or pip isn't installed.")
@@ -79,7 +64,7 @@ def disco_main():
     # Create the base configuration object
     config = ClientConfig(args.to_dict())
 
-    for arg_key, config_key in six.iteritems(CONFIG_OVERRIDE_MAPPING):
+    for arg_key, config_key in CONFIG_OVERRIDE_MAPPING.items():
         if getattr(args, arg_key) is not None:
             setattr(config, config_key, getattr(args, arg_key))
 
@@ -106,17 +91,10 @@ def disco_main():
     # Build out client object
     client = Client(config)
 
-    # If applicable, build the bot and load plugins
-    bot = None
-    if args.run_bot or hasattr(config, 'bot'):
-        bot_config = BotConfig(args.bot.to_dict())
-        if not hasattr(bot_config, 'plugins'):
-            bot_config.plugins = args.plugin
-        else:
-            bot_config.plugins += args.plugin
-
-        bot = Bot(client, bot_config)
-    return (bot or client)
+    bot_config = BotConfig(args.bot.to_dict())
+    bot_config.plugins += args.plugin
+    return Bot(client, bot_config)
+    
 
 
 if __name__ == '__main__':

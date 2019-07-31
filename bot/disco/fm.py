@@ -15,7 +15,7 @@ from bot.base import bot
 from bot.util.misc import (
     api_loop, AT_to_id, get_dict_item,
     redact, user_regex as discord_regex,
-    exception_channels, time_since
+    exception_webhooks, time_since
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
@@ -146,12 +146,13 @@ class fmPlugin(Plugin):
         data = [alias for alias in target.aliases
                 if alias.guild_id == event.guild.id]
         if data:
-            user = event.guild.get_member(target.user_id)
-            embed = bot.generic_embed_values(
-                title={"title": f"{user.name}'s aliases "
-                       f"in {event.guild.name}"},
-                non_inlines={str(index + 1): alias.alias for
-                             index, alias in enumerate(data)},
+            member = event.guild.get_member(target.user_id)
+            embed, _ = self.generic_user_data(
+                target.user_id,
+                title_template=f"{member.name}'s aliases in {event.guild.name}",
+                fields=[{"name": str(index + 1), "value": alias.alias,
+                         "inline": False} for index, alias in enumerate(data)],
+                #  thumbnail={"url": member.user.avatar_url},
             )
             api_loop(
                 event.channel.send_message,
@@ -176,20 +177,16 @@ class fmPlugin(Plugin):
                 response = f"Unknown error occured {code}."
                 log.warning(f"Failed to get artist error: {artist}")
             return api_loop(event.channel.send_message, response)
-        inline = {
-            "Listeners": artist_info["stats"]["listeners"],
-            "Play Count": artist_info["stats"]["playcount"],
-            "On-Tour": str(bool(artist_info["ontour"])),
-            "skip_inlines": "N/A",
-        }
-        title = {
-            "title": artist_info["name"],
-            "url": artist_info["url"],
-        }
-        artist_embed = bot.generic_embed_values(
-            title=title,
-            thumbnail=artist_info["image"][-1]["#text"],
-            inlines=inline,
+        fields = [
+            {"name": "Listeners", "value": artist_info["stats"]["listeners"]},
+            {"name": "Play Count", "value": artist_info["stats"]["playcount"]},
+            {"name": "On-Tour", "value": str(bool(artist_info["ontour"]))},
+        ]
+        artist_embed = bot.generic_embed(
+            title=artist_info["name"],
+            url=artist_info["url"],
+            thumbnail={"url": self.get_artwork(artist, "artist")},
+            fields=[{**field, "inline": False} for field in fields],
         )
         api_loop(event.channel.send_message, embed=artist_embed)
 
@@ -211,18 +208,18 @@ class fmPlugin(Plugin):
                  f"``{bot.prefix}friends add`` to catch some."),
             )
         else:
-            title = {
+            kwargs = {
                 "title": f"{event.author} friends.",
                 "url": (f"https://www.last.fm/user/{user.last_username}"
                         if user.last_username else None),
+                "thumbnail": {"url": event.author.avatar_url},
             }
             data = [f.slave_id for f in user.friends]
             content, embed = self.friends_search(
                 data,
                 0,
                 owner=event.author.id,
-                title=title,
-                thumbnail=event.author.avatar_url,
+                **kwargs,
             )
             reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(data) > 5 and not event.channel.is_dm:
@@ -232,9 +229,8 @@ class fmPlugin(Plugin):
                     data=data,
                     index=0,
                     amount=5,
-                    title=title,
-                    thumbnail=event.author.avatar_url,
                     edit_message=self.friends_search,
+                    **kwargs
                 )
                 bot.reactor.add_reactors(
                     self,
@@ -247,7 +243,7 @@ class fmPlugin(Plugin):
                 )
 
     def friends_search(self, data, index, owner, limit=5, **kwargs):
-        embed = bot.generic_embed_values(**kwargs)
+        embed = bot.generic_embed(**kwargs)
         if len(data) - index < limit:
             limit = len(data) - index
         for x in range(limit):
@@ -395,7 +391,7 @@ class fmPlugin(Plugin):
         )
         data = get_dict_item(data, data_map)
         if data:
-            thumbnail = self.get_artwork(search, artwork_type)
+            thumbnail = {"url": self.get_artwork(search, artwork_type)}
             content, embed = getattr(self, react)(
                 data,
                 0,
@@ -409,7 +405,7 @@ class fmPlugin(Plugin):
                     index=0,
                     amount=5,
                     edit_message=getattr(self, react),
-                    thumbnail=thumbnail
+                    thumbnail=thumbnail,
                 )
                 bot.reactor.add_reactors(
                     self,
@@ -771,7 +767,16 @@ class fmPlugin(Plugin):
             value_clamps=("playcount", ),
             seperator="\n",
         )
-        api_loop(message.edit, " ", embed=fm_embed)
+        try:
+            api_loop(
+                message.edit,
+                " ",
+                embed=fm_embed,
+            )
+        except APIException as e:
+            if e.code in (10003, 10005, 10008):
+                return
+            raise e
 
     def generic_user_data(
             self,
@@ -793,13 +798,10 @@ class fmPlugin(Plugin):
     #        "url": user_data["url"],
     #        "icon": user_data["image"][-1]["#text"],
     #    }
-        title = {
-            "title": title_template.format(user_data["name"]),
-            "url": user_data["url"],
-        }
-        fm_embed = bot.generic_embed_values(
-            title=title,
-            thumbnail=user_data["image"][-1]["#text"],
+        fm_embed = bot.generic_embed(
+            title=title_template.format(user_data["name"]),
+            url=user_data["url"],
+            thumbnail={"url": user_data["image"][-1]["#text"]},
             #  author=author,
             footer={"text": (f"{user_data['playcount']} scrobbles, "
                              f"registered:")},
@@ -866,12 +868,12 @@ class fmPlugin(Plugin):
                 )
                 raise fmEntryNotFound(self.cache[url].error)
             log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
-            if bot.config.exception_channels:
-                exception_channels(
+            if bot.config.exception_webhooks:
+                exception_webhooks(
                     self.client,
-                    bot.config.exception_channels,
-                    (f"Last.FM threw error {r.status_code}: "
-                     f"```{redact(r.text)[:1950]}```"),
+                    bot.config.exception_webhooks,
+                    content=(f"Last.FM threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
                 )
             try:
                 message = ": " + r.json().get("message", ".")
@@ -1089,7 +1091,7 @@ class fmPlugin(Plugin):
             url_index: list = ("url", ),
             limit: int = 5,
             **kwargs):  # "last"
-        non_inlines = dict()
+        fields = list()
         if len(data) - index < limit:
             limit = len(data) - index
         for x in range(limit):
@@ -1118,17 +1120,18 @@ class fmPlugin(Plugin):
                     ),
                     1,
                 )
-            non_inlines[current_name] = current_value
-        title = {
-            "title": f"{item} results.",
-            "url": get_dict_item(data[index], url_index),
-        }
+            fields.append({
+                "name": current_name,
+                "value": current_value,
+                "inline": False,
+            })
     #    if not kwargs.get("thumbnail"):
     #        name = data[index].get("name")
     #        kwargs["thumbnail"] = self.get_artwork(name, item)
-        return bot.generic_embed_values(
-            title=title,
-            non_inlines=non_inlines,
+        return bot.generic_embed(
+            title=f"{item} results.",
+            url=get_dict_item(data[index], url_index),
+            fields=fields,
             **kwargs,
         )
 
