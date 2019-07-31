@@ -56,7 +56,7 @@ def disco_main():
                     path.pop(0)
                     subprocess.call(path)
                 else:
-                    log.warning(f"Failed to update/install yt-dl {e}")
+                    print(f"Failed to update/install yt-dl {e}")
     else:
         print(f"System {sys.platform} may not be supported, "
               "Linux is suggested or pip isn't installed.")
@@ -94,7 +94,6 @@ def disco_main():
     bot_config = BotConfig(args.bot.to_dict())
     bot_config.plugins += args.plugin
     return Bot(client, bot_config)
-    
 
 
 if __name__ == '__main__':

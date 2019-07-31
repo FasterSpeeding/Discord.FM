@@ -9,7 +9,7 @@ import re
 from disco.api.http import APIException
 from disco.bot.command import CommandError
 from requests import Request
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError as requestsCError
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def api_loop(command, *args, log_50007=True, **kwargs):
             raise CommandError("Command timed out.")
         try:
             return command(*args, **kwargs)
-        except ConnectionError as e:
+        except requestsCError as e:
             log.info(f"Caught discord-request error {e}.")
         except APIException as e:
             if e.code == 50013:  # Missing permissions
@@ -145,19 +145,19 @@ def get(
 
 
 def exception_webhooks(client, exception_webhooks, **kwargs):
-    for id, token in exception_webhooks.copy().items():
+    for webhook_id, token in exception_webhooks.copy().items():
         try:
             api_loop(
                 client.api.webhooks_token_execute,
-                id,
+                webhook_id,
                 token,
                 data=kwargs,
             )
         except APIException as e:
             if e.code in (10015, 50001):
                 log.warning("Unable to send exception "
-                            f"webook - {id}: {e}")
-                del exception_webhooks[id]
+                            f"webook - {webhook_id}: {e}")
+                del exception_webhooks[webhook_id]
             else:
                 raise e
         except CommandError as e:

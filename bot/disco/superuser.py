@@ -424,7 +424,7 @@ class superuserPlugin(Plugin):
             )
 
     @Plugin.command("register error dm", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_register_error_dm_message(self, event):
+    def on_register_error_dm_command(self, event):
         """
         Used to register the current user's DMs for error messages.
         """
