@@ -48,7 +48,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
             raise e
 
 
-user_regex = re.compile(r"[<]?[@]?[!]?\d{18}[>]?")
+user_regex = re.compile(r"[<]?[@]?[!]?\d+[>]?")
 redact_regs = [
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
     re.compile(r"[-._\w\d]{20,140}"),

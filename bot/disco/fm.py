@@ -81,11 +81,13 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
-        if len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias:
+        if (len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias
+                or alias.isdigit()):
             return api_loop(
                 event.channel.send_message,
                 ("Aliasas are limited to 20 characters and cannot "
-                 "contain Discord's reserved special characters."),
+                 "contain Discord's reserved special characters or "
+                 "consist purely of numbers."),
             )
 
         data = bot.sql(bot.sql.aliases.query.filter(
