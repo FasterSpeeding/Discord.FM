@@ -83,7 +83,7 @@ class sql(custom_base):
     port: int = None
     username: str = None
     password: str = None
-    query: str = "?charset=utf8mb4"
+    query: dict = {"charset": "utf8mb4"}
     args: dict = None
 
 
