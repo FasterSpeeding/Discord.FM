@@ -1,5 +1,4 @@
 from datetime import datetime
-from time import time
 import logging
 import humanize
 import pytz
@@ -15,14 +14,14 @@ log = logging.getLogger(__name__)
 
 
 def api_loop(command, *args, log_50007=True, **kwargs):
-    init_time = time()
+    retries = 0
     while True:
-        if time() - init_time > 10:
+        if retries >= 5:
             raise CommandError("Command timed out.")
         try:
             return command(*args, **kwargs)
         except requestsCError as e:
-            log.info("Didn't catch error reset.")
+            log.info(f"Caught discord-request error {e}.")
         except APIException as e:
             if e.code == 50013:  # Missing permissions
                 raise CommandError("Missing permissions to respond "
@@ -30,6 +29,8 @@ def api_loop(command, *args, log_50007=True, **kwargs):
             if e.code != 50007 or log_50007:  # Cannot send messages to user
                 log.critical(f"Api exception: {e.code}: {e}")
             raise e
+        finally:
+            retries += 1
 
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
@@ -46,7 +47,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
             raise e
 
 
-user_regex = re.compile(r"[<]?[@]?[!]?\d{18}[>]?")
+user_regex = re.compile(r"[<]?[@]?[!]?\d+[>]?")
 redact_regs = [
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
     re.compile(r"[-._\w\d]{20,140}"),
@@ -142,28 +143,24 @@ def get(
                        f"unexpected error: {redact(r.text)}")
 
 
-def exception_channels(client, exception_channels, *args, **kwargs):
-    for guild, channel in exception_channels.copy().items():
-        guild_obj = client.state.guilds.get(int(guild), None)
-        if guild_obj is not None:
-            channel_obj = guild_obj.channels.get(channel, None)
-            if channel_obj is not None:
-                try:
-                    api_loop(channel_obj.send_message, *args, **kwargs)
-                except (APIException, CommandError) as e:
-                    if (isinstance(e, CommandError) or  # Missing permissions,
-                            e.code in (50013, 50001)):  # Missing access
-                        log.warning("Unable to post in exception "
-                                    f"channel - {channel}: {e}")
-                        del exception_channels[guild]
-                    else:
-                        raise e
+def exception_webhooks(client, exception_webhooks, **kwargs):
+    for webhook_id, token in exception_webhooks.copy().items():
+        try:
+            api_loop(
+                client.api.webhooks_token_execute,
+                webhook_id,
+                token,
+                data=kwargs,
+            )
+        except APIException as e:
+            if e.code in (10015, 50001):
+                log.warning("Unable to send exception "
+                            f"webook - {webhook_id}: {e}")
+                del exception_webhooks[webhook_id]
             else:
-                log.warning(f"Invalid exception channel: {channel}")
-                del exception_channels[guild]
-        else:
-            log.warning(f"Invalid exception guild: {guild}")
-            del exception_channels[guild]
+                raise e
+        except CommandError as e:
+            log.warning(e)
 
 
 def exception_dms(client, exception_dms, *args, **kwargs):

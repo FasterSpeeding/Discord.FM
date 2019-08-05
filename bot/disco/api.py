@@ -13,7 +13,7 @@ from requests import get, post
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, exception_channels, redact
+from bot.util.misc import api_loop, exception_webhooks, redact
 from bot.util.react import generic_react
 
 log = logging.getLogger(__name__)
@@ -68,23 +68,38 @@ class ApiPlugin(Plugin):
 
         if not lyrics:
             content = sanitize(content, escape_codeblocks=True)
-            return api_loop(
-                first_message.edit,
-                f"No Lyrics found for ``{content}``",
-            )
+            try:
+                return api_loop(
+                    first_message.edit,
+                    f"No Lyrics found for ``{content}``",
+                )
+            except APIException as e:
+                if e.code in (10003, 10004, 10008):
+                    return
+                raise e
 
         if len(lyrics) > 46300:
-            return first_message.edit("I doubt that's a song.")
+            try:
+                return first_message.edit("I doubt that's a song.")
+            except APIException as e:
+                if e.code in (10003, 10005, 10008):
+                    return
+                raise e
         footer = {
             "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
+            "icon_url": event.author.get_avatar_url(size=32),
         }
-        lyrics_embed = bot.generic_embed_values(
-            title={"title": title},
+        lyrics_embed = bot.generic_embed(
+            title=title,
             footer=footer,
             timestamp=event.msg.timestamp.isoformat(),
         )
-        first_message.delete()
+        try:
+            first_message.delete()
+        except APIException as e:
+            if e.code in (10003, 10004, 10008):
+                return
+            raise e
         responses = 0
         limit = limit if limit is not None else 3
         while lyrics and responses < limit:
@@ -206,12 +221,12 @@ class ApiPlugin(Plugin):
                 )
         else:
             log.warning(r.text)
-            if bot.config.exception_channels:
-                exception_channels(
+            if bot.config.exception_webhooks:
+                exception_webhooks(
                     self.client,
-                    bot.config.exception_channels,
-                    (f"Spotify threw error {r.status_code}: "
-                     f"```{redact(r.text)[:1950]}```"),
+                    bot.config.exception_webhooks,
+                    content=(f"Spotify threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
                 )
             api_loop(
                 event.channel.send_message,
@@ -233,12 +248,12 @@ class ApiPlugin(Plugin):
         )
         if r.status_code != 200:
             log.warning(redact(str(r.text)))
-            if bot.config.exception_channels:
-                exception_channels(
+            if bot.config.exception_webhooks:
+                exception_webhooks(
                     self.client,
-                    bot.config.exception_channels,
-                    (f"Spotify OAUTH threw error {r.status_code}: "
-                     f"```{redact(r.text)[:1950]}```"),
+                    bot.config.exception_webhooks,
+                    content=(f"Spotify OAUTH threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
                 )
             raise CommandError(
                 f"Error code {r.status_code} returned by oauth flow"
@@ -323,12 +338,12 @@ class ApiPlugin(Plugin):
                 api_loop(event.channel.send_message, "Video not found.")
         else:
             log.warning(r.text)
-            if bot.config.exception_channels:
-                exception_channels(
+            if bot.config.exception_webhooks:
+                exception_webhooks(
                     self.client,
-                    bot.config.exception_channels,
-                    (f"Youtube threw error {r.status_code}: "
-                     f"```{redact(r.text)[:1950]}```"),
+                    bot.config.exception_webhooks,
+                    content=(f"Youtube threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
                 )
             api_loop(
                 event.channel.send_message,

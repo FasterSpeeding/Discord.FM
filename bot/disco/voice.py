@@ -1,4 +1,5 @@
 from decimal import Decimal
+from operator import itemgetter
 from random import shuffle
 from time import sleep, time
 from uuid import uuid4
@@ -18,7 +19,7 @@ from youtube_dl.utils import DownloadError
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, exception_channels
+from bot.util.misc import api_loop, exception_webhooks
 
 log = logging.getLogger(__name__)
 
@@ -294,10 +295,10 @@ class MusicPlugin(Plugin):
             yt_data = self.get_ytdl_values(youtubedl_object.info)
         except DownloadError as e:
             if "yt-dl.org" in str(e):
-                exception_channels(
+                exception_webhooks(
                     self.client,
-                    bot.config.exception_channels,
-                    "Youtube-DL Error: ```" + str(e)[:1950] + "```",
+                    bot.config.exception_webhooks,
+                    content="Youtube-DL Error: ```" + str(e)[:1950] + "```",
                 )
                 user_out = ("Unable to fetch video: ``"
                             f"{str(e.__context__)[:150]}``")
@@ -371,10 +372,10 @@ class MusicPlugin(Plugin):
                     yt_data = self.get_ytdl_values(ytdl_object.info)
                 except DownloadError as e:
                     if "yt-dl.org" in str(e):
-                        exception_channels(
+                        exception_webhooks(
                             self.client,
-                            bot.config.exception_channels,
-                            "YT-DL Error: ```" + str(e)[:1950] + "```",
+                            bot.config.exception_webhooks,
+                            content="YT-DL Error: ```" + str(e)[:1950] + "```",
                         )
                         del self.cool_down["playlist"][event.guild.id]
                         return api_loop(
@@ -534,24 +535,29 @@ class MusicPlugin(Plugin):
             else:
                 api_loop(event.channel.send_message, "Invalid index input.")
         else:
-            matched_list = dict()
+            matched_list = list()
             queue = player.queue
             for item in queue:
                 ratio = partial_ratio(item.metadata["title"], index)
                 if ratio >= 70:
-                    key = f"#{queue.index(item)+1} ({ratio}% match)"
-                    matched_list[key] = item.metadata["title"]
+                    matched_list.append({
+                        "name": f"#{queue.index(item)+1} ({ratio}% match)",
+                        "value": item.metadata["title"],
+                        "inline": False,
+                        "sort": index,
+                    })
             if matched_list:
+                matched_list.sort(key=itemgetter("sort"), reverse=True)
+                for field in matched_list:
+                    field.pop("sort")
                 footer = {
                     "text": f"Requested by {event.author}",
                     "img": event.author.get_avatar_url(size=32),
                 }
-                embed = bot.generic_embed_values(
-                    title={"title": "Queue search results"},
+                embed = bot.generic_embed(
+                    title="Queue search results",
                     footer=footer,
-                    non_inlines={
-                        k: matched_list[k] for k in list(matched_list)[-25:]
-                    },
+                    fields=matched_list[:25],
                     timestamp=event.msg.timestamp.isoformat(),
                 )
                 api_loop(event.channel.send_message, embed=embed)
@@ -671,11 +677,11 @@ class psuedo_queue(object):
                     piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                     self.player.queue.append(piped)
                 except AttributeError as e:
-                    exception_channels(
+                    exception_webhooks(
                         self.bot.client,
-                        bot.config.exception_channels,
-                        (f"{self.id} - Error loading audio: ```"
-                         + str(e)[:1950] + "```"),
+                        bot.config.exception_webhooks,
+                        content=(f"{self.id} - Error loading audio: ```"
+                                 + str(e)[:1950] + "```"),
                     )
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
                         log.warning(e)
@@ -687,10 +693,10 @@ class psuedo_queue(object):
                 # except MemoryErrors as e:
                 except Exception as e:
                     log.exception(e)
-                    exception_channels(
+                    exception_webhooks(
                         self.bot.client,
-                        bot.config.exception_channels,
-                        "Voice error: ```" + str(e)[:1950] + "```",
+                        bot.config.exception_webhooks,
+                        content="Voice error: ```" + str(e)[:1950] + "```",
                     )
                 else:
                     self.waiting = True
@@ -704,11 +710,11 @@ class psuedo_queue(object):
                 piped = self.queue[0].pipe(BufferedOpusEncoderPlayable)
                 self.player.queue.append(piped)
             except AttributeError as e:
-                exception_channels(
+                exception_webhooks(
                     self.bot.client,
-                    bot.config.exception_channels,
-                    (f"{self.id} - Error loading audio: ```"
-                     + str(e)[:1950] + "```"),
+                    bot.config.exception_webhooks,
+                    content=(f"{self.id} - Error loading audio: ```"
+                             + str(e)[:1950] + "```"),
                 )
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)
@@ -718,10 +724,10 @@ class psuedo_queue(object):
                 raise e
             #    except MemoryErrors as e:
             except Exception as e:
-                exception_channels(
+                exception_webhooks(
                     self.bot.client,
-                    bot.config.exception_channels,
-                    "Voice error: ```" + str(e)[:1950] + "```",
+                    bot.config.exception_webhooks,
+                    content="Voice error: ```" + str(e)[:1950] + "```",
                 )
                 log.exception(e)
             else:
