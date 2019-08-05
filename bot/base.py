@@ -141,7 +141,7 @@ class config(custom_base):
     exception_dms: list = []
     exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
-    monitor_usage: bool = False
+    monitor_usage: int = None
     whitelist: list = []
     blacklist: list = []
     uservetos: list = []

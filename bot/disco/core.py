@@ -47,7 +47,7 @@ class CorePlugin(Plugin):
                 os.makedirs("data/status/")
             self.register_schedule(
                 self.log_stats,
-                60,
+                bot.config.monitor_usage,
                 repeat=True,
                 init=False,
             )
