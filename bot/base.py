@@ -141,12 +141,11 @@ class config(custom_base):
     exception_dms: list = []
     exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
-    support_invite: str = None
     monitor_usage: bool = False
-    vote_link: str = None
     whitelist: list = []
     blacklist: list = []
     uservetos: list = []
+    about_links: dict = {}
     api: api = api()
     disco: disco = disco()
     sql: sql = sql()

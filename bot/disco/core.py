@@ -51,6 +51,8 @@ class CorePlugin(Plugin):
                 repeat=True,
                 init=False,
             )
+        if "Github repo" not in bot.config.about_links:
+            bot.config.about_links["Github repo"] = __GIT__
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -271,39 +273,12 @@ class CorePlugin(Plugin):
     @Plugin.command("invite", metadata={"help": "miscellaneous"})
     def on_invite_command(self, event):
         """
-        Get a bot invite link from me.
-        This command will send the author a bot invite link in a DM.
+        Get a link to invite me to a guild.
         """
         api_loop(
             event.channel.send_message,
             ("https://discordapp.com/oauth2/authorize?client_id="
              f"{self.state.me.id}&scope=bot&permissions={104197184}"),
-        )
-
-    @Plugin.command("vote", metadata={"help": "miscellaneous"})
-    def on_vote_command(self, event):
-        """
-        Get a link to upvote this bot on a bot listing site.
-        """
-        if not bot.config.vote_link:
-            return api_loop(
-                event.channel.send_message,
-                "No vote link is currently setup."
-            )
-
-        api_loop(
-            event.channel.send_message,
-            f"You can upvote me at {bot.config.vote_link}",
-        )
-
-    @Plugin.command("git", metadata={"help": "miscellaneous"})
-    def on_git_command(self, event):
-        """
-        Get a link to this bot's github repo.
-        """
-        api_loop(
-            event.channel.send_message,
-            f"You can find me at {__GIT__}",
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -354,24 +329,11 @@ class CorePlugin(Plugin):
                 f"Prefix changed to ``{prefix}``",
             )
 
-    @Plugin.command("support", metadata={"help": "miscellaneous"})
-    def on_support_command(self, event):
-        """
-        Get Support server invite.
-        """
-        if not bot.config.support_invite:
-            return api_loop(
-                event.channel.send_message,
-                "No support server is currently setup.",
-            )
-
-        api_loop(
-            event.channel.send_message,
-            f"To join my support server, use {bot.config.support_invite}",
-        )
-
-    @Plugin.command("_instance")
+    @Plugin.command("about", metadata={"help": "miscellaneous"})
     def on_info_command(self, event):
+        """
+        Get information about this bot's instance.
+        """
         shard_id = self.bot.client.config.shard_id
         shard_count = self.bot.client.config.shard_count
         author = {
@@ -382,6 +344,9 @@ class CorePlugin(Plugin):
         start_date = datetime.fromtimestamp(self.process.create_time())
         uptime = datetime.now() - start_date
         uptime = ":".join(str(uptime).split(":")[:2])
+        description = ""
+        for name, link in bot.config.about_links.items():
+            description += f"[{name}]({link})\n"
 
         member_count = 0
         for guild in self.client.state.guilds.copy().values():
@@ -415,9 +380,9 @@ class CorePlugin(Plugin):
             ("Members", (f"{member_count} total\n"
                          f"{len(self.client.state.users)} unique" + online)),
             ("Channels", (f"{len(self.client.state.channels)} total\n"
-                         f"{voice_count} voice\n{text_count} text\n"
-                         f"{len(self.client.state.dms)} open "
-                         f"DMs\n{other_count} other")),
+                          f"{voice_count} voice\n{text_count} text\n"
+                          f"{len(self.client.state.dms)} open "
+                          f"DMs\n{other_count} other")),
         )
         footer = {
             "text": f"Made with Disco v{DISCO_VERSION}",
@@ -425,6 +390,7 @@ class CorePlugin(Plugin):
         }
         embed = bot.generic_embed(
             author=author,
+            description=description,
             fields=[{"name": field[0], "value": field[1], "inline": True}
                     for field in fields],
             footer=footer,

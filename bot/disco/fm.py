@@ -151,7 +151,8 @@ class fmPlugin(Plugin):
             member = event.guild.get_member(target.user_id)
             embed, _ = self.generic_user_data(
                 target.user_id,
-                title_template=f"{member.name}'s aliases in {event.guild.name}",
+                title_template=(f"{member.name}'s aliases "
+                                f"in {event.guild.name}"),
                 fields=[{"name": str(index + 1), "value": alias.alias,
                          "inline": False} for index, alias in enumerate(data)],
                 #  thumbnail={"url": member.user.avatar_url},

@@ -5,7 +5,7 @@ import textwrap
 
 from disco.api.http import APIException
 from disco.bot import Plugin
-from disco.bot.command import CommandLevels
+from disco.bot.command import CommandError, CommandLevels
 from disco.util.logging import logging
 from requests import get
 
@@ -404,12 +404,16 @@ class superuserPlugin(Plugin):
 
         #  create webhook
         try:
-            webhook = event.channel.create_webhook(
+            webhook = api_loop(
+                event.channel.create_webhook,
                 self.state.me.username,
                 avatar,
             )
-        except APIException as e:
-            event.channel.send_message(f"Unable to make webhook: ```{e.msg}```")
+        except (APIException, CommandError) as e:
+            api_loop(
+                event.channel.send_message,
+                f"Unable to make webhook: ```{e.msg}```",
+            )
         else:
             #  save webhook to config
             config = bot.get_config()

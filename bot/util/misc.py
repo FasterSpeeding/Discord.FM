@@ -1,5 +1,4 @@
 from datetime import datetime
-from time import time
 import logging
 import humanize
 import pytz
