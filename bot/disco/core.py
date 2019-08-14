@@ -1,7 +1,9 @@
 from datetime import datetime
 from time import time
 from traceback import extract_stack
+import os
 import psutil
+import csv
 
 
 from disco import VERSION as DISCO_VERSION
@@ -18,7 +20,7 @@ from disco.util.logging import logging
 from bot import __GIT__
 from bot.base import bot
 from bot.util.misc import (
-    api_loop, dm_default_send, exception_channels,
+    api_loop, dm_default_send, exception_webhooks,
     exception_dms, redact
 )
 
@@ -40,6 +42,17 @@ class CorePlugin(Plugin):
             log.critical("Failed to load guild data from SQL "
                          "servers, they're probably down.")
             log.exception(e.original_exception)
+        if bot.config.monitor_usage:
+            if not os.path.exists("data/status/"):
+                os.makedirs("data/status/")
+            self.register_schedule(
+                self.log_stats,
+                60,
+                repeat=True,
+                init=False,
+            )
+        if "Github repo" not in bot.config.about_links:
+            bot.config.about_links["Github repo"] = __GIT__
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
@@ -234,12 +247,9 @@ class CorePlugin(Plugin):
                     for trigger in command_obj.triggers:
                         triggers_formatted += f"**{trigger}** | "
                     triggers_formatted = triggers_formatted[:-3] + "):"
-                    title = {
-                        "title": (f"{bot.prefix}{triggers_formatted}{args} "
-                                  f"a command in the {array_name} module."),
-                    }
-                    embed = bot.generic_embed_values(
-                        title=title,
+                    embed = bot.generic_embed(
+                        title=(f"{bot.prefix}{triggers_formatted}{args} "
+                               f"a command in the {array_name} module."),
                         description=docstring,
                     )
                     dm_default_send(event, channel, embed=embed)
@@ -263,39 +273,12 @@ class CorePlugin(Plugin):
     @Plugin.command("invite", metadata={"help": "miscellaneous"})
     def on_invite_command(self, event):
         """
-        Get a bot invite link from me.
-        This command will send the author a bot invite link in a DM.
+        Get a link to invite me to a guild.
         """
         api_loop(
             event.channel.send_message,
             ("https://discordapp.com/oauth2/authorize?client_id="
              f"{self.state.me.id}&scope=bot&permissions={104197184}"),
-        )
-
-    @Plugin.command("vote", metadata={"help": "miscellaneous"})
-    def on_vote_command(self, event):
-        """
-        Get a link to upvote this bot on a bot listing site.
-        """
-        if not bot.config.vote_link:
-            return api_loop(
-                event.channel.send_message,
-                "No vote link is currently setup."
-            )
-
-        api_loop(
-            event.channel.send_message,
-            f"You can upvote me at {bot.config.vote_link}",
-        )
-
-    @Plugin.command("git", metadata={"help": "miscellaneous"})
-    def on_git_command(self, event):
-        """
-        Get a link to this bot's github repo.
-        """
-        api_loop(
-            event.channel.send_message,
-            f"You can find me at {__GIT__}",
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -329,50 +312,41 @@ class CorePlugin(Plugin):
                      "permission to use this command."),
                 )
 
+            new_prefix = prefix if prefix != bot.prefix else None
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            if guild is None:
+            if guild is None and new_prefix is not None:
                 guild = bot.sql.guilds(
                     guild_id=event.guild.id,
-                    prefix=prefix,
+                    prefix=new_prefix,
                 )
                 bot.sql.add(guild)
-            else:
-                guild.prefix = prefix
-            bot.sql.flush()
+            elif guild:
+                guild.prefix = new_prefix
+                bot.sql.flush()
             bot.prefix_cache[event.guild.id] = prefix
             api_loop(
                 event.channel.send_message,
                 f"Prefix changed to ``{prefix}``",
             )
 
-    @Plugin.command("support", metadata={"help": "miscellaneous"})
-    def on_support_command(self, event):
-        """
-        Get Support server invite.
-        """
-        if not bot.config.support_invite:
-            return api_loop(
-                event.channel.send_message,
-                "No support server is currently setup.",
-            )
-
-        api_loop(
-            event.channel.send_message,
-            f"To join my support server, use {bot.config.support_invite}",
-        )
-
-    @Plugin.command("_instance")
+    @Plugin.command("about", metadata={"help": "miscellaneous"})
     def on_info_command(self, event):
+        """
+        Get information about this bot's instance.
+        """
         shard_id = self.bot.client.config.shard_id
         shard_count = self.bot.client.config.shard_count
         author = {
             "name": (f"Discord.FM: Shard {shard_id} of {shard_count}"),
-            "icon": self.client.state.me.get_avatar_url(),
+            "icon_url": self.client.state.me.get_avatar_url(),
             "url": __GIT__,
         }
         start_date = datetime.fromtimestamp(self.process.create_time())
         uptime = datetime.now() - start_date
         uptime = ":".join(str(uptime).split(":")[:2])
+        description = ""
+        for name, link in bot.config.about_links.items():
+            description += f"[{name}]({link})\n"
 
         member_count = 0
         for guild in self.client.state.guilds.copy().values():
@@ -397,29 +371,51 @@ class CorePlugin(Plugin):
         cpu_usage = self.process.cpu_percent() / psutil.cpu_count()
         memory_percent = self.process.memory_percent()
 
-        inline_fields = {
-            "Guilds": str(len(self.client.state.guilds)),
-            "Voice Instances": str(len(self.client.state.voice_clients)),
-            "Uptime": uptime,
-            "Process": (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
-                        f"\n{cpu_usage:.2f}% CPU"),
-            "Members": (f"{member_count} total\n"
-                        f"{len(self.client.state.users)} unique" + online),
-            "Channels": (f"{len(self.client.state.channels)} total\n"
-                         f"{voice_count} voice\n{text_count} text\n"
-                         f"{len(self.client.state.dms)} open "
-                         f"DMs\n{other_count} other"),
-        }
+        fields = (
+            ("Guilds", str(len(self.client.state.guilds))),
+            ("Voice Instances", str(len(self.client.state.voice_clients))),
+            ("Uptime", uptime),
+            ("Process", (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
+                         f"\n{cpu_usage:.2f}% CPU")),
+            ("Members", (f"{member_count} total\n"
+                         f"{len(self.client.state.users)} unique" + online)),
+            ("Channels", (f"{len(self.client.state.channels)} total\n"
+                          f"{voice_count} voice\n{text_count} text\n"
+                          f"{len(self.client.state.dms)} open "
+                          f"DMs\n{other_count} other")),
+        )
         footer = {
             "text": f"Made with Disco v{DISCO_VERSION}",
-            "img": "http://i.imgur.com/5BFecvA.png",
+            "icon_url": "http://i.imgur.com/5BFecvA.png",
         }
-        embed = bot.generic_embed_values(
+        embed = bot.generic_embed(
             author=author,
-            inlines=inline_fields,
+            description=description,
+            fields=[{"name": field[0], "value": field[1], "inline": True}
+                    for field in fields],
             footer=footer,
         )
         api_loop(event.channel.send_message, embed=embed)
+
+    def log_stats(self):
+        start_date = datetime.fromtimestamp(self.process.create_time())
+        uptime = datetime.now() - start_date
+        fields = {
+            "Uptime": uptime.seconds,
+            "Voice Instances": len(self.client.state.voice_clients),
+            "Memory usage": self.process.memory_full_info().uss / 1024**2,
+            "Memory %": self.process.memory_percent(),
+            "CPU %": self.process.cpu_percent() / psutil.cpu_count(),
+            "Guild count": len(self.client.state.guilds),
+            "Members": len(self.client.state.users),
+            "Channels": len(self.client.state.channels),
+        }
+        try:
+            with open(f"data/status/{start_date}.csv", mode="a+") as csv_file:
+                writer = csv.DictWriter(csv_file, fieldnames=fields.keys())
+                writer.writerow(fields)
+        except (IOError, OSError) as e:
+            log.warning(f"Unable to log status to csv: {e}")
 
     def custom_prefix(self, event):
         if event.author.bot:
@@ -488,13 +484,13 @@ class CorePlugin(Plugin):
                 footer_text = f"{event.guild.name}: {event.guild.id}"
             author = {
                 "name": str(event.author),
-                "icon": event.author.get_avatar_url(size=32),
+                "icon_url ": event.author.get_avatar_url(size=32),
                 "url": ("https://discordapp.com/"
                         f"users/{event.author.id}"),
             }
-            embed = bot.generic_embed_values(
+            embed = bot.generic_embed(
                 author=author,
-                title={"title": f"Exception occured: {strerror}"},
+                title=f"Exception occured: {strerror}"[:256],
                 description=event.message.content,
                 footer={"text": footer_text},
                 timestamp=event.message.timestamp.isoformat(),
@@ -504,16 +500,16 @@ class CorePlugin(Plugin):
                 bot.config.exception_dms,
                 embed=embed,
             )
-        if bot.config.exception_channels:
-            embed = bot.generic_embed_values(
-                title={"title": f"Exception occured: {strerror}"},
-                description=extract_stack(),
+        if bot.config.exception_webhooks:
+            embed = bot.generic_embed(
+                title=f"Exception occured: {strerror}"[:256],
+                description=extract_stack()[:2048],
                 footer={"text": event.message.content},
             )
-            exception_channels(
+            exception_webhooks(
                 self.client,
-                bot.config.exception_channels,
-                embed=embed,
+                bot.config.exception_webhooks,
+                embeds=[embed.to_dict(), ],
             )
         log.exception(exception)
 
