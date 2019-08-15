@@ -3,7 +3,6 @@ import logging
 
 
 from disco.api.http import APIException
-from disco.types.message import Message
 from disco.types.permissions import Permissions
 
 

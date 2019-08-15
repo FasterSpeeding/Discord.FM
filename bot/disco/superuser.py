@@ -362,7 +362,7 @@ class superuserPlugin(Plugin):
 
     @Plugin.command("permission check",
                     metadata={"help": "miscellaneous", "perms": bot.config.default_permissions})
-    def on_permission_check(self, event):    
+    def on_permission_check(self, event):
         """
         Check if this bot has the right permissions in this channel.
         """
