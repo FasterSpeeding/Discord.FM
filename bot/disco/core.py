@@ -191,7 +191,8 @@ class CorePlugin(Plugin):
                 if message_id in bot.reactor.events:
                     del bot.reactor.events[message_id]
 
-    @Plugin.command("help", "[command:str...]", metadata={"help": "miscellaneous"})
+    @Plugin.command("help", "[command:str...]",
+                    metadata={"help": "miscellaneous", "perms": Permissions.EMBED_LINKS})
     def on_help_command(self, event, command=None):
         """
         Get a list of the commands in a module.
@@ -277,8 +278,8 @@ class CorePlugin(Plugin):
         """
         api_loop(
             event.channel.send_message,
-            ("https://discordapp.com/oauth2/authorize?client_id="
-             f"{self.state.me.id}&scope=bot&permissions={104197184}"),
+            (f"https://discordapp.com/oauth2/authorize?client_id={self.state.me.id}"
+             f"&scope=bot&permissions={bot.config.default_permissions}"),
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -329,7 +330,7 @@ class CorePlugin(Plugin):
                 f"Prefix changed to ``{prefix}``",
             )
 
-    @Plugin.command("about", metadata={"help": "miscellaneous"})
+    @Plugin.command("about", metadata={"help": "miscellaneous", "perms": Permissions.EMBED_LINKS})
     def on_info_command(self, event):
         """
         Get information about this bot's instance.
@@ -418,28 +419,42 @@ class CorePlugin(Plugin):
             log.warning(f"Unable to log status to csv: {e}")
 
     def custom_prefix(self, event):
-        if event.author.bot:
+        def get_prefix(self, event):
+            if event.channel.is_dm:
+                return bot.prefix
+
+            prefix = bot.prefix_cache.get(event.guild_id, None)
+            if prefix is not None:
+                return prefix
+
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
+            #  Cache default value if missing sql entry to avoid further lookups.
+            if not guild or guild.prefix is None:
+                bot.prefix_cache[event.guild_id] = bot.prefix
+                return bot.prefix
+
+            bot.prefix_cache[event.guild_id] = guild.prefix
+            return guild.prefix
+
+        def get_missing_perms(permissionValue, self_perms):
+            perms = [perm for perm in Permissions._attrs.values()
+                     if (permissionValue & perm.value) == perm.value]
+            return [perm.name for perm in perms
+                    if not self_perms.can(perm.value)]
+
+        #  Block all commands if missing permissions.
+        self_perms = event.channel.get_permissions(self.bot.client.state.me)
+        if event.author.bot or not self_perms.can(Permissions.SEND_MESSAGES):
             return
 
+        #  Enforce guild whitelist
         if ((event.channel.is_dm and "DM" in bot.config.blacklist or
              bot.config.whitelist and event.guild_id not in bot.config.whitelist
              or bot.config.blacklist and event.guild_id in bot.config.blacklist)
                 and event.author.id not in bot.config.uservetos):
             return
 
-        if event.channel.is_dm:
-            prefix = bot.prefix
-        else:
-            prefix = bot.prefix_cache.get(event.guild_id, None)
-            if prefix is None:
-                guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
-                if not guild or guild.prefix is None:
-                    prefix = bot.prefix
-                    bot.prefix_cache[event.guild_id] = prefix
-                else:
-                    prefix = guild.prefix
-                    bot.prefix_cache[event.guild_id] = guild.prefix
-
+        prefix = get_prefix(event)
         require_mention = self.bot.config.commands_require_mention
         if not event.message.content.startswith(prefix):
             require_mention = True
@@ -458,6 +473,15 @@ class CorePlugin(Plugin):
         for command, match in commands:
             if not self.bot.check_command_permissions(command, event):
                 continue
+            permissionValue = command.metadata.get("metadata", None)
+            if PermissionValue:
+                PermissionValue = embed.get("perms", None)
+            if perms and not self_perms.can(PermissionValue):
+                return api_loop(
+                    event.channel.send_message,
+                    ("Missing permission(s) required to respond: " +
+                     f"``{get_missing_perms(PermissionValue, self_perms)}``"),
+                )
             try:
                 command.plugin.execute(CommandEvent(command, event, match))
             except Exception as e:

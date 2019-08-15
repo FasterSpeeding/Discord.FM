@@ -4,6 +4,7 @@ import logging
 
 from disco.api.http import APIException
 from disco.types.message import Message
+from disco.types.permissions import Permissions
 
 
 from bot.util.misc import api_loop
@@ -105,48 +106,45 @@ class reactors_handler(object):
             reaction,
             author_id,
             *args,
-            channel_id=None,
             time=30):
-        if isinstance(message, Message):
-            message_id = message.id
-            channel_id = message.channel.id
-        else:
-            if not channel_id:
-                raise AssertionError()
-            message_id = int(message)
-        for reactor in args:
-            self.add_argument(
-                message_id,
-                reactor,
-                reaction,
-                author_id,
-            )
-        for reactor in args:
-            try:
-                client.client.api.channels_messages_reactions_create(
-                    channel_id,
-                    message_id,
+        permissions = message.channel.get_permissions(self.bot.client.state.me)
+        if permissions.can(Permissions.ADD_REACTIONS):
+            for reactor in args:
+                self.add_argument(
+                    message.id,
                     reactor,
+                    reaction,
+                    author_id,
                 )
-            except APIException as e:
-                if e.code == 10008:  # Unknown message
-                    if message_id in self.events:
-                        del self.events[message_id]
-                    return
+            for reactor in args:
+                try:
+                    client.client.api.channels_messages_reactions_create(
+                        message.channel.id,
+                        message.id,
+                        reactor,
+                    )
+                except APIException as e:
+                    if e.code == 10008:  # Unknown message
+                        if message.id in self.events:
+                            del self.events[message.id]
+                        return
 
-                if e.code not in (50001, 50013):  # access, permission error
+                    if e.code in (50001, 50013):  # access, permission error
+                        break
+
                     raise e
         sleep(time)
-        if message_id in self.events:
-            del self.events[message_id]
-            try:
-                client.client.api.channels_messages_reactions_delete_all(
-                    channel_id,
-                    message_id,
-                )
-            except APIException as e:
-                if e.code not in (10008, 50001, 50013):
-                    raise e  # Unknown message, missing access, permission
+        if message.id in self.events:
+            del self.events[message.id]
+            if permissions.can(Permissions.MANAGE_MESSAGES):
+                try:
+                    client.client.api.channels_messages_reactions_delete_all(
+                        message.channel.id,
+                        message.id,
+                    )
+                except APIException as e:
+                    if e.code not in (10008, 50001, 50013):
+                        raise e  # Unknown message, missing access, permission
 
 
 def generic_react(

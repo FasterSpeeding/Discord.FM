@@ -6,6 +6,7 @@ import textwrap
 from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
+from disco.types.permissions import Permissions
 from disco.util.logging import logging
 from requests import get
 
@@ -358,6 +359,17 @@ class superuserPlugin(Plugin):
             payload,
         )
 
+    @Plugin.command("permission check",
+                    metadata={"help": "miscellaneous", "perms": bot.config.default_permissions})
+    def on_permission_check(self, event):    
+        """
+        Used to check if this bot has the permissions it needs to function properly.
+        """
+        api_loop(
+            event.channel.send_message,
+            "Looks good to me :thumbsup:",
+        )
+
     @Plugin.command("ping", metadata={"help": "miscellaneous"})
     def on_ping_command(self, event):
         """
@@ -387,7 +399,8 @@ class superuserPlugin(Plugin):
             message,
         )
 
-    @Plugin.command("register error webhook", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("register error webhook", level=CommandLevels.OWNER,
+                    metadata={"help": "owner", "perms": Permissions.MANAGE_WEBHOOKS})
     def on_register_error_webhook_command(self, event):
         """
         Used to register a webhook in the current channel for error messages.
@@ -412,7 +425,7 @@ class superuserPlugin(Plugin):
         except (APIException, CommandError) as e:
             api_loop(
                 event.channel.send_message,
-                f"Unable to make webhook: ```{e.msg}```",
+                f"Unable to make webhook: ``{e.msg}``",
             )
         else:
             #  save webhook to config

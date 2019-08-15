@@ -10,6 +10,7 @@ import threading
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
 from disco.types.base import Unset
+from disco.types.permissions import Permissions
 from disco.util.logging import logging
 from disco.voice.playable import YoutubeDLInput, BufferedOpusEncoderPlayable
 from disco.voice.player import Player
@@ -498,7 +499,8 @@ class MusicPlugin(Plugin):
              f"using ``{ytdata['source']}``.")
         )
 
-    @Plugin.command("queue", "[index:str...]", aliases=["queued"], metadata={"help": "voice"})
+    @Plugin.command("queue", "[index:str...]", aliases=["queued"],
+                    metadata={"help": "voice", "perms": Permissions.EMBED_LINKS})
     def on_queued_command(self, event, index=None):
         """
         Get information about the queue (search, entry info or length).

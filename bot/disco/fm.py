@@ -5,6 +5,7 @@ import re
 
 from disco.bot import Plugin
 from disco.bot.command import CommandError
+from disco.types.permissions import Permissions
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from requests import get, Session, Request
@@ -90,6 +91,7 @@ class fmPlugin(Plugin):
                  "consist purely of numbers."),
             )
 
+        alias = alias.lower()
         data = bot.sql(bot.sql.aliases.query.filter(
             bot.sql.aliases.guild_id == event.guild.id,
             bot.sql.aliases.alias.like(alias),
@@ -131,7 +133,8 @@ class fmPlugin(Plugin):
                      "already taken in this guild."),
                 )
 
-    @Plugin.command("list", "[target:str...]", group="alias", metadata={"help": "last.fm"})
+    @Plugin.command("list", "[target:str...]", group="alias",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_alias_list_command(self, event, target=None):
         """
         Used to get a list of a user's aliases in a guild.
@@ -167,7 +170,8 @@ class fmPlugin(Plugin):
                 "User doesn't have any aliases set in this guild.",
             )
 
-    @Plugin.command("artist info", "<artist:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("artist info", "<artist:str...>",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_artist_command(self, event, artist):
         """
         Get an artist's info on Last.fm.
@@ -197,7 +201,8 @@ class fmPlugin(Plugin):
     def on_chart_command(self, event):
         raise CommandError("Not implemented yet, coming soon.")
 
-    @Plugin.command("friends", metadata={"help": "last.fm"})
+    @Plugin.command("friends",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_friends_command(self, event):
         """
         Get a list of what your friends have recently listened to.
@@ -345,37 +350,52 @@ class fmPlugin(Plugin):
         "artists",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "artist.search",
             "data_map": ("results", "artistmatches", "artist"),
             "artwork_type": "Artist",
-            "react": "search_artist_react",
+            "react": "search_embed",
             "meta_type": "artist",
+            "names": (("name", ), ),
+            "name_format": "[{}]: {}",
+            "values": (("listeners", ), ("mbid", )),
+            "value_format": "Listeners: {}, MBID: {}",
+            "item": "Artist",
         })
     @Plugin.command(
         "albums",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "album.search",
             "data_map": ("results", "albummatches", "album"),
             "artwork_type": "Album",
-            "react": "search_album_react",
+            "react": "search_embed",
             "meta_type": "album",
+            "names": (("artist", ), ("name", )),
+            "name_format": "[{}]: {} - {}",
+            "values": (("mbid", ), ),
+            "value_format": "MBID: {}",
+            "item": "Album",
         })
     @Plugin.command(
         "tracks",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "track.search",
             "data_map": ("results", "trackmatches", "track"),
             "artwork_type": "Track",
-            "react": "search_track_react",
+            "react": "search_embed",
             "meta_type": "track",
+            "names": (("artist", ), ("name", )),
+            "name_format": "[{}]: {} - {}",
+            "values": (("listeners", ), ("mbid", )),
+            "value_format": "Listeners: {}, MBID: {}",
+            "item": "Track",
         })
     def on_search_command(
             self,
@@ -385,9 +405,10 @@ class fmPlugin(Plugin):
             data_map,
             artwork_type,
             react,
-            meta_type):
+            meta_type,
+            **kwargs):
         """
-        Search for an item on Last.fm.
+        Search for a {meta_type} on Last.fm.
         """
         data = self.get_cached({
                 "method": method,
@@ -402,6 +423,7 @@ class fmPlugin(Plugin):
                 data,
                 0,
                 thumbnail=thumbnail,
+                **kwargs,
             )
             reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(data) > 5 and not event.channel.is_dm:
@@ -412,6 +434,7 @@ class fmPlugin(Plugin):
                     amount=5,
                     edit_message=getattr(self, react),
                     thumbnail=thumbnail,
+                    **kwargs,
                 )
                 bot.reactor.add_reactors(
                     self,
@@ -425,94 +448,52 @@ class fmPlugin(Plugin):
         else:
             api_loop(event.channel.send_message, f"No {meta_type}s found.")
 
-    def search_artist_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data=data,
-            index=index,
-            names=(("name", ), ),
-            name_format="[{}]: {}",
-            values=(("listeners", ), ("mbid", )),
-            value_format="Listeners: {}, MBID: {}",
-            item="Artist",
-            **kwargs
-        )
-
-    def search_album_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data,
-            index=index,
-            names=(("artist", ), ("name", )),
-            name_format="[{}]: {} - {}",
-            values=(("mbid", ), ),
-            value_format="MBID: {}",
-            item="Album",
-            **kwargs,
-        )
-
-    def search_track_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data,
-            index=index,
-            names=(("artist", ), ("name", )),
-            name_format="[{}]: {} - {}",
-            values=(("listeners", ), ("mbid", )),
-            value_format="Listeners: {}, MBID: {}",
-            item="Track",
-            **kwargs,
-        )
-
     @Plugin.command(
         "albums",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettopalbums",
             "meta_type": "album",
-            "secondary_kwargs": {
-                "data_map": ("topalbums", "album"),
-                "name_format": ("playcount", "raw:plays"),
-                "value_format": ("artist", ),
-                "artist_map": ("artist", "name"),
-            }
+            "data_map": ("topalbums", "album"),
+            "name_format": ("playcount", "raw:plays"),
+            "value_format": ("artist", ),
+            "artist_map": ("artist", "name"),
         })
     @Plugin.command(
         "artists",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettopartists",
             "meta_type": "artist",
-            "secondary_kwargs": {
-                "data_map": ("topartists", "artist"),
-                "name_format": ("playcount", "raw:plays"),
-            }
+            "data_map": ("topartists", "artist"),
+            "name_format": ("playcount", "raw:plays"),
         })
     @Plugin.command(
         "tracks",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettoptracks",
             "meta_type": "track",
-            "secondary_kwargs": {
-                "data_map": ("toptracks", "track"),
-                "name_format": ("playcount", "raw:plays"),
-                "value_format": ("artist", ),
-                "artist_map": ("artist", "name"),
-            }
+            "data_map": ("toptracks", "track"),
+            "name_format": ("playcount", "raw:plays"),
+            "value_format": ("artist", ),
+            "artist_map": ("artist", "name"),
         })
     def on_top_items_command(
             self,
             event,
             method,
             meta_type,
-            secondary_kwargs,
-            username=None):
+            username=None,
+            **kwargs):
         """
-        Get an account's top played item.
+        Get an account's top played {meta_type}s.
         This command will default to the author.
         But will target another user if their ID, @ or nickname is passed.
         Returns the top items of the target user's Last.FM account.
@@ -538,7 +519,7 @@ class fmPlugin(Plugin):
             params=params,
             limit=limit,
             singular=False,
-            **secondary_kwargs,
+            **kwargs,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
@@ -627,7 +608,8 @@ class fmPlugin(Plugin):
                      f"set to ``{username}``."),
                 )
 
-    @Plugin.command("user", "[username:str...]", aliases=["np", "now"], metadata={"help": "last.fm"})
+    @Plugin.command("user", "[username:str...]", aliases=["np", "now"],
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_command(self, event, username=None):
         """
         Get basic stats from last.fm account.
@@ -659,7 +641,8 @@ class fmPlugin(Plugin):
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("recent", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("recent", "[username:str...]",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_recent_command(self, event, username=None):
         """
         Get an account's recent tracks.
@@ -693,7 +676,8 @@ class fmPlugin(Plugin):
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("full", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("full", "[username:str...]",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_full_command(self, event, username=None):
         """
         Get stats from a last.fm account.
@@ -1056,7 +1040,7 @@ class fmPlugin(Plugin):
             if channel and not channel.is_dm:
                 data = bot.sql(bot.sql.aliases.query.filter(
                     bot.sql.aliases.guild_id == channel.guild_id,
-                    bot.sql.aliases.alias.like(target)
+                    bot.sql.aliases.alias.like(target.lower())
                     ).first)
                 if data:
                     user_id = data.user_id
@@ -1140,7 +1124,7 @@ class fmPlugin(Plugin):
     #    if not kwargs.get("thumbnail"):
     #        name = data[index].get("name")
     #        kwargs["thumbnail"] = self.get_artwork(name, item)
-        return bot.generic_embed(
+        return None, bot.generic_embed(
             title=f"{item} results.",
             url=get_dict_item(data[index], url_index),
             fields=fields,

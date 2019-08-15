@@ -40,7 +40,8 @@ class ApiPlugin(Plugin):
         bot.unload_help_embeds(self)
         super(ApiPlugin, self).unload(ctx)
 
-    @Plugin.command("lyrics", "<content:str...>", metadata={"help": "api"})
+    @Plugin.command("lyrics", "<content:str...>",
+                    metadata={"help": "api", "perms": Permissions.EMBED_LINKS})
     def on_lyrics_command(self, event, content):
         """
         Return lyrics for a song.
