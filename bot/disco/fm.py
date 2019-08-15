@@ -355,7 +355,6 @@ class fmPlugin(Plugin):
             "method": "artist.search",
             "data_map": ("results", "artistmatches", "artist"),
             "artwork_type": "Artist",
-            "react": "search_embed",
             "meta_type": "artist",
             "names": (("name", ), ),
             "name_format": "[{}]: {}",
@@ -372,7 +371,6 @@ class fmPlugin(Plugin):
             "method": "album.search",
             "data_map": ("results", "albummatches", "album"),
             "artwork_type": "Album",
-            "react": "search_embed",
             "meta_type": "album",
             "names": (("artist", ), ("name", )),
             "name_format": "[{}]: {} - {}",
@@ -389,7 +387,6 @@ class fmPlugin(Plugin):
             "method": "track.search",
             "data_map": ("results", "trackmatches", "track"),
             "artwork_type": "Track",
-            "react": "search_embed",
             "meta_type": "track",
             "names": (("artist", ), ("name", )),
             "name_format": "[{}]: {} - {}",
@@ -404,8 +401,8 @@ class fmPlugin(Plugin):
             method,
             data_map,
             artwork_type,
-            react,
             meta_type,
+            react="search_embed",
             **kwargs):
         """
         Search for a {meta_type} on Last.fm.

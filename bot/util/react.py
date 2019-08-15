@@ -107,15 +107,15 @@ class reactors_handler(object):
             author_id,
             *args,
             time=30):
-        permissions = message.channel.get_permissions(self.bot.client.state.me)
-        if permissions.can(Permissions.ADD_REACTIONS):
-            for reactor in args:
-                self.add_argument(
-                    message.id,
-                    reactor,
-                    reaction,
-                    author_id,
-                )
+        for reactor in args:
+            self.add_argument(
+                message.id,
+                reactor,
+                reaction,
+                author_id,
+            )
+        self_perms = message.channel.get_permissions(client.bot.client.state.me)
+        if self_perms.can(int(Permissions.ADD_REACTIONS)):
             for reactor in args:
                 try:
                     client.client.api.channels_messages_reactions_create(
@@ -136,7 +136,7 @@ class reactors_handler(object):
         sleep(time)
         if message.id in self.events:
             del self.events[message.id]
-            if permissions.can(Permissions.MANAGE_MESSAGES):
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
                     client.client.api.channels_messages_reactions_delete_all(
                         message.channel.id,

@@ -140,14 +140,20 @@ class CorePlugin(Plugin):
         """
         React to message reaction add.
         """
-        if not trigger_event.guild.get_member(trigger_event.user_id).user.bot:
-            message_id = trigger_event.message_id
-            event = bot.reactor.events.get(message_id, None)
-            if event and time() < event.end_time and event.conditions:
-                for condition in event.conditions:
-                    if (not condition.auth or
-                            trigger_event.user_id == condition.owner_id and
-                            trigger_event.emoji.name == condition.reactor):
+        if trigger_event.guild.get_member(trigger_event.user_id).user.bot:
+            return
+
+        message_id = trigger_event.message_id
+        event = bot.reactor.events.get(message_id, None)
+        if event and time() < event.end_time and event.conditions:
+            for condition in event.conditions:
+                if (not condition.auth or
+                        trigger_event.user_id == condition.owner_id and
+                        trigger_event.emoji.name == condition.reactor):
+                    self_perms = trigger_event.channel.get_permissions(
+                        self.bot.client.state.me,
+                    )
+                    if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                         try:
                             self.client.api.channels_messages_reactions_delete(
                                 channel=event.channel_id,
@@ -163,23 +169,27 @@ class CorePlugin(Plugin):
 
                             if e.code != 50013:  # Missing permissions
                                 raise e
-                        index = condition.function(
-                            client=self,
-                            message_id=message_id,
-                            channel_id=event.channel_id,
-                            reactor=condition.reactor,
-                            **event.kwargs,
-                            **condition.kwargs,
-                        )
-                        if (index is not None and
-                                message_id in bot.reactor.events):
-                            bot.reactor.events[
-                                message_id
-                            ].kwargs["index"] = index
-                            event.end_time += 10
-                        elif message_id in bot.reactor.events:
-                            del bot.reactor.events[message_id]
-            elif event and time() > event.end_time:
+                    index = condition.function(
+                        client=self,
+                        message_id=message_id,
+                        channel_id=event.channel_id,
+                        reactor=condition.reactor,
+                        **event.kwargs,
+                        **condition.kwargs,
+                    )
+                    if (index is not None and
+                            message_id in bot.reactor.events):
+                        bot.reactor.events[
+                            message_id
+                        ].kwargs["index"] = index
+                        event.end_time += 10
+                    elif message_id in bot.reactor.events:
+                        del bot.reactor.events[message_id]
+        elif event and time() > event.end_time:
+            self_perms = trigger_event.channel.get_permissions(
+                self.bot.client.state.me,
+            )
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
                         channel=event.channel_id,
@@ -188,8 +198,8 @@ class CorePlugin(Plugin):
                 except APIException as e:  # Unknown message, Missing permissions
                     if e.code not in (10008, 50013):
                         raise e
-                if message_id in bot.reactor.events:
-                    del bot.reactor.events[message_id]
+            if message_id in bot.reactor.events:
+                del bot.reactor.events[message_id]
 
     @Plugin.command("help", "[command:str...]",
                     metadata={"help": "miscellaneous", "perms": Permissions.EMBED_LINKS})
@@ -419,7 +429,7 @@ class CorePlugin(Plugin):
             log.warning(f"Unable to log status to csv: {e}")
 
     def custom_prefix(self, event):
-        def get_prefix(self, event):
+        def get_prefix(event):
             if event.channel.is_dm:
                 return bot.prefix
 
@@ -436,15 +446,13 @@ class CorePlugin(Plugin):
             bot.prefix_cache[event.guild_id] = guild.prefix
             return guild.prefix
 
-        def get_missing_perms(permissionValue, self_perms):
+        def get_missing_perms(PermissionValue, self_perms):
             perms = [perm for perm in Permissions._attrs.values()
-                     if (permissionValue & perm.value) == perm.value]
+                     if (int(PermissionValue) & perm.value) == perm.value]
             return [perm.name for perm in perms
                     if not self_perms.can(perm.value)]
 
-        #  Block all commands if missing permissions.
-        self_perms = event.channel.get_permissions(self.bot.client.state.me)
-        if event.author.bot or not self_perms.can(Permissions.SEND_MESSAGES):
+        if event.author.bot:
             return
 
         #  Enforce guild whitelist
@@ -473,15 +481,19 @@ class CorePlugin(Plugin):
         for command, match in commands:
             if not self.bot.check_command_permissions(command, event):
                 continue
-            permissionValue = command.metadata.get("metadata", None)
-            if PermissionValue:
-                PermissionValue = embed.get("perms", None)
-            if perms and not self_perms.can(PermissionValue):
-                return api_loop(
-                    event.channel.send_message,
-                    ("Missing permission(s) required to respond: " +
-                     f"``{get_missing_perms(PermissionValue, self_perms)}``"),
+            if not event.channel.is_dm:
+                self_perms = event.channel.get_permissions(
+                    self.bot.client.state.me,
                 )
+                PermissionValue = command.metadata.get("metadata", None)
+                if PermissionValue:
+                    PermissionValue = PermissionValue.get("perms", None)
+                if PermissionValue and not self_perms.can(int(PermissionValue)):
+                    return api_loop(
+                        event.channel.send_message,
+                        ("Missing permission(s) required to respond: `" +
+                         f"{get_missing_perms(PermissionValue, self_perms)}`"),
+                    )
             try:
                 command.plugin.execute(CommandEvent(command, event, match))
             except Exception as e:

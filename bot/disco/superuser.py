@@ -206,7 +206,8 @@ class superuserPlugin(Plugin):
         self.status.update_presence(payload)
         api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("eval", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("eval", level=CommandLevels.OWNER,
+                   metadata={"help": "owner", "perms": Permissions.ATTACH_FILES})
     def on_eval_command(self, event):
         """
         Used to evaluate raw python3 code.
@@ -363,7 +364,7 @@ class superuserPlugin(Plugin):
                     metadata={"help": "miscellaneous", "perms": bot.config.default_permissions})
     def on_permission_check(self, event):    
         """
-        Used to check if this bot has the permissions it needs to function properly.
+        Check if this bot has the right permissions in this channel.
         """
         api_loop(
             event.channel.send_message,
