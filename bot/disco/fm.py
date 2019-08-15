@@ -144,7 +144,7 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
-        target = self.get_user_info(target or event.author.id, event.guild.id)
+        target = self.get_user_info(target or event.author.id, event.channel)
         data = [alias for alias in target.aliases
                 if alias.guild_id == event.guild.id]
         if data:
@@ -307,7 +307,7 @@ class fmPlugin(Plugin):
         and won't target users that haven't setup a last.fm username.
         This command accepts either a Discord user ID or @user
         """
-        target = self.get_user_info(target, event.guild.id)
+        target = self.get_user_info(target, event.channel)
         if not target.last_username:
             raise CommandError("Target user doesn't have "
                                "a Last.FM account setup.")
@@ -319,6 +319,9 @@ class fmPlugin(Plugin):
             user = bot.sql.users(user_id=event.author.id)
             bot.sql.add(user)
         if not any([f.slave_id == target for f in user.friends]):
+            if (event.channel.is_dm or not
+                    event.channel.guild.get_member(target)):
+                raise CommandError("User not found in this guild.")
             friendship = bot.sql.friends(
                 master_id=event.author.id,
                 slave_id=target,
@@ -520,7 +523,7 @@ class fmPlugin(Plugin):
         period = self.get_period(event.author.id)
         fm_embed, lastname = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
             description=(f"Top {meta_type}s "
                          f"{self.beautify_period(period, over=True)}."),
         )
@@ -636,7 +639,7 @@ class fmPlugin(Plugin):
             username = event.author.id
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
         )
         params = {
             "method": "user.getrecenttracks",
@@ -669,7 +672,7 @@ class fmPlugin(Plugin):
             username = event.author.id
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
             description="Recent tracks",
         )
         params = {
@@ -702,7 +705,7 @@ class fmPlugin(Plugin):
             username = event.author.id
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
         )
         message = api_loop(event.channel.send_message, "Searching for user.")
         period = self.get_period(event.author.id)
@@ -785,9 +788,9 @@ class fmPlugin(Plugin):
             self,
             username,
             title_template="{}",
-            guild=None,
+            channel=None,
             **kwargs):
-        user_data = self.get_user(username, guild)
+        user_data = self.get_user(username, channel)
         username = user_data["name"]
         if username is None:
             raise CommandError("User should set a last.fm account "
@@ -991,18 +994,24 @@ class fmPlugin(Plugin):
                 inline=inline,
             )
 
-    def get_user(self, username: str, guild: int = None):
+    def get_user(self, username: str, channel = None):
         username = str(username)
+        result = None
         try:
-            result = self.get_user_info(username, guild=guild).last_username
+            result = self.get_user_info(username, channel)
         except CommandError:
             pass
         else:
-            if result:
-                username = result
+            if result.last_username:
+                username = result.last_username
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
                                    f"using ``{bot.prefix}username``")
+        if result and channel and ((channel.is_dm and result.user_id !=
+                                    list(channel.recipients.keys())[0]) or
+                (not channel.is_dm and not
+                 channel.guild.get_member(result.user_id))):
+            raise CommandError("User not found in this guild.")
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):
@@ -1016,7 +1025,7 @@ class fmPlugin(Plugin):
         raise CommandError("Invalid username format.")
 
     @staticmethod
-    def get_user_info(target: str, guild: int = None):
+    def get_user_info(target: str, channel = None):
         """
         Used to get a Discord user's information from the SQL server.
 
@@ -1042,25 +1051,25 @@ class fmPlugin(Plugin):
                 The guild id used for alias lookup.
         """
         try:
-            target = AT_to_id(target)
+            user_id = AT_to_id(target)
         except CommandError as e:
-            if guild is not None and not isinstance(guild, bool):
+            if channel and not channel.is_dm:
                 data = bot.sql(bot.sql.aliases.query.filter(
-                    bot.sql.aliases.guild_id == guild,
+                    bot.sql.aliases.guild_id == channel.guild_id,
                     bot.sql.aliases.alias.like(target)
                     ).first)
                 if data:
-                    target = data.user_id
+                    user_id = data.user_id
                 else:
                     raise CommandError("User alias not found.")
-            elif isinstance(guild, bool):
+            elif channel:
                 raise CommandError("User aliases aren't enabled in DMs.")
             else:
                 raise e
-        data = bot.sql(bot.sql.users.query.get, target)
+        data = bot.sql(bot.sql.users.query.get, user_id)
         if data is None:
             return bot.sql.users(
-                user_id=target,
+                user_id=user_id,
             )
         return data
 
