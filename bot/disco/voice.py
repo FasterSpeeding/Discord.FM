@@ -3,7 +3,7 @@ from disco.util.logging import logging
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, exception_channels
+from bot.util.misc import api_loop
 
 log = logging.getLogger(__name__)
 
