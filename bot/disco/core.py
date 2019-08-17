@@ -213,9 +213,9 @@ class CorePlugin(Plugin):
             channel = api_loop(event.author.open_dm)
         else:
             channel = event.channel
-        if command is None:  # _attrs may not work in 1.0.0
+        if command is None:
             for name, embed in bot.help_embeds.copy().items():
-                level = CommandLevels._attrs.get(name, None)
+                level = getattr(CommandLevels, name.upper(), None)
                 if level and level > self.bot.get_level(event.author):
                     continue
                 dm_default_send(event, channel, embed=embed)
@@ -227,7 +227,7 @@ class CorePlugin(Plugin):
             # Check for module match.
             embed = bot.help_embeds.get(command.lower())
             if embed:
-                level = CommandLevels._attrs.get(command.lower(), None)
+                level = getattr(CommandLevels, command.upper(), None)
                 if not level or level <= self.bot.get_level(event.author):
                     return dm_default_send(event, channel, embed=embed)
 
@@ -244,9 +244,7 @@ class CorePlugin(Plugin):
                     args = " " + command_obj.raw_args + "; "
                 else:
                     args = str()
-                array_name = command_obj.metadata.get("metadata", None)
-                if array_name:
-                    array_name = array_name.get("help", None)
+                array_name = command_obj.metadata.get("help", None)
                 if array_name:
                     docstring = command_obj.get_docstring()
                     docstring = docstring.replace("    ", "").strip("\n")
@@ -447,10 +445,11 @@ class CorePlugin(Plugin):
             return guild.prefix
 
         def get_missing_perms(PermissionValue, self_perms):
-            perms = [perm for perm in Permissions._attrs.values()
-                     if (int(PermissionValue) & perm.value) == perm.value]
-            return [perm.name for perm in perms
-                    if not self_perms.can(perm.value)]
+            perms = [perm for perm in Permissions.keys()
+                     if (int(PermissionValue) & getattr(Permissions, perm))
+                     == getattr(Permissions, perm)]
+            return [perm for perm in perms
+                    if not self_perms.can(getattr(Permissions, perm))]
 
         if event.author.bot:
             return
@@ -485,9 +484,7 @@ class CorePlugin(Plugin):
                 self_perms = event.channel.get_permissions(
                     self.bot.client.state.me,
                 )
-                PermissionValue = command.metadata.get("metadata", None)
-                if PermissionValue:
-                    PermissionValue = PermissionValue.get("perms", None)
+                PermissionValue = command.metadata.get("perms", None)
                 if PermissionValue and not self_perms.can(int(PermissionValue)):
                     return api_loop(
                         event.channel.send_message,

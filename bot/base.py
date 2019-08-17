@@ -243,9 +243,7 @@ class bot_frame:
             self.help_embeds = dict()
         arrays_to_sort = list()
         for command in bot.commands:
-            array_name = command.metadata.get("metadata", None)
-            if array_name:
-                array_name = array_name.get("help", None)
+            array_name = command.metadata.get("help", None)
             doc_string = command.get_docstring().strip("\n").strip("    ")
             if array_name:
                 if not doc_string:
@@ -279,9 +277,7 @@ class bot_frame:
 
     def unload_help_embeds(self, bot):
         for command in bot.commands:
-            array_name = command.metadata.get("metadata", None)
-            if array_name:
-                array_name = array_name.get("help", None)
+            array_name = command.metadata.get("help", None)
             if array_name:
                 if command.raw_args is not None:
                     args = command.raw_args
