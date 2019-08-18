@@ -81,10 +81,7 @@ class CorePlugin(Plugin):
     def on_guild_join(self, event):
         if isinstance(event.unavailable, Unset):
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            if not guild or guild.prefix is None:
-                bot.prefix_cache[event.guild.id] = bot.prefix
-            else:
-                bot.prefix_cache[event.guild.id] = guild.prefix
+            bot.prefix_cache[event.guild.id] = guild.prefix if guild else None
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
@@ -334,7 +331,7 @@ class CorePlugin(Plugin):
             elif guild:
                 guild.prefix = new_prefix
                 bot.sql.flush()
-            bot.prefix_cache[event.guild.id] = prefix
+            bot.prefix_cache[event.guild.id] = new_prefix
             api_loop(
                 event.channel.send_message,
                 f"Prefix changed to ``{prefix}``",
@@ -433,18 +430,16 @@ class CorePlugin(Plugin):
             if event.channel.is_dm:
                 return bot.prefix
 
-            prefix = bot.prefix_cache.get(event.guild_id, None)
-            if prefix is not None:
-                return prefix
+            #  check prefix cache return default prefix if is None
+            prefix = bot.prefix_cache.get(event.guild_id, Unset)
+            if prefix is not Unset:
+                return bot.prefix if prefix is None else prefix
 
+
+            #  check sql and cache value returned or default
             guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
-            #  Cache default value if missing sql entry to avoid further lookups.
-            if not guild or guild.prefix is None:
-                bot.prefix_cache[event.guild_id] = bot.prefix
-                return bot.prefix
-
-            bot.prefix_cache[event.guild_id] = guild.prefix
-            return guild.prefix
+            bot.prefix_cache[event.guild_id] = guild.prefix if guild else None
+            return bot.prefix if not guild or guild.prefix is None else guild.prefix
 
         def get_missing_perms(PermissionValue, self_perms):
             perms = [perm for perm in Permissions._attrs.values()
