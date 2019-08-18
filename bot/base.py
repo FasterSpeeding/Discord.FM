@@ -110,12 +110,12 @@ class bot_data(custom_base):
     http_host: str = None
     http_port: int = None
     plugins: list = [
-        "bot.disco.superuser",
-        "bot.disco.core",
-        "bot.disco.fm",
-        "bot.disco.api",
-        "bot.disco.voice",
-        #  "bot.disco.discogs",
+        "bot.plugins.superuser",
+        "bot.plugins.core",
+        "bot.plugins.fm",
+        "bot.plugins.api",
+        "bot.plugins.voice",
+        #  "bot.plugins.discogs",
     ]
 
 
