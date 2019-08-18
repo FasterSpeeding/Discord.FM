@@ -212,7 +212,7 @@ class ApiPlugin(Plugin):
                     edit_message=self.spotify_react,
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,
@@ -327,7 +327,7 @@ class ApiPlugin(Plugin):
                         edit_message=self.youtube_react,
                     )
                     bot.reactor.add_reactors(
-                        self,
+                        self.client,
                         reply,
                         generic_react,
                         event.author.id,

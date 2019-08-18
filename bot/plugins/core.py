@@ -167,7 +167,7 @@ class CorePlugin(Plugin):
                             if e.code != 50013:  # Missing permissions
                                 raise e
                     index = condition.function(
-                        client=self,
+                        client=self.client,
                         message_id=message_id,
                         channel_id=event.channel_id,
                         reactor=condition.reactor,

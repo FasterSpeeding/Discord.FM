@@ -241,7 +241,7 @@ class fmPlugin(Plugin):
                     **kwargs
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,
@@ -434,7 +434,7 @@ class fmPlugin(Plugin):
                     **kwargs,
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,

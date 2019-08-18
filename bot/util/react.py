@@ -113,11 +113,11 @@ class reactors_handler(object):
                 reaction,
                 author_id,
             )
-        self_perms = message.channel.get_permissions(client.bot.client.state.me)
+        self_perms = message.channel.get_permissions(client.state.me)
         if self_perms.can(int(Permissions.ADD_REACTIONS)):
             for reactor in args:
                 try:
-                    client.client.api.channels_messages_reactions_create(
+                    client.api.channels_messages_reactions_create(
                         message.channel.id,
                         message.id,
                         reactor,
@@ -137,7 +137,7 @@ class reactors_handler(object):
             del self.events[message.id]
             if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
-                    client.client.api.channels_messages_reactions_delete_all(
+                    client.api.channels_messages_reactions_delete_all(
                         message.channel.id,
                         message.id,
                     )
@@ -176,7 +176,7 @@ def generic_react(
     if index is not None:
         content, embed = edit_message(data=data, index=index, **kwargs)
         api_loop(
-            client.client.api.channels_messages_modify,
+            client.api.channels_messages_modify,
             channel_id,
             message_id,
             content=content,
@@ -228,7 +228,7 @@ def right_shift(
 def end_event(client, message_id, channel_id, **kwargs):
     try:
         api_loop(
-            client.client.api.channels_messages_delete,
+            client.api.channels_messages_delete,
             channel_id,
             message_id,
         )
