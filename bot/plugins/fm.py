@@ -882,17 +882,17 @@ class fmPlugin(Plugin):
 
         @staticmethod
         def artist(data, artist_map, **kwargs):
-            try:
-                artist = get_dict_item(data, artist_map)
-            except (IndexError, KeyError):
+            artist = get_dict_item(data, artist_map)
+            if artist is None:
                 artist = "Unset"
             return f"{artist} -"
 
         @staticmethod
         def ago(data, time_map=("date", "uts"), **kwargs):
-            try:
-                delta = str(time_since(get_dict_item(data, time_map)))
-            except (IndexError, KeyError):
+            delta = get_dict_item(data, time_map)
+            if delta is not None:
+                delta = str(time_since(delta))
+            else:
                 delta = "Now"
             return delta.capitalize()
 
