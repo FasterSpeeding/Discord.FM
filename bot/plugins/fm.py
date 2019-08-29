@@ -980,7 +980,7 @@ class fmPlugin(Plugin):
                 inline=inline,
             )
 
-    def get_user(self, username: str, channel = None):
+    def get_user(self, username: str, channel=None):
         username = str(username)
         result = None
         try:
@@ -995,8 +995,8 @@ class fmPlugin(Plugin):
                                    f"using ``{bot.prefix}username``")
         if result and channel and ((channel.is_dm and result.user_id !=
                                     list(channel.recipients.keys())[0]) or
-                (not channel.is_dm and not
-                 channel.guild.get_member(result.user_id))):
+                                   (not channel.is_dm and not
+                                    channel.guild.get_member(result.user_id))):
             raise CommandError("User not found in this guild.")
         return self.get_last_account(username)["user"]
 
@@ -1011,7 +1011,7 @@ class fmPlugin(Plugin):
         raise CommandError("Invalid username format.")
 
     @staticmethod
-    def get_user_info(target: str, channel = None):
+    def get_user_info(target: str, channel=None):
         """
         Used to get a Discord user's information from the SQL server.
 

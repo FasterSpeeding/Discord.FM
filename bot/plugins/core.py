@@ -435,7 +435,6 @@ class CorePlugin(Plugin):
             if prefix is not Unset:
                 return bot.prefix if prefix is None else prefix
 
-
             #  check sql and cache value returned or default
             guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
             bot.prefix_cache[event.guild_id] = guild.prefix if guild else None

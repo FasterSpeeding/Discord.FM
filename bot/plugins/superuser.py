@@ -207,7 +207,7 @@ class superuserPlugin(Plugin):
         api_loop(event.channel.send_message, ":thumbsup:")
 
     @Plugin.command("eval", level=CommandLevels.OWNER,
-                   metadata={"help": "owner", "perms": Permissions.ATTACH_FILES})
+                    metadata={"help": "owner", "perms": Permissions.ATTACH_FILES})
     def on_eval_command(self, event):
         """
         Used to evaluate raw python3 code.
