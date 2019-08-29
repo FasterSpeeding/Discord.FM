@@ -935,7 +935,10 @@ class fmPlugin(Plugin):
             name = ""
             value = ""
             for index in range(limit):
-                position = data.get(index, None)
+                try:
+                    position = data[index]
+                except (IndexError, ValueError):
+                    position = None
                 if not position:
                     break
                 if not singular or not name:
@@ -998,8 +1001,8 @@ class fmPlugin(Plugin):
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
                                    f"using ``{bot.prefix}username``")
-        if result and channel and ((channel.is_dm and result.user_id !=
-                                    list(channel.recipients.keys())[0]) or
+        if result and channel and ((channel.is_dm and result.user_id not in
+                                    channel.recipients.keys()) or
                                    (not channel.is_dm and not
                                     channel.guild.get_member(result.user_id))):
             raise CommandError("User not found in this guild.")
