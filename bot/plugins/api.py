@@ -3,6 +3,7 @@ from time import time
 from urllib.parse import quote_plus
 
 
+from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError
 from disco.types.permissions import Permissions

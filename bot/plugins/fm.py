@@ -926,13 +926,18 @@ class fmPlugin(Plugin):
             end_value_map=("name", ),
             **kwargs):
         data = self.get_cached(params, url=url, cool_down=cool_down)
-        if len(get_dict_item(data, data_map)) < limit:
-            limit = len(get_dict_item(data, data_map))
+        data = get_dict_item(data, data_map)
+        if data and len(data) < limit:
+            limit = len(data)
+        elif not data:
+            limit = 0
         if limit != 0:
             name = ""
             value = ""
             for index in range(limit):
-                position = get_dict_item(data, data_map)[index]
+                position = data.get(index, None)
+                if not position:
+                    break
                 if not singular or not name:
                     for method in (name_format or ()):
                         function = getattr(
