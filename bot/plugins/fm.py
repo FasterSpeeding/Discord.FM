@@ -819,7 +819,7 @@ class fmPlugin(Plugin):
             self.expire = expire
             self.data = data
             self.error = error
-            
+
         def validity_check(self):
             return self.exists and not self.expired_check()
 
