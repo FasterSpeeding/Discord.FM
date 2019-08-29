@@ -199,7 +199,7 @@ class CorePlugin(Plugin):
                 del bot.reactor.events[message_id]
 
     @Plugin.command("help", "[command:str...]",
-                    metadata={"help": "miscellaneous", "perms": Permissions.EMBED_LINKS})
+                    metadata={"help": "miscellaneous"})  # , "perms": Permissions.EMBED_LINKS})
     def on_help_command(self, event, command=None):
         """
         Get a list of the commands in a module.
