@@ -66,7 +66,7 @@ class fmPlugin(Plugin):
     def purge_cache(self):
         log.debug("Purging cache.")
         for url, cache_obj in self.cache.copy().items():
-            if cache_obj.expire > time():
+            if cache_obj.expired_check():
                 del self.cache[url]
 
     @Plugin.command("add", "<alias:str...>", group="alias", metadata={"help": "last.fm"})
@@ -819,6 +819,12 @@ class fmPlugin(Plugin):
             self.expire = expire
             self.data = data
             self.error = error
+            
+        def validity_check(self):
+            return self.exists and not self.expired_check()
+
+        def expired_check(self):
+            return time() > self.expire
 
     def get_cached(
             self,
@@ -830,8 +836,7 @@ class fmPlugin(Plugin):
         params = {str(key): str(value) for key, value in params.items()}
         get = self.s.prepare_request(Request("GET", url, params=params))
         url = get.url
-        if (url not in self.cache or self.cache[url].exists and
-                time() >= self.cache[url].expire):
+        if url not in self.cache or not self.cache[url].expired_check():
             try:
                 r = self.s.send(get)
             except requestCError as e:
@@ -870,7 +875,7 @@ class fmPlugin(Plugin):
                 message = redact(message)
             raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
                                   f"unexpected HTTP status code{message}")
-        if self.cache[url].exists and time() <= self.cache[url].expire:
+        if self.cache[url].validity_check():
             return self.cache[url].data
         raise fmEntryNotFound(self.cache[url].error)
 
