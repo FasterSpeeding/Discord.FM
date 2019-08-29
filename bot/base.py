@@ -85,6 +85,7 @@ class sql(custom_base):
     password: str = None
     query: dict = {"charset": "utf8mb4"}
     args: dict = None
+    local_path: str = "data/data.db"
 
 
 class embed_values(custom_base):

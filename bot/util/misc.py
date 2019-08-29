@@ -112,7 +112,10 @@ def get_dict_item(data: dict, Dict_map: list):
     based off a list of indexs and keys.
     """
     for index in Dict_map:
-        data = data[index]
+        try:
+            data = data[index]
+        except (IndexError, KeyError):
+            return
     return data
 
 

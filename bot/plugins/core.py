@@ -473,6 +473,7 @@ class CorePlugin(Plugin):
         ))
         if not commands:
             return
+
         for command, match in commands:
             if not self.bot.check_command_permissions(command, event):
                 continue
