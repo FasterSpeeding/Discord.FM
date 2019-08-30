@@ -212,18 +212,20 @@ class superuserPlugin(Plugin):
         """
         Used to evaluate raw python3 code.
         The available classes are:
-        "bot", "state", "client", "event", "sql", "config" and "prefix_cache".
+        "bot", "client", "config", "event", "plugins",
+        "prefix_cache", "sql" and "state".
         To get an output, you have to assign the data to a variable
         with "out"/"output" being preferred over other variables.
         """
         ctx = {
             "bot": self.bot,
-            "state": self.bot.client.state,
             "client": self.bot.client,
-            "event": event,
-            "sql": bot.sql,
             "config": bot.config,
+            "event": event,
+            "plugins": self.bot.plugins,
             "prefix_cache": bot.prefix_cache,
+            "sql": bot.sql,
+            "state": self.bot.client.state,
         }
         response_block = "```python\n{}\n```"
         code = event.codeblock.replace("py\n", "").replace("python\n", "")
