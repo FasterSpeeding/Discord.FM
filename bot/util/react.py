@@ -128,8 +128,8 @@ class reactors_handler(object):
                             del self.events[message.id]
                         return
 
-                    if e.code in (50001, 50013):  # access, permission error
-                        break
+                    if e.code in (30010, 50001, 50013, 90001): #  max reacts, access
+                        break  # permission error, react blocked
 
                     raise e
         sleep(time)
