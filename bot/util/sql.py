@@ -191,6 +191,8 @@ class sql_instance:
         friends,
         aliases,
     )
+    autocommit = True
+    autoflush = True
     tables = {}
     session = None
     engine = None
@@ -270,6 +272,7 @@ class sql_instance:
 
     def commit(self):
         self(self.session.commit)
+        self.flush()
 
     def ssl_check(self):
         driver = self.session.connection().engine.driver
@@ -360,8 +363,8 @@ class sql_instance:
 
         session = scoped_session(
             sessionmaker(
-                autocommit=True,
-                autoflush=True,
+                autocommit=self.autocommit,
+                autoflush=self.autoflush,
                 bind=engine,
             ),
         )
