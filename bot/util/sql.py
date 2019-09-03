@@ -193,7 +193,6 @@ class sql_instance:
     )
     autocommit = True
     autoflush = True
-    tables = {}
     session = None
     engine = None
     _driver_ssl_checks = {  # starts from self.session.connection()
