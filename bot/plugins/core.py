@@ -10,7 +10,7 @@ from disco import VERSION as DISCO_VERSION
 from disco.bot import Plugin
 from disco.api.http import APIException
 from disco.bot.command import CommandError, CommandEvent, CommandLevels
-from disco.types.base import Unset
+from disco.types.base import UNSET
 from disco.types.channel import ChannelType
 from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
@@ -79,13 +79,13 @@ class CorePlugin(Plugin):
 
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
-        if isinstance(event.unavailable, Unset):
+        if event.unavailable is UNSET:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             bot.prefix_cache[event.guild.id] = guild.prefix if guild else None
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
-        if isinstance(event.unavailable, Unset):
+        if event.unavailable is UNSET:
             bot.prefix_cache.pop(event.id, None)
             guild = bot.sql(bot.sql.guilds.query.get, event.id)
             if guild:
@@ -431,8 +431,8 @@ class CorePlugin(Plugin):
                 return bot.prefix
 
             #  check prefix cache return default prefix if is None
-            prefix = bot.prefix_cache.get(event.guild_id, Unset)
-            if prefix is not Unset:
+            prefix = bot.prefix_cache.get(event.guild_id, UNSET)
+            if prefix is not UNSET:
                 return bot.prefix if prefix is None else prefix
 
             #  check sql and cache value returned or default
@@ -552,7 +552,7 @@ def event_channel_guild_check(self, event):
     Guild objects in Message Create Events at seemingly random intervals.
     """
     if ((not hasattr(event, "channel") or event.channel is None) and
-            not isinstance(event.guild_id, Unset)):
+            event.guild_id is not UNSET):
         guild = getattr(event, "guild", None)
         if guild is None:
             event.guild = self.client.state.guilds.get(
@@ -572,7 +572,7 @@ def event_channel_guild_check(self, event):
                 event.channel_id,
             )
     elif ((not hasattr(event, "channel") or event.channel is None) and
-            isinstance(event.guild_id, Unset)):
+            event.guild_id is UNSET):
         event.channel = api_loop(
             self.client.api.channels_get,
             event.message.channel_id,
