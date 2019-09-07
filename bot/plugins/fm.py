@@ -176,22 +176,33 @@ class fmPlugin(Plugin):
         """
         Get an artist's info on Last.fm.
         """
-        artist = self.get_artist(artist)
-        artist_info = artist.get("artist")
-        if not artist_info:
-            response = artist.get("message")
+        #  Make request
+        params = {"method": "artist.getinfo"}
+        if self.mbid_reg.fullmatch(artist):
+            params.update({"mbid": artist.lower()})
+        else:
+            params.update({"artist": artist.lower()})
+        response = self.get_cached(params, cool_down=3600, item="artist")
+
+        #  Check for error message.
+        artist_data = response.get("artist")
+        if not artist_data:
+            response = response.get("message")
             if not response:
-                response = f"Unknown error occured {code}."
+                response = "Unknown error occured."
                 log.warning(f"Failed to get artist error: {artist}")
             return api_loop(event.channel.send_message, response)
+        print(artist_data)
+        print(artist_data.get("mbid"))
+
         fields = [
-            {"name": "Listeners", "value": artist_info["stats"]["listeners"]},
-            {"name": "Play Count", "value": artist_info["stats"]["playcount"]},
-            {"name": "On-Tour", "value": str(bool(artist_info["ontour"]))},
+            {"name": "Listeners", "value": artist_data["stats"]["listeners"]},
+            {"name": "Play Count", "value": artist_data["stats"]["playcount"]},
+            {"name": "On-Tour", "value": str(bool(artist_data["ontour"]))},
         ]
         artist_embed = bot.generic_embed(
-            title=artist_info["name"],
-            url=artist_info["url"],
+            title=artist_data["name"],
+            url=artist_data["url"],
             thumbnail={"url": self.get_artwork(artist, "artist")},
             fields=[{**field, "inline": False} for field in fields],
         )
@@ -796,15 +807,6 @@ class fmPlugin(Plugin):
             **kwargs,
         )
         return fm_embed, user_data["name"]
-
-    def get_artist(self, artist: str):
-        params = {"method": "artist.getinfo"}
-        if self.mbid_reg.fullmatch(artist):
-            params.update({"mbid": artist.lower()})
-        else:
-            params.update({"artist": artist.lower()})
-        artist_data = self.get_cached(params, cool_down=3600, item="artist")
-        return artist_data
 
     class cached_object:
         __slots__ = (
