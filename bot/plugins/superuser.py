@@ -238,7 +238,7 @@ class superuserPlugin(Plugin):
             ctx["func"](ctx)
         except Exception as e:
             response = response_block.format(
-                (type(e).__name__ + ": " + str(e))[:1980]
+                (type(e).__name__ + ": " + str(e))
             )
         else:
             del ctx["results"]["ctx"]
