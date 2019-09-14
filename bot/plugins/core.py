@@ -137,7 +137,7 @@ class CorePlugin(Plugin):
         """
         React to message reaction add.
         """
-        if trigger_event.guild.get_member(trigger_event.user_id).user.bot:
+        if self.client.state.users.get(trigger_event.user_id).bot:
             return
 
         message_id = trigger_event.message_id
@@ -543,37 +543,3 @@ class CorePlugin(Plugin):
                 embeds=[embed.to_dict(), ],
             )
         log.exception(exception)
-
-
-def event_channel_guild_check(self, event):
-    """
-    Used to work around a bug with the etf encoder
-    where certain guilds will stop returning
-    Guild objects in Message Create Events at seemingly random intervals.
-    """
-    if ((not hasattr(event, "channel") or event.channel is None) and
-            event.guild_id is not UNSET):
-        guild = getattr(event, "guild", None)
-        if guild is None:
-            event.guild = self.client.state.guilds.get(
-                event.guild_id,
-                None,
-            )
-            if event.guild is None:
-                self.client.state.guilds[event.guild_id] = api_loop(
-                    self.client.api.guilds_get,
-                    event.guild_id,
-                )
-                event.guild = self.client.state.guilds[event.guild_id]
-        event.channel = event.guild.channels.get(event.channel_id, None)
-        if event.channel is None:
-            event.channel = api_loop(
-                self.client.api.channels_get,
-                event.channel_id,
-            )
-    elif ((not hasattr(event, "channel") or event.channel is None) and
-            event.guild_id is UNSET):
-        event.channel = api_loop(
-            self.client.api.channels_get,
-            event.message.channel_id,
-        )
