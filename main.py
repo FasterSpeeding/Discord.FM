@@ -3,7 +3,6 @@ The CLI module is a small utility that can be used as an easy entry point for
 creating and running bots/clients.
 """
 import os
-import subprocess
 import logging
 
 from gevent import monkey
