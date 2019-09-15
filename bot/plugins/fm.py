@@ -538,7 +538,7 @@ class fmPlugin(Plugin):
         Accepts a string argument from one of the options below.
             Overall
             7 days
-            1 months
+            1 month
             3 months
             6 months
             12 months
