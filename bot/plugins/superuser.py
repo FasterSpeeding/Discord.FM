@@ -7,16 +7,12 @@ from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
 from disco.types.permissions import Permissions
-from disco.util.logging import logging
 from requests import get
 
 
 from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.status import status_handler, guildCount
-
-
-log = logging.getLogger(__name__)
 
 
 class superuserPlugin(Plugin):
@@ -64,8 +60,8 @@ class superuserPlugin(Plugin):
                 continue
             if hasattr(plug, "__check__") and not plug.__check__():
                 self.bot.rmv_plugin(plug.__class__)
-                log.info(plug.__class__.__name__ +
-                         " failed check and has been unloaded.")
+                self.log.info(plug.__class__.__name__ +
+                              " failed check and has been unloaded.")
 
     @Plugin.command("restart", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_restart_command(self, event):
@@ -73,7 +69,7 @@ class superuserPlugin(Plugin):
         Used to reload all the bot's modules.
         """
         api_loop(event.channel.send_message, "Restarting")
-        log.info("Soft restart initiated.")
+        self.log.info("Soft restart initiated.")
         self.register_schedule(
             self.restart,
             0,
@@ -84,10 +80,10 @@ class superuserPlugin(Plugin):
     def restart(self):
         for plugin in self.bot.plugins.copy().values():
             if not issubclass(plugin.__class__, self.__class__):
-                log.info("Reloading plugin: " + plugin.__class__.__name__)
+                self.log.info("Reloading plugin: " + plugin.__class__.__name__)
                 plugin.reload()  # check this
-                log.info("Successfully reloaded plugin: "
-                         + plugin.__class__.__name__)
+                self.log.info("Successfully reloaded plugin: "
+                              + plugin.__class__.__name__)
 
     @Plugin.command("shutdown", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_shutdown_command(self, event):
@@ -95,7 +91,7 @@ class superuserPlugin(Plugin):
         Used to unload all the bot's modules and end the script.
         """
         api_loop(event.channel.send_message, "Shutting down.")
-        log.info("Soft shutdown initiated.")
+        self.log.info("Soft shutdown initiated.")
         self.register_schedule(
             self.shutdown,
             0,
@@ -106,12 +102,12 @@ class superuserPlugin(Plugin):
     def shutdown(self):
         for plugin in self.bot.plugins.copy().values():
             if not issubclass(plugin.__class__, self.__class__):
-                log.info("Unloading plugin: " + plugin.__class__.__name__)
+                self.log.info("Unloading plugin: " + plugin.__class__.__name__)
                 self.bot.rmv_plugin(plugin.__class__)
-                log.info("Successfully unloaded plugin: "
-                         + plugin.__class__.__name__)
+                self.log.info("Successfully unloaded plugin: "
+                              + plugin.__class__.__name__)
             else:
-                log.info("Caught self")
+                self.log.info("Caught self")
         bot.sql.flush()
         exit(0)
 
@@ -383,7 +379,7 @@ class superuserPlugin(Plugin):
         try:
             self.client.gw.ws.sock.ping()
         except Exception as e:
-            log.warning(f"Websocket exception on ping: {e}")
+            self.log.warning(f"Websocket exception on ping: {e}")
             websocket_ping = None
         message_ping = time()
         bot_message = api_loop(
@@ -415,7 +411,7 @@ class superuserPlugin(Plugin):
             avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
                       + base64.b64encode(r.content).decode("utf-8"))
         except Exception as e:
-            log.warning(f"failed to get webhook image {e}")
+            self.log.warning(f"failed to get webhook image {e}")
             avatar = None
 
         #  create webhook

@@ -7,7 +7,6 @@ from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError
 from disco.types.permissions import Permissions
-from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from lyrics_extractor import Song_Lyrics
 from requests import get, post
@@ -16,8 +15,6 @@ from requests import get, post
 from bot.base import bot
 from bot.util.misc import api_loop, exception_webhooks, redact
 from bot.util.react import generic_react
-
-log = logging.getLogger(__name__)
 
 
 class ApiPlugin(Plugin):
@@ -222,7 +219,7 @@ class ApiPlugin(Plugin):
                     "\N{black rightwards arrow}",
                 )
         else:
-            log.warning(r.text)
+            self.log.warning(r.text)
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -249,7 +246,7 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code != 200:
-            log.warning(redact(str(r.text)))
+            self.log.warning(redact(str(r.text)))
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -339,7 +336,7 @@ class ApiPlugin(Plugin):
             else:
                 api_loop(event.channel.send_message, "Video not found.")
         else:
-            log.warning(r.text)
+            self.log.warning(r.text)
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,

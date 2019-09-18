@@ -14,7 +14,6 @@ from disco.types.base import UNSET
 from disco.types.channel import ChannelType
 from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
-from disco.util.logging import logging
 
 
 from bot import __GIT__
@@ -23,8 +22,6 @@ from bot.util.misc import (
     api_loop, dm_default_send, exception_webhooks,
     exception_dms, redact
 )
-
-log = logging.getLogger(__name__)
 
 
 class CorePlugin(Plugin):
@@ -39,7 +36,7 @@ class CorePlugin(Plugin):
                 else:
                     bot.prefix_cache[guild.guild_id] = bot.prefix
         except CommandError as e:
-            log.critical("Failed to load guild data from SQL "
+            self.log.critical("Failed to load guild data from SQL "
                          "servers, they're probably down.")
             log.exception(e.original_exception)
         if bot.config.monitor_usage:
@@ -65,8 +62,8 @@ class CorePlugin(Plugin):
                 )
             except APIException as e:  # Unknown message, Missing permissions
                 if e.code not in (10008, 50013):
-                    log.warning("Api exception caught while "
-                                f"unloading Core module: {e}")
+                    self.log.warning("Api exception caught while "
+                                     f"unloading Core module: {e}")
             del bot.reactor.events[event.message_id]
         super(CorePlugin, self).unload(ctx)
 
@@ -75,7 +72,7 @@ class CorePlugin(Plugin):
         try:
             self.custom_prefix(event)
         except Exception as e:
-            log.exception(e)
+            self.log.exception(e)
 
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
@@ -423,7 +420,7 @@ class CorePlugin(Plugin):
                 writer = csv.DictWriter(csv_file, fieldnames=fields.keys())
                 writer.writerow(fields)
         except (IOError, OSError) as e:
-            log.warning(f"Unable to log status to csv: {e}")
+            self.log.warning(f"Unable to log status to csv: {e}")
 
     def custom_prefix(self, event):
         def get_prefix(event):
@@ -542,4 +539,4 @@ class CorePlugin(Plugin):
                 bot.config.exception_webhooks,
                 embeds=[embed.to_dict(), ],
             )
-        log.exception(exception)
+        self.log.exception(exception)

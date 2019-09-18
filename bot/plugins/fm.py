@@ -6,7 +6,6 @@ import re
 from disco.bot import Plugin
 from disco.bot.command import CommandError
 from disco.types.permissions import Permissions
-from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from requests import get, Session, Request
 from requests.exceptions import ConnectionError as requestCError
@@ -20,8 +19,6 @@ from bot.util.misc import (
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
-
-log = logging.getLogger(__name__)
 
 
 class fmEntryNotFound(CommandError):
@@ -64,7 +61,7 @@ class fmPlugin(Plugin):
 
     @Plugin.schedule(60)
     def purge_cache(self):
-        log.debug("Purging cache.")
+        self.log.debug("Purging cache.")
         for url, cache_obj in self.cache.copy().items():
             if cache_obj.expired_check():
                 del self.cache[url]
@@ -842,7 +839,7 @@ class fmPlugin(Plugin):
             try:
                 r = self.s.send(get)
             except requestCError as e:
-                log.warning(e)
+                self.log.warning(e)
                 raise CommandError("Last.FM isn't available right now.")
 
             if r.status_code == 200:
@@ -861,7 +858,7 @@ class fmPlugin(Plugin):
                     error=f"404 - {item} doesn't exist.",
                 )
                 raise fmEntryNotFound(self.cache[url].error)
-            log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
+            self.log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -1166,10 +1163,10 @@ class fmPlugin(Plugin):
         try:
             r = get(endpoint, headers=headers, params=params)
         except requestCError as e:
-            log.warning(e)
+            self.log.warning(e)
         else:
             if r.status_code < 400:
                 data = r.json().get("results")
                 return (data[0].get("thumb") if data else data)
-            log.warning(f"{r.status_code} returned "
-                        f"by Discogs: {r.text}")
+            self.log.warning(f"{r.status_code} returned "
+                             f"by Discogs: {r.text}")

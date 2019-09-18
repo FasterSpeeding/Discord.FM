@@ -11,7 +11,6 @@ from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
 from disco.types.base import Unset
 from disco.types.permissions import Permissions
-from disco.util.logging import logging
 from disco.voice.playable import YoutubeDLInput, BufferedOpusEncoderPlayable
 from disco.voice.player import Player
 from disco.voice.client import VoiceException
@@ -21,8 +20,6 @@ from youtube_dl.utils import DownloadError
 
 from bot.base import bot
 from bot.util.misc import api_loop, exception_webhooks
-
-log = logging.getLogger(__name__)
 
 
 class MusicPlugin(Plugin):
@@ -47,15 +44,17 @@ class MusicPlugin(Plugin):
                 try:
                     guild_object.guild_check()
                 except CommandError as e:
-                    log.warning(f"CommandError occured during queue_check {e}")
+                    self.log.warning("CommandError occured "
+                                     f"during queue_check {e}")
                 except Exception as e:
-                    log.warning(f"Exception occured during queue_check {e}")
+                    self.log.warning("Exception occured "
+                                     f"during queue_check {e}")
             #    except CommandError as e:
             #        self.channel.send_message  # was self.msg.reply(e)
             #    except IndexError:
             #        continue
             #    except Exception as e:
-            #        log.warning(e)
+            #        self.log.warning(e)
 
     @Plugin.schedule(5)
     def lonely_check(self):
@@ -189,7 +188,7 @@ class MusicPlugin(Plugin):
         try:
             user_state = event.guild.get_member(event.author).get_voice_state()
         except Exception as e:
-            log.warning(e)
+            self.log.warning(e)
             user_state = None
         if user_state is None:
             raise CommandError("You need to be in a voice "
@@ -202,7 +201,7 @@ class MusicPlugin(Plugin):
         except CommandError as e:
             raise e
         except Exception as e:
-            log.warning(e)
+            self.log.warning(e)
         if not same_channel:
             raise CommandError("You need to be in the same "
                                "voice channel to use this command.")
@@ -686,15 +685,15 @@ class psuedo_queue(object):
                                  + str(e)[:1950] + "```"),
                     )
                     if str(e) == "python3.6: undefined symbol: opus_strerror":
-                        log.warning(e)
+                        self.log.warning(e)
                         sleep(10)
                     else:
-                        log.exception(e)
+                        self.log.exception(e)
                 except CommandError as e:
                     raise e
                 # except MemoryErrors as e:
                 except Exception as e:
-                    log.exception(e)
+                    self.log.exception(e)
                     exception_webhooks(
                         self.bot.client,
                         bot.config.exception_webhooks,
@@ -703,7 +702,7 @@ class psuedo_queue(object):
                 else:
                     self.waiting = True
                 if not self.thread.isAlive():
-                    log.info("Initiating thread")
+                    self.log.info("Initiating thread")
                     self.thread.start()
 
     def skip(self):
@@ -721,7 +720,7 @@ class psuedo_queue(object):
                 if str(e) == "python3.6: undefined symbol: opus_strerror":
                     sleep(10)
                 else:
-                    log.exception(e)
+                    self.log.exception(e)
             except CommandError as e:
                 raise e
             #    except MemoryErrors as e:
@@ -731,7 +730,7 @@ class psuedo_queue(object):
                     bot.config.exception_webhooks,
                     content="Voice error: ```" + str(e)[:1950] + "```",
                 )
-                log.exception(e)
+                self.log.exception(e)
             else:
                 self.waiting = True
                 self.player.skip()
