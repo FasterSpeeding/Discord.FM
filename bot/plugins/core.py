@@ -37,7 +37,7 @@ class CorePlugin(Plugin):
                     bot.prefix_cache[guild.guild_id] = bot.prefix
         except CommandError as e:
             self.log.critical("Failed to load guild data from SQL "
-                         "servers, they're probably down.")
+                              "servers, they're probably down.")
             log.exception(e.original_exception)
         if bot.config.monitor_usage:
             if not os.path.exists("data/status/"):
