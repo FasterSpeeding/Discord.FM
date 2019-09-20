@@ -72,6 +72,7 @@ class CorePlugin(Plugin):
         try:
             self.custom_prefix(event)
         except Exception as e:
+            self.exception_response(event, e)
             self.log.exception(e)
 
     @Plugin.listen("GuildCreate")
@@ -486,11 +487,7 @@ class CorePlugin(Plugin):
                         ("Missing permission(s) required to respond: `" +
                          f"{get_missing_perms(PermissionValue, self_perms)}`"),
                     )
-            try:
-                command.plugin.execute(CommandEvent(command, event, match))
-            except Exception as e:
-                self.exception_response(event, e)
-            break
+            command.plugin.execute(CommandEvent(command, event, match))
 
     def exception_response(self, event, exception, respond: bool = True):
         if isinstance(exception, APIException) and exception.code == 50013:
