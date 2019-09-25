@@ -383,7 +383,7 @@ class CorePlugin(Plugin):
             ("Uptime", uptime),
             ("Process", (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                          f"\n{cpu_usage:.2f}% CPU")),
-            ("Members", (f"{member_count} total\n"
+            ("Users", (f"{member_count} total\n"
                          f"{len(self.client.state.users)} unique" + online)),
             ("Channels", (f"{len(self.client.state.channels)} total\n"
                           f"{voice_count} voice\n{text_count} text\n"
@@ -406,15 +406,23 @@ class CorePlugin(Plugin):
     def log_stats(self):
         start_date = datetime.fromtimestamp(self.process.create_time())
         uptime = datetime.now() - start_date
+        member_count = 0
+        cached_member_count = 0
+        for guild in self.client.state.guilds.copy().values():
+            member_count += guild.member_count
+            cached_member_count += len(guild.members)
         fields = {
             "Uptime": uptime.seconds,
             "Voice Instances": len(self.client.state.voice_clients),
             "Memory usage": self.process.memory_full_info().uss / 1024**2,
             "Memory %": self.process.memory_percent(),
             "CPU %": self.process.cpu_percent() / psutil.cpu_count(),
-            "Guild count": len(self.client.state.guilds),
-            "Members": len(self.client.state.users),
+            "Guilds": len(self.client.state.guilds),
+            "Users": len(self.client.state.users),
+            "Member Count": member_count,
+            "Cached Member Count": cached_member_count,
             "Channels": len(self.client.state.channels),
+            "DMs": len(self.client.state.dms),
         }
         try:
             with open(f"data/status/{start_date}.csv", mode="a+") as csv_file:
