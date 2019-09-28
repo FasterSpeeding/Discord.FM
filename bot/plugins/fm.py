@@ -59,7 +59,7 @@ class fmPlugin(Plugin):
     def __check__():
         return bot.config.api.last_key
 
-    @Plugin.schedule(60)
+    @Plugin.schedule(180)
     def purge_cache(self):
         self.log.debug("Purging cache.")
         for url, cache_obj in self.cache.copy().items():

@@ -496,6 +496,7 @@ class CorePlugin(Plugin):
                          f"{get_missing_perms(PermissionValue, self_perms)}`"),
                     )
             command.plugin.execute(CommandEvent(command, event, match))
+            break
 
     def exception_response(self, event, exception, respond: bool = True):
         if isinstance(exception, APIException) and exception.code == 50013:
