@@ -70,7 +70,7 @@ class ApiPlugin(Plugin):
             try:
                 return api_loop(
                     first_message.edit,
-                    f"No Lyrics found for ``{content}``",
+                    f"No lyrics found for ``{content}``",
                 )
             except APIException as e:
                 if e.code in (10003, 10004, 10008):
