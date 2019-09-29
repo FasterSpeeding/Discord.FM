@@ -84,6 +84,7 @@ class ApiPlugin(Plugin):
                 if e.code in (10003, 10005, 10008):
                     return
                 raise e
+
         footer = {
             "text": f"Requested by {event.author}",
             "icon_url": event.author.get_avatar_url(size=32),
@@ -99,6 +100,7 @@ class ApiPlugin(Plugin):
             if e.code in (10003, 10004, 10008):
                 return
             raise e
+
         responses = 0
         limit = limit if limit is not None else 3
         while lyrics and responses < limit:
@@ -125,6 +127,7 @@ class ApiPlugin(Plugin):
                 event.channel.send_message,
                 "This command cannot be used in DMs.",
             )
+
         if limit is not None:
             member = event.guild.get_member(event.author)
             if member.permissions.can(Permissions.MANAGE_GUILD):
@@ -133,6 +136,7 @@ class ApiPlugin(Plugin):
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
+
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
                     guild = bot.sql.guilds(
@@ -198,6 +202,7 @@ class ApiPlugin(Plugin):
                     event.channel.send_message,
                     f"{sp_type}: ``{search}`` not found."
                 )
+
             url = r.json()[sp_type+"s"]["items"][0]["external_urls"]["spotify"]
             reply = api_loop(event.channel.send_message, url)
             if (len(r.json()[sp_type+"s"]["items"]) > 1 and

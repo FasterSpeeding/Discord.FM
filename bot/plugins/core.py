@@ -39,6 +39,7 @@ class CorePlugin(Plugin):
             self.log.critical("Failed to load guild data from SQL "
                               "servers, they're probably down.")
             log.exception(e.original_exception)
+
         if bot.config.monitor_usage:
             if not os.path.exists("data/status/"):
                 os.makedirs("data/status/")
@@ -99,6 +100,7 @@ class CorePlugin(Plugin):
                     event.channel.send_message,
                     "This command cannot be used in DMs.",
                 )
+
         member = event.guild.get_member(event.author)
         if member.permissions.can(Permissions.ADMINISTRATOR):
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
@@ -164,6 +166,7 @@ class CorePlugin(Plugin):
 
                             if e.code != 50013:  # Missing permissions
                                 raise e
+
                     index = condition.function(
                         client=self.client,
                         message_id=message_id,
@@ -193,6 +196,7 @@ class CorePlugin(Plugin):
                 except APIException as e:  # Unknown message, Missing permissions
                     if e.code not in (10008, 50013):
                         raise e
+
             if message_id in bot.reactor.events:
                 del bot.reactor.events[message_id]
 
@@ -213,6 +217,7 @@ class CorePlugin(Plugin):
                 level = CommandLevels._attrs.get(name, None)
                 if level and level > self.bot.get_level(event.author):
                     continue
+
                 dm_default_send(event, channel, embed=embed)
         else:
             if command.startswith(bot.prefix):
@@ -299,6 +304,7 @@ class CorePlugin(Plugin):
                 event.channel.send_message,
                 "This command can only be used in guilds.",
             )
+
         if prefix is None:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             if not guild or guild.prefix is None:
@@ -482,6 +488,7 @@ class CorePlugin(Plugin):
         for command, match in commands:
             if not self.bot.check_command_permissions(command, event):
                 continue
+
             if not event.channel.is_dm:
                 self_perms = event.channel.get_permissions(
                     self.bot.client.state.me,
@@ -495,6 +502,7 @@ class CorePlugin(Plugin):
                         ("Missing permission(s) required to respond: `" +
                          f"{get_missing_perms(PermissionValue, self_perms)}`"),
                     )
+
             command.plugin.execute(CommandEvent(command, event, match))
             break
 

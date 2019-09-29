@@ -101,6 +101,7 @@ class fmPlugin(Plugin):
             ).count) < 5):
                 if not bot.sql(bot.sql.guilds.query.get, event.guild.id):
                     bot.sql.add(bot.sql.guilds(guild_id=event.guild.id))
+
                 payload = bot.sql.aliases(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
@@ -144,6 +145,7 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
+
         target = self.get_user_info(target or event.author.id, event.channel)
         data = [alias for alias in target.aliases
                 if alias.guild_id == event.guild.id]
@@ -179,8 +181,8 @@ class fmPlugin(Plugin):
             params.update({"mbid": artist.lower()})
         else:
             params.update({"artist": artist.lower()})
-        response = self.get_cached(params, cool_down=3600, item="artist")
 
+        response = self.get_cached(params, cool_down=3600, item="artist")
         #  Check for error message.
         artist_data = response.get("artist")
         if not artist_data:
@@ -189,8 +191,6 @@ class fmPlugin(Plugin):
                 response = "Unknown error occured."
                 log.warning(f"Failed to get artist error: {artist}")
             return api_loop(event.channel.send_message, response)
-        print(artist_data)
-        print(artist_data.get("mbid"))
 
         fields = [
             {"name": "Listeners", "value": artist_data["stats"]["listeners"]},
@@ -281,8 +281,10 @@ class fmPlugin(Plugin):
                 else:
                     finished = False
                     break
+
             if finished:
                 break
+
             friend = friend.last_username
             limit = 2
             params = {
@@ -310,6 +312,7 @@ class fmPlugin(Plugin):
                 )
             if current_index >= len(data) - 1:
                 break
+
         return None, embed
 
     @Plugin.command("friends add", "<target:str...>", metadata={"help": "last.fm"})
@@ -324,6 +327,7 @@ class fmPlugin(Plugin):
         if not target.last_username:
             raise CommandError("Target user doesn't have "
                                "a Last.FM account setup.")
+
         target = target.user_id
         name = self.state.users.get(int(target))
         name = str(name) if name else target
@@ -335,6 +339,7 @@ class fmPlugin(Plugin):
             if (event.channel.is_dm or not
                     event.channel.guild.get_member(target)):
                 raise CommandError("User not found in this guild.")
+
             friendship = bot.sql.friends(
                 master_id=event.author.id,
                 slave_id=target,
@@ -506,6 +511,7 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
+
         period = self.get_period(event.author.id)
         fm_embed, lastname = self.generic_user_data(
             username,
@@ -658,6 +664,7 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
+
         fm_embed, username = self.generic_user_data(
             username,
             channel=event.channel,
@@ -692,6 +699,7 @@ class fmPlugin(Plugin):
         """
         if username is None:
             username = event.author.id
+
         fm_embed, username = self.generic_user_data(
             username,
             channel=event.channel,
@@ -784,6 +792,7 @@ class fmPlugin(Plugin):
         if username is None:
             raise CommandError("User should set a last.fm account "
                                f"using ``{bot.prefix}username``")
+
         registered = strftime(
             "%Y-%m-%dT%H:%M:%S",
             gmtime(user_data["registered"]["#text"]),
@@ -858,6 +867,7 @@ class fmPlugin(Plugin):
                     error=f"404 - {item} doesn't exist.",
                 )
                 raise fmEntryNotFound(self.cache[url].error)
+
             self.log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
             if bot.config.exception_webhooks:
                 exception_webhooks(
@@ -866,16 +876,19 @@ class fmPlugin(Plugin):
                     content=(f"Last.FM threw error {r.status_code}: "
                              f"```{redact(r.text)[:1950]}```"),
                 )
+
             try:
-                message = ": " + r.json().get("message", ".")
+                message = ": " + r.json().get("message", "")
             except JSONDecodeError:
                 message = "."
             else:
                 message = redact(message)
             raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
                                   f"unexpected HTTP status code{message}")
+
         if self.cache[url].validity_check():
             return self.cache[url].data
+
         raise fmEntryNotFound(self.cache[url].error)
 
     class fm_format_mapping:
@@ -940,6 +953,7 @@ class fmPlugin(Plugin):
                     position = None
                 if not position:
                     break
+
                 if not singular or not name:
                     for method in (name_format or ()):
                         function = getattr(
@@ -1149,6 +1163,7 @@ class fmPlugin(Plugin):
         art_type = type_match.get(art_type.lower())
         if not (art_type and self.discogs_secret and self.discogs_key):
             return
+
         endpoint = "https://api.discogs.com/database/search"
         headers = {
             "Authorization": (f"Discogs key={self.discogs_key},"

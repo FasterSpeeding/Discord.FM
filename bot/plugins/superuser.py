@@ -58,6 +58,7 @@ class superuserPlugin(Plugin):
         for plug in self.bot.plugins.copy().values():
             if issubclass(plug.__class__, self.__class__):
                 continue
+
             if hasattr(plug, "__check__") and not plug.__check__():
                 self.bot.rmv_plugin(plug.__class__)
                 self.log.info(plug.__class__.__name__ +
@@ -122,6 +123,7 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 f"{plugin_name} does not exist.",
             )
+
         self.bot.rmv_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
@@ -134,6 +136,7 @@ class superuserPlugin(Plugin):
 
         if plugin is None:
             return api_loop(event.msg.reply, f"{plugin_name} does not exist.")
+
         self.bot.reload_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
@@ -280,11 +283,13 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 "Guild removed from filter :ok_hand:",
             )
+
         if guild != "DM" and not self.client.state.guilds.get(guild):
             return api_loop(
                 event.channel.send_message,
                 "Guild not found :shrug:",
             )
+
         filter_list.append(guild)
         api_loop(
             event.channel.send_message,

@@ -200,6 +200,7 @@ class bot_frame:
                          if os.path.isfile(path)]
             if not locations:
                 raise Exception("Config location not found.")
+
             config_path = locations[0]
         else:
             config_path = config_path or meta_path
@@ -207,9 +208,11 @@ class bot_frame:
                     if config_path.endswith(type)]
         if not handlers:
             raise Exception("Invalid config type.")
+
         if not handlers[0]:
             raise Exception("Handler for file type "
                             f"'{config_path.split('.')[-1]}' is not present.")
+
         data = handlers[0](open(config_path, "r"))
         self.config_meta = config_path
         return data
@@ -223,6 +226,7 @@ class bot_frame:
         if not handlers or not handlers[0]:
             raise Exception("Invalid config type of handler for file type "
                             f"'{config_path.split('.')[-1]}' is not present.")
+
         with open(config_path, "w") as file:
             handlers[0](data, file, indent=4)
 

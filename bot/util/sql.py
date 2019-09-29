@@ -284,6 +284,7 @@ class sql_instance:
         for attr in check_map:
             if not position:
                 break
+
             position = getattr(position, attr, None)
         log.info(f"SQL SSL status: {position or 'unknown'}")
         return position
