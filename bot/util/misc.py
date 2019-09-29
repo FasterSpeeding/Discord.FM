@@ -82,7 +82,7 @@ def AT_to_id(discord_id: str):
         for to_replace in (("<", ""), ("@", ""), ("!", ""), (">", "")):
             discord_id = discord_id.replace(*to_replace)
         return int(discord_id)
-    
+
     raise CommandError("Invalid @user.")
 
 
