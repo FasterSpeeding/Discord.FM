@@ -164,7 +164,8 @@ class CorePlugin(Plugin):
 
             return
 
-        if event.run_check(trigger_event):
+        condition = event.get_condition(trigger_event)
+        if condition:
             if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
                     self.client.api.channels_messages_reactions_delete(
@@ -389,7 +390,7 @@ class CorePlugin(Plugin):
             ("Process", (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                          f"\n{cpu_usage:.2f}% CPU")),
             ("Users", (f"{member_count} total\n"
-                         f"{len(self.client.state.users)} unique" + online)),
+                       f"{len(self.client.state.users)} unique" + online)),
             ("Channels", (f"{len(self.client.state.channels)} total\n"
                           f"{voice_count} voice\n{text_count} text\n"
                           f"{len(self.client.state.dms)} open "

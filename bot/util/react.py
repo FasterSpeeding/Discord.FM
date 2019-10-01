@@ -60,14 +60,13 @@ class reactor_object:
         self.end_time = (end_time or time() + 30)
         self.kwargs = kwargs
 
-    def run_check(self, trigger_event):
+    def get_condition(self, trigger_event):
         if time() < self.end_time and self.conditions:
             for condition in self.conditions:
-                return any(not condition.auth or
-                           trigger_event.user_id == condition.owner_id and
-                           trigger_event.emoji.name == condition.reactor)
-
-        return False
+                if ((not condition.auth or
+                     trigger_event.user_id == condition.owner_id) and
+                        trigger_event.emoji.name == condition.reactor):
+                    return condition
 
     def del_check(self):
         return time() > self.end_time
