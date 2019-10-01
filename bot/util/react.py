@@ -63,9 +63,9 @@ class reactor_object:
     def get_condition(self, trigger_event):
         if time() < self.end_time and self.conditions:
             for condition in self.conditions:
-                if ((not condition.auth or
-                     trigger_event.user_id == condition.owner_id) and
-                        trigger_event.emoji.name == condition.reactor):
+                if (trigger_event.emoji.name == condition.reactor and
+                        (not condition.auth or
+                         trigger_event.user_id == condition.owner_id)):
                     return condition
 
     def del_check(self):
