@@ -335,7 +335,7 @@ class fmPlugin(Plugin):
         if not user:
             user = bot.sql.users(user_id=event.author.id)
             bot.sql.add(user)
-        if not any([f.slave_id == target for f in user.friends]):
+        if not any(f.slave_id == target for f in user.friends):
             if (event.channel.is_dm or not
                     event.channel.guild.get_member(target)):
                 raise CommandError("User not found in this guild.")

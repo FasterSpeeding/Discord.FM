@@ -142,51 +142,13 @@ class CorePlugin(Plugin):
 
         message_id = trigger_event.message_id
         event = bot.reactor.events.get(message_id, None)
-        if event and time() < event.end_time and event.conditions:
-            for condition in event.conditions:
-                if (not condition.auth or
-                        trigger_event.user_id == condition.owner_id and
-                        trigger_event.emoji.name == condition.reactor):
-                    self_perms = trigger_event.channel.get_permissions(
-                        self.bot.client.state.me,
-                    )
-                    if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
-                        try:
-                            self.client.api.channels_messages_reactions_delete(
-                                channel=event.channel_id,
-                                message=message_id,
-                                emoji=condition.reactor,
-                                user=condition.owner_id,
-                            )
-                        except APIException as e:
-                            if e.code == 10008:  # Unknown message
-                                if message_id in bot.reactor.events:
-                                    del bot.reactor.events[message_id]
-                                return
+        if not event:
+            return
 
-                            if e.code != 50013:  # Missing permissions
-                                raise e
-
-                    index = condition.function(
-                        client=self.client,
-                        message_id=message_id,
-                        channel_id=event.channel_id,
-                        reactor=condition.reactor,
-                        **event.kwargs,
-                        **condition.kwargs,
-                    )
-                    if (index is not None and
-                            message_id in bot.reactor.events):
-                        bot.reactor.events[
-                            message_id
-                        ].kwargs["index"] = index
-                        event.end_time += 10
-                    elif message_id in bot.reactor.events:
-                        del bot.reactor.events[message_id]
-        elif event and time() > event.end_time:
-            self_perms = trigger_event.channel.get_permissions(
-                self.bot.client.state.me,
-            )
+        self_perms = trigger_event.channel.get_permissions(
+            self.bot.client.state.me,
+        )
+        if event.del_check():
             if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
@@ -198,6 +160,43 @@ class CorePlugin(Plugin):
                         raise e
 
             if message_id in bot.reactor.events:
+                del bot.reactor.events[message_id]
+
+            return
+
+        if event.run_check(trigger_event):
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
+                try:
+                    self.client.api.channels_messages_reactions_delete(
+                        channel=event.channel_id,
+                        message=message_id,
+                        emoji=trigger_event.emoji.name,
+                        user=trigger_event.user_id,
+                    )
+                except APIException as e:
+                    if e.code == 10008:  # Unknown message
+                        if message_id in bot.reactor.events:
+                            del bot.reactor.events[message_id]
+                        return
+
+                    if e.code != 50013:  # Missing permissions
+                        raise e
+
+            index = condition.function(
+                client=self.client,
+                message_id=message_id,
+                channel_id=event.channel_id,
+                reactor=condition.reactor,
+                **event.kwargs,
+                **condition.kwargs,
+            )
+            if (index is not None and
+                    message_id in bot.reactor.events):
+                bot.reactor.events[
+                    message_id
+                ].kwargs["index"] = index
+                event.end_time += 10
+            elif message_id in bot.reactor.events:
                 del bot.reactor.events[message_id]
 
     @Plugin.command("help", "[command:str...]",

@@ -60,6 +60,18 @@ class reactor_object:
         self.end_time = (end_time or time() + 30)
         self.kwargs = kwargs
 
+    def run_check(self, trigger_event):
+        if time() < self.end_time and self.conditions:
+            for condition in self.conditions:
+                return any(not condition.auth or
+                           trigger_event.user_id == condition.owner_id and
+                           trigger_event.emoji.name == condition.reactor)
+
+        return False
+
+    def del_check(self):
+        return time() > self.end_time
+
 
 class reactors_handler(object):
     def __init__(self):
@@ -173,6 +185,7 @@ def generic_react(
         )
     else:
         return
+
     if index is not None:
         content, embed = edit_message(data=data, index=index, **kwargs)
         api_loop(
