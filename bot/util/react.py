@@ -61,7 +61,7 @@ class reactor_object:
         self.kwargs = kwargs
 
     def get_condition(self, trigger_event):
-        if time() < self.end_time and self.conditions:
+        if not self.del_check() and self.conditions:
             for condition in self.conditions:
                 if (trigger_event.emoji.name == condition.reactor and
                         (not condition.auth or
