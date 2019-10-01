@@ -79,6 +79,7 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
+
         if (len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias
                 or alias.isdigit()):
             return api_loop(
@@ -1014,11 +1015,13 @@ class fmPlugin(Plugin):
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
                                    f"using ``{bot.prefix}username``")
+
         if result and channel and ((channel.is_dm and result.user_id not in
                                     channel.recipients.keys()) or
                                    (not channel.is_dm and not
                                     channel.guild.get_member(result.user_id))):
             raise CommandError("User not found in this guild.")
+
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):
@@ -1029,6 +1032,7 @@ class fmPlugin(Plugin):
             }
             user_data = self.get_cached(params, cool_down=1800, item="user")
             return user_data
+
         raise CommandError("Invalid username format.")
 
     @staticmethod
