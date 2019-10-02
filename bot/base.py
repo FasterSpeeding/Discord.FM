@@ -99,6 +99,7 @@ class bot_data(custom_base):
     levels: dict = {}
     commands_enabled: bool = False
     commands_require_mention: bool = False
+    commands_allow_mention: bool = None
     commands_mention_rules: dict = None
     commands_prefix: str = "fm."
     commands_allow_edit: bool = None
@@ -248,9 +249,7 @@ class bot_frame:
             self.help_embeds = dict()
         arrays_to_sort = list()
         for command in bot.commands:
-            array_name = command.metadata.get("metadata", None)
-            if array_name:
-                array_name = array_name.get("help", None)
+            array_name = command.metadata.get("help", None)
             doc_string = command.get_docstring().strip("\n").strip("    ")
             if array_name:
                 if not doc_string:
@@ -284,9 +283,7 @@ class bot_frame:
 
     def unload_help_embeds(self, bot):
         for command in bot.commands:
-            array_name = command.metadata.get("metadata", None)
-            if array_name:
-                array_name = array_name.get("help", None)
+            array_name = command.metadata.get("help", None)
             if array_name:
                 if command.raw_args is not None:
                     args = command.raw_args

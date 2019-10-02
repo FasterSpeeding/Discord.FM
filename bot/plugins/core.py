@@ -474,6 +474,11 @@ class CorePlugin(Plugin):
         elif (len(event.message.content) > len(prefix) and
                 event.message.content[len(prefix)] == " "):
             prefix += " "
+
+        if (bot.config.disco.bot.commands_allow_mention is not None
+                and not bot.config.disco.bot.commands_allow_mention):
+            require_mention = False
+
         commands = list(self.bot.get_commands_for_message(
             require_mention,
             self.bot.config.commands_mention_rules,
