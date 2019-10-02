@@ -212,9 +212,9 @@ class CorePlugin(Plugin):
             channel = api_loop(event.author.open_dm)
         else:
             channel = event.channel
-        if command is None:  # _attrs may not work in 1.0.0
+        if command is None:
             for name, embed in bot.help_embeds.copy().items():
-                level = CommandLevels._attrs.get(name, None)
+                level = getattr(CommandLevels, name.upper(), None)
                 if level and level > self.bot.get_level(event.author):
                     continue
 
@@ -227,7 +227,7 @@ class CorePlugin(Plugin):
             # Check for module match.
             embed = bot.help_embeds.get(command.lower())
             if embed:
-                level = CommandLevels._attrs.get(command.lower(), None)
+                level = getattr(CommandLevels, command.upper(), None)
                 if not level or level <= self.bot.get_level(event.author):
                     return dm_default_send(event, channel, embed=embed)
 
@@ -436,7 +436,7 @@ class CorePlugin(Plugin):
             return bot.prefix if not guild or guild.prefix is None else guild.prefix
 
         def get_missing_perms(PermissionValue, self_perms):
-            perms = [perm for perm in Permissions._attrs.values()
+            perms = [perm for perm in Permissions.keys()
                      if (int(PermissionValue) & perm.value) == perm.value]
             return [perm.name for perm in perms
                     if not self_perms.can(perm.value)]

@@ -311,7 +311,6 @@ class bot_frame:
             data = self.generate_command_info(command, spawn_embed=True)
             if data and data[3] in self.help_embeds:
                 embed_name = data[3]
-
                 matching_fields = [field for field in
                                    self.help_embeds[embed_name].fields
                                    if field.name == data[0]]
