@@ -257,7 +257,7 @@ class bot_frame:
                     inline=False,
                 )
                 embeds_to_sort.append(data[3])
-        for embed in embedes_to_sort:
+        for embed in embeds_to_sort:
             self.help_embeds[embed].fields = sorted(
                 self.help_embeds[embed].fields,
                 key=operator.attrgetter("name"),
