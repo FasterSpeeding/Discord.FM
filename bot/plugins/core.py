@@ -244,9 +244,7 @@ class CorePlugin(Plugin):
                     args = " " + command_obj.raw_args + "; "
                 else:
                     args = str()
-                array_name = command_obj.metadata.get("metadata", None)
-                if array_name:
-                    array_name = array_name.get("help", None)
+                array_name = command_obj.metadata.get("help", None)
                 if array_name:
                     docstring = command_obj.get_docstring()
                     docstring = docstring.replace("    ", "").strip("\n")
@@ -493,9 +491,7 @@ class CorePlugin(Plugin):
                 self_perms = event.channel.get_permissions(
                     self.bot.client.state.me,
                 )
-                PermissionValue = command.metadata.get("metadata", None)
-                if PermissionValue:
-                    PermissionValue = PermissionValue.get("perms", None)
+                PermissionValue = command.metadata.get("perms", None)
                 if PermissionValue and not self_perms.can(int(PermissionValue)):
                     return api_loop(
                         event.channel.send_message,
