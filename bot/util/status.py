@@ -1,7 +1,7 @@
 import logging
 
 
-from disco.types.user import Activity, Status, ActivityType
+from disco.types.user import Activity, Status, ActivityTypes
 from requests import post, RequestException
 
 
@@ -132,7 +132,7 @@ class status_handler(object):
             self.bot.client.update_presence(
                 Status.online,
                 Activity(
-                    type=ActivityType.listening,
+                    type=ActivityTypes.listening,
                     name=presence,
                 )
             )
