@@ -236,32 +236,17 @@ class CorePlugin(Plugin):
             for command_obj in self.bot.commands:
                 match = command_obj.compiled_regex.match(command)
                 if (match and (not command_obj.level or
-                               author_level >= command_obj.level)):
+                               author_level >= command_obj.level)
+                        and command_obj.metadata.get("help", None)):
                     break
 
-            if match:
-                if command_obj.raw_args is not None:
-                    args = " " + command_obj.raw_args + "; "
-                else:
-                    args = str()
-                array_name = command_obj.metadata.get("help", None)
-                if array_name:
-                    docstring = command_obj.get_docstring()
-                    docstring = docstring.replace("    ", "").strip("\n")
-                    if command_obj.group:
-                        triggers_formatted = command_obj.group + " ("
-                    else:
-                        triggers_formatted = "("
-
-                    for trigger in command_obj.triggers:
-                        triggers_formatted += f"**{trigger}** | "
-                    triggers_formatted = triggers_formatted[:-3] + "):"
-                    embed = bot.generic_embed(
-                        title=(f"{bot.prefix}{triggers_formatted}{args} "
-                               f"a command in the {array_name} module."),
-                        description=docstring,
-                    )
-                    dm_default_send(event, channel, embed=embed)
+            data = bot.generate_command_info(commanb_obj, all_triggers=True)
+            if match and data:
+                embed = bot.generic_embed(
+                    title=data[0] + f" a command in the {data[3]} module.",
+                    description=data[2],
+                )
+                dm_default_send(event, channel, embed=embed)
             else:
                 command = sanitize(command, escape_codeblocks=True)
                 dm_default_send(

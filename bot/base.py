@@ -249,55 +249,77 @@ class bot_frame:
             self.help_embeds = dict()
         arrays_to_sort = list()
         for command in bot.commands:
-            array_name = command.metadata.get("help", None)
-            doc_string = command.get_docstring().strip("\n").strip("    ")
-            if array_name:
-                if not doc_string:
-                    doc_string = "Null"
-                if array_name not in self.help_embeds:
-                    self.help_embeds[array_name] = self.generic_embed(
-                        title=f"{array_name.capitalize()} module commands.",
-                        description=("Argument key: <required> [optional], "
-                                     "with '...'specifying a multi-word "
-                                     "argument and optional usernames "
-                                     "defaulting to a user's set username."),
-                    )
-                args = command.raw_args if command.raw_args else ""
-                if command.group:
-                    command_name = command.group + " " + command.name
-                else:
-                    command_name = command.name
+            data = self.generate_command_info(command, spawn_embed=True)
+            if data:
                 self.help_embeds[array_name].add_field(
-                    name=f"{self.prefix}**{command_name}** {args}",
-                    value=doc_string.split("\n", 1)[0],
-                    inline=False
+                    name=data[0],
+                    value=data[1],
+                    inline=False,
                 )
-                arrays_to_sort.append(array_name)
-        for array in arrays_to_sort:
-            self.help_embeds[array].fields = sorted(
-                self.help_embeds[array].fields,
+                embeds_to_sort.append(array_name)
+        for embed in embedes_to_sort:
+            self.help_embeds[embed].fields = sorted(
+                self.help_embeds[embed].fields,
                 key=operator.attrgetter("name"),
             )
         self.help_embeds = {key: self.help_embeds[key] for
                             key in sorted(self.help_embeds.keys())}
 
+    def generate_command_info(self, command, spawn_embed=False, all_triggers=False):
+        embed_name = command.metadata.get("help", None)
+        if not embed_name:
+            return
+
+        doc_string = command.get_docstring().strip("\n").strip("    ")
+        if not doc_string:
+            doc_string = "Null"
+
+        if spawn_embed and embed_name not in self.help_embeds:
+            self.generate_help_embed(embed_name)
+
+        args = command.raw_args if command.raw_args else ""
+        if not all_triggers:
+            if command.group:
+                command_name = command.group + " " + command.name
+            else:
+                command_name = "**" + command.name + "** "
+        else:
+            if command.group:
+                command_name = command.group + " ("
+            else:
+                command_name = "("
+
+            for trigger in command.triggers:
+                command_name += f"**{trigger}** | "
+                command_name = triggers_formatted[:-3] + "):"
+
+        return (f"{self.prefix}{command_name}{args}",
+                doc_string.split("\n", 1)[0],
+                doc_string,
+                embed_name)
+
+    def generate_help_embed(self, embed_name):
+        self.help_embeds[embed_name] = self.generic_embed(
+            title=f"{embed_name.capitalize()} module commands.",
+            description=("Argument key: <required> [optional], "
+                         "with '...'specifying a multi-word "
+                         "argument and optional usernames "
+                         "defaulting to a user's set username."),
+        )
+
     def unload_help_embeds(self, bot):
         for command in bot.commands:
-            array_name = command.metadata.get("help", None)
-            if array_name:
-                if command.raw_args is not None:
-                    args = command.raw_args
-                else:
-                    args = str()
-                field_name = f"{self.prefix}**{command.name}** {args}"
-                if array_name in self.help_embeds:
-                    matching_fields = [field for field in
-                                       self.help_embeds[array_name].fields
-                                       if field.name == field_name]
-                    for field in matching_fields:
-                        self.help_embeds[array_name].fields.remove(field)
-                    if not self.help_embeds[array_name].fields:
-                        del self.help_embeds[array_name]
+            data = self.generate_command_info(command, spawn_embed=True)
+            if data and data[3] in self.help_embeds:
+                embed_name = data[3]
+
+                matching_fields = [field for field in
+                                   self.help_embeds[embed_name].fields
+                                   if field.name == data[0]]
+                for field in matching_fields:
+                    self.help_embeds[embed_name].fields.remove(field)
+                if not self.help_embeds[embed_name].fields:
+                    del self.help_embeds[embed_name]
 
 
 bot = bot_frame()
