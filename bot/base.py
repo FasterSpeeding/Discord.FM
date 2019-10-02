@@ -247,7 +247,7 @@ class bot_frame:
         """
         if not hasattr(self, "help_embeds"):
             self.help_embeds = dict()
-        arrays_to_sort = list()
+        embeds_to_sort = list()
         for command in bot.commands:
             data = self.generate_command_info(command, spawn_embed=True)
             if data:
