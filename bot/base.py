@@ -99,7 +99,6 @@ class bot_data(custom_base):
     levels: dict = {}
     commands_enabled: bool = False
     commands_require_mention: bool = False
-    commands_allow_mention: bool = None
     commands_mention_rules: dict = None
     commands_prefix: str = "fm."
     commands_allow_edit: bool = None
