@@ -251,12 +251,12 @@ class bot_frame:
         for command in bot.commands:
             data = self.generate_command_info(command, spawn_embed=True)
             if data:
-                self.help_embeds[array_name].add_field(
+                self.help_embeds[data[3]].add_field(
                     name=data[0],
                     value=data[1],
                     inline=False,
                 )
-                embeds_to_sort.append(array_name)
+                embeds_to_sort.append(data[3])
         for embed in embedes_to_sort:
             self.help_embeds[embed].fields = sorted(
                 self.help_embeds[embed].fields,
