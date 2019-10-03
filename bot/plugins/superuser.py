@@ -410,7 +410,7 @@ class superuserPlugin(Plugin):
         Used to register a webhook in the current channel for error messages.
         """
         #  attempt to get bot's current avatar as base64.
-        url = self.state.me.get_avatar_url(fmt="png")
+        url = self.state.me.get_avatar_url(still_format="png")
         try:
             r = get(url)
             avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
