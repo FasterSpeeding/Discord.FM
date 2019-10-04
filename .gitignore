@@ -108,6 +108,7 @@ venv.bak/
 
 # Bot data
 *.db
+*.yaml
 *.json
 *.pem
 *.csv

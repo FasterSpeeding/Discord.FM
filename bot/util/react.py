@@ -3,7 +3,7 @@ import logging
 
 
 from disco.api.http import APIException
-from disco.types.message import Message
+from disco.types.permissions import Permissions
 
 
 from bot.util.misc import api_loop
@@ -60,6 +60,17 @@ class reactor_object:
         self.end_time = (end_time or time() + 30)
         self.kwargs = kwargs
 
+    def get_condition(self, trigger_event):
+        if not self.del_check() and self.conditions:
+            for condition in self.conditions:
+                if (trigger_event.emoji.name == condition.reactor and
+                        (not condition.auth or
+                         trigger_event.user_id == condition.owner_id)):
+                    return condition
+
+    def del_check(self):
+        return time() > self.end_time
+
 
 class reactors_handler(object):
     def __init__(self):
@@ -105,48 +116,45 @@ class reactors_handler(object):
             reaction,
             author_id,
             *args,
-            channel_id=None,
             time=30):
-        if isinstance(message, Message):
-            message_id = message.id
-            channel_id = message.channel.id
-        else:
-            if not channel_id:
-                raise AssertionError()
-            message_id = int(message)
         for reactor in args:
             self.add_argument(
-                message_id,
+                message.id,
                 reactor,
                 reaction,
                 author_id,
             )
-        for reactor in args:
-            try:
-                client.client.api.channels_messages_reactions_create(
-                    channel_id,
-                    message_id,
-                    reactor,
-                )
-            except APIException as e:
-                if e.code == 10008:  # Unknown message
-                    if message_id in self.events:
-                        del self.events[message_id]
-                    return
+        self_perms = message.channel.get_permissions(client.state.me)
+        if self_perms.can(int(Permissions.ADD_REACTIONS)):
+            for reactor in args:
+                try:
+                    client.api.channels_messages_reactions_create(
+                        message.channel.id,
+                        message.id,
+                        reactor,
+                    )
+                except APIException as e:
+                    if e.code == 10008:  # Unknown message
+                        if message.id in self.events:
+                            del self.events[message.id]
+                        return
 
-                if e.code not in (50001, 50013):  # access, permission error
+                    if e.code in (30010, 50001, 50013, 90001):  # max reacts
+                        break  # access, permission error, react blocked
+
                     raise e
         sleep(time)
-        if message_id in self.events:
-            del self.events[message_id]
-            try:
-                client.client.api.channels_messages_reactions_delete_all(
-                    channel_id,
-                    message_id,
-                )
-            except APIException as e:
-                if e.code not in (10008, 50001, 50013):
-                    raise e  # Unknown message, missing access, permission
+        if message.id in self.events:
+            del self.events[message.id]
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
+                try:
+                    client.api.channels_messages_reactions_delete_all(
+                        message.channel.id,
+                        message.id,
+                    )
+                except APIException as e:
+                    if e.code not in (10008, 50001, 50013):
+                        raise e  # Unknown message, missing access, permission
 
 
 def generic_react(
@@ -176,10 +184,11 @@ def generic_react(
         )
     else:
         return
+
     if index is not None:
         content, embed = edit_message(data=data, index=index, **kwargs)
         api_loop(
-            client.client.api.channels_messages_modify,
+            client.api.channels_messages_modify,
             channel_id,
             message_id,
             content=content,
@@ -231,7 +240,7 @@ def right_shift(
 def end_event(client, message_id, channel_id, **kwargs):
     try:
         api_loop(
-            client.client.api.channels_messages_delete,
+            client.api.channels_messages_delete,
             channel_id,
             message_id,
         )

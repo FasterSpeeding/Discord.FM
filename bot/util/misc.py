@@ -18,6 +18,7 @@ def api_loop(command, *args, log_50007=True, **kwargs):
     while True:
         if retries >= 5:
             raise CommandError("Command timed out.")
+
         try:
             return command(*args, **kwargs)
         except requestsCError as e:
@@ -26,9 +27,11 @@ def api_loop(command, *args, log_50007=True, **kwargs):
             if e.code == 50013:  # Missing permissions
                 raise CommandError("Missing permissions to respond "
                                    "(possibly Embed Links).")
+
             if e.code != 50007 or log_50007:  # Cannot send messages to user
                 log.critical(f"Api exception: {e.code}: {e}")
             raise e
+
         finally:
             retries += 1
 
@@ -79,6 +82,7 @@ def AT_to_id(discord_id: str):
         for to_replace in (("<", ""), ("@", ""), ("!", ""), (">", "")):
             discord_id = discord_id.replace(*to_replace)
         return int(discord_id)
+
     raise CommandError("Invalid @user.")
 
 
@@ -112,7 +116,11 @@ def get_dict_item(data: dict, Dict_map: list):
     based off a list of indexs and keys.
     """
     for index in Dict_map:
-        data = data[index]
+        try:
+            data = data[index]
+        except (IndexError, KeyError):
+            return
+
     return data
 
 

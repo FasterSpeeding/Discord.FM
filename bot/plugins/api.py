@@ -3,10 +3,10 @@ from time import time
 from urllib.parse import quote_plus
 
 
+from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError
 from disco.types.permissions import Permissions
-from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from lyrics_extractor import Song_Lyrics
 from requests import get, post
@@ -15,8 +15,6 @@ from requests import get, post
 from bot.base import bot
 from bot.util.misc import api_loop, exception_webhooks, redact
 from bot.util.react import generic_react
-
-log = logging.getLogger(__name__)
 
 
 class ApiPlugin(Plugin):
@@ -40,7 +38,8 @@ class ApiPlugin(Plugin):
         bot.unload_help_embeds(self)
         super(ApiPlugin, self).unload(ctx)
 
-    @Plugin.command("lyrics", "<content:str...>", metadata={"help": "api"})
+    @Plugin.command("lyrics", "<content:str...>",
+                    metadata={"help": "api", "perms": Permissions.EMBED_LINKS})
     def on_lyrics_command(self, event, content):
         """
         Return lyrics for a song.
@@ -71,7 +70,7 @@ class ApiPlugin(Plugin):
             try:
                 return api_loop(
                     first_message.edit,
-                    f"No Lyrics found for ``{content}``",
+                    f"No lyrics found for ``{content}``",
                 )
             except APIException as e:
                 if e.code in (10003, 10004, 10008):
@@ -85,6 +84,7 @@ class ApiPlugin(Plugin):
                 if e.code in (10003, 10005, 10008):
                     return
                 raise e
+
         footer = {
             "text": f"Requested by {event.author}",
             "icon_url": event.author.get_avatar_url(size=32),
@@ -100,6 +100,7 @@ class ApiPlugin(Plugin):
             if e.code in (10003, 10004, 10008):
                 return
             raise e
+
         responses = 0
         limit = limit if limit is not None else 3
         while lyrics and responses < limit:
@@ -126,6 +127,7 @@ class ApiPlugin(Plugin):
                 event.channel.send_message,
                 "This command cannot be used in DMs.",
             )
+
         if limit is not None:
             member = event.guild.get_member(event.author)
             if member.permissions.can(Permissions.MANAGE_GUILD):
@@ -134,6 +136,7 @@ class ApiPlugin(Plugin):
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
+
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
                     guild = bot.sql.guilds(
@@ -199,6 +202,7 @@ class ApiPlugin(Plugin):
                     event.channel.send_message,
                     f"{sp_type}: ``{search}`` not found."
                 )
+
             url = r.json()[sp_type+"s"]["items"][0]["external_urls"]["spotify"]
             reply = api_loop(event.channel.send_message, url)
             if (len(r.json()[sp_type+"s"]["items"]) > 1 and
@@ -211,7 +215,7 @@ class ApiPlugin(Plugin):
                     edit_message=self.spotify_react,
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,
@@ -220,7 +224,7 @@ class ApiPlugin(Plugin):
                     "\N{black rightwards arrow}",
                 )
         else:
-            log.warning(r.text)
+            self.log.warning(r.text)
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -247,7 +251,7 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code != 200:
-            log.warning(redact(str(r.text)))
+            self.log.warning(redact(str(r.text)))
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -326,7 +330,7 @@ class ApiPlugin(Plugin):
                         edit_message=self.youtube_react,
                     )
                     bot.reactor.add_reactors(
-                        self,
+                        self.client,
                         reply,
                         generic_react,
                         event.author.id,
@@ -337,7 +341,7 @@ class ApiPlugin(Plugin):
             else:
                 api_loop(event.channel.send_message, "Video not found.")
         else:
-            log.warning(r.text)
+            self.log.warning(r.text)
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,

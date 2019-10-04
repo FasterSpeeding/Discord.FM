@@ -5,7 +5,7 @@ import re
 
 from disco.bot import Plugin
 from disco.bot.command import CommandError
-from disco.util.logging import logging
+from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
 from requests import get, Session, Request
 from requests.exceptions import ConnectionError as requestCError
@@ -19,8 +19,6 @@ from bot.util.misc import (
 )
 from bot.util.react import generic_react
 from bot.util.sql import periods
-
-log = logging.getLogger(__name__)
 
 
 class fmEntryNotFound(CommandError):
@@ -61,11 +59,11 @@ class fmPlugin(Plugin):
     def __check__():
         return bot.config.api.last_key
 
-    @Plugin.schedule(60)
+    @Plugin.schedule(180)
     def purge_cache(self):
-        log.debug("Purging cache.")
+        self.log.debug("Purging cache.")
         for url, cache_obj in self.cache.copy().items():
-            if cache_obj.expire > time():
+            if cache_obj.expired_check():
                 del self.cache[url]
 
     @Plugin.command("add", "<alias:str...>", group="alias", metadata={"help": "last.fm"})
@@ -81,6 +79,7 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
+
         if (len(alias) > 20 or sanitize(alias, escape_codeblocks=True) != alias
                 or alias.isdigit()):
             return api_loop(
@@ -90,6 +89,7 @@ class fmPlugin(Plugin):
                  "consist purely of numbers."),
             )
 
+        alias = alias.lower()
         data = bot.sql(bot.sql.aliases.query.filter(
             bot.sql.aliases.guild_id == event.guild.id,
             bot.sql.aliases.alias.like(alias),
@@ -102,6 +102,7 @@ class fmPlugin(Plugin):
             ).count) < 5):
                 if not bot.sql(bot.sql.guilds.query.get, event.guild.id):
                     bot.sql.add(bot.sql.guilds(guild_id=event.guild.id))
+
                 payload = bot.sql.aliases(
                     user_id=event.author.id,
                     guild_id=event.guild.id,
@@ -131,7 +132,8 @@ class fmPlugin(Plugin):
                      "already taken in this guild."),
                 )
 
-    @Plugin.command("list", "[target:str...]", group="alias", metadata={"help": "last.fm"})
+    @Plugin.command("list", "[target:str...]", group="alias",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_alias_list_command(self, event, target=None):
         """
         Used to get a list of a user's aliases in a guild.
@@ -144,7 +146,8 @@ class fmPlugin(Plugin):
                 event.channel.send_message,
                 "Alias commands are guild specific.",
             )
-        target = self.get_user_info(target or event.author.id, event.guild.id)
+
+        target = self.get_user_info(target or event.author.id, event.channel)
         data = [alias for alias in target.aliases
                 if alias.guild_id == event.guild.id]
         if data:
@@ -167,27 +170,37 @@ class fmPlugin(Plugin):
                 "User doesn't have any aliases set in this guild.",
             )
 
-    @Plugin.command("artist info", "<artist:str...>", metadata={"help": "last.fm"})
+    @Plugin.command("artist info", "<artist:str...>",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_artist_command(self, event, artist):
         """
         Get an artist's info on Last.fm.
         """
-        artist = self.get_artist(artist)
-        artist_info = artist.get("artist")
-        if not artist_info:
-            response = artist.get("message")
+        #  Make request
+        params = {"method": "artist.getinfo"}
+        if self.mbid_reg.fullmatch(artist):
+            params.update({"mbid": artist.lower()})
+        else:
+            params.update({"artist": artist.lower()})
+
+        response = self.get_cached(params, cool_down=3600, item="artist")
+        #  Check for error message.
+        artist_data = response.get("artist")
+        if not artist_data:
+            response = response.get("message")
             if not response:
-                response = f"Unknown error occured {code}."
+                response = "Unknown error occured."
                 log.warning(f"Failed to get artist error: {artist}")
             return api_loop(event.channel.send_message, response)
+
         fields = [
-            {"name": "Listeners", "value": artist_info["stats"]["listeners"]},
-            {"name": "Play Count", "value": artist_info["stats"]["playcount"]},
-            {"name": "On-Tour", "value": str(bool(artist_info["ontour"]))},
+            {"name": "Listeners", "value": artist_data["stats"]["listeners"]},
+            {"name": "Play Count", "value": artist_data["stats"]["playcount"]},
+            {"name": "On-Tour", "value": str(bool(artist_data["ontour"]))},
         ]
         artist_embed = bot.generic_embed(
-            title=artist_info["name"],
-            url=artist_info["url"],
+            title=artist_data["name"],
+            url=artist_data["url"],
             thumbnail={"url": self.get_artwork(artist, "artist")},
             fields=[{**field, "inline": False} for field in fields],
         )
@@ -197,7 +210,8 @@ class fmPlugin(Plugin):
     def on_chart_command(self, event):
         raise CommandError("Not implemented yet, coming soon.")
 
-    @Plugin.command("friends", metadata={"help": "last.fm"})
+    @Plugin.command("friends",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_friends_command(self, event):
         """
         Get a list of what your friends have recently listened to.
@@ -236,7 +250,7 @@ class fmPlugin(Plugin):
                     **kwargs
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,
@@ -268,8 +282,10 @@ class fmPlugin(Plugin):
                 else:
                     finished = False
                     break
+
             if finished:
                 break
+
             friend = friend.last_username
             limit = 2
             params = {
@@ -297,6 +313,7 @@ class fmPlugin(Plugin):
                 )
             if current_index >= len(data) - 1:
                 break
+
         return None, embed
 
     @Plugin.command("friends add", "<target:str...>", metadata={"help": "last.fm"})
@@ -307,10 +324,11 @@ class fmPlugin(Plugin):
         and won't target users that haven't setup a last.fm username.
         This command accepts either a Discord user ID or @user
         """
-        target = self.get_user_info(target, event.guild.id)
+        target = self.get_user_info(target, event.channel)
         if not target.last_username:
             raise CommandError("Target user doesn't have "
                                "a Last.FM account setup.")
+
         target = target.user_id
         name = self.state.users.get(int(target))
         name = str(name) if name else target
@@ -318,7 +336,11 @@ class fmPlugin(Plugin):
         if not user:
             user = bot.sql.users(user_id=event.author.id)
             bot.sql.add(user)
-        if not any([f.slave_id == target for f in user.friends]):
+        if not any(f.slave_id == target for f in user.friends):
+            if (event.channel.is_dm or not
+                    event.channel.guild.get_member(target)):
+                raise CommandError("User not found in this guild.")
+
             friendship = bot.sql.friends(
                 master_id=event.author.id,
                 slave_id=target,
@@ -342,37 +364,49 @@ class fmPlugin(Plugin):
         "artists",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "artist.search",
             "data_map": ("results", "artistmatches", "artist"),
             "artwork_type": "Artist",
-            "react": "search_artist_react",
             "meta_type": "artist",
+            "names": (("name", ), ),
+            "name_format": "[{}]: {}",
+            "values": (("listeners", ), ("mbid", )),
+            "value_format": "Listeners: {}, MBID: {}",
+            "item": "Artist",
         })
     @Plugin.command(
         "albums",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "album.search",
             "data_map": ("results", "albummatches", "album"),
             "artwork_type": "Album",
-            "react": "search_album_react",
             "meta_type": "album",
+            "names": (("artist", ), ("name", )),
+            "name_format": "[{}]: {} - {}",
+            "values": (("mbid", ), ),
+            "value_format": "MBID: {}",
+            "item": "Album",
         })
     @Plugin.command(
         "tracks",
         "<search:str...>",
         group="search",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "track.search",
             "data_map": ("results", "trackmatches", "track"),
             "artwork_type": "Track",
-            "react": "search_track_react",
             "meta_type": "track",
+            "names": (("artist", ), ("name", )),
+            "name_format": "[{}]: {} - {}",
+            "values": (("listeners", ), ("mbid", )),
+            "value_format": "Listeners: {}, MBID: {}",
+            "item": "Track",
         })
     def on_search_command(
             self,
@@ -381,10 +415,11 @@ class fmPlugin(Plugin):
             method,
             data_map,
             artwork_type,
-            react,
-            meta_type):
+            meta_type,
+            react="search_embed",
+            **kwargs):
         """
-        Search for an item on Last.fm.
+        Search for a {meta_type} on Last.fm.
         """
         data = self.get_cached({
                 "method": method,
@@ -399,6 +434,7 @@ class fmPlugin(Plugin):
                 data,
                 0,
                 thumbnail=thumbnail,
+                **kwargs,
             )
             reply = api_loop(event.channel.send_message, content, embed=embed)
             if len(data) > 5 and not event.channel.is_dm:
@@ -409,9 +445,10 @@ class fmPlugin(Plugin):
                     amount=5,
                     edit_message=getattr(self, react),
                     thumbnail=thumbnail,
+                    **kwargs,
                 )
                 bot.reactor.add_reactors(
-                    self,
+                    self.client,
                     reply,
                     generic_react,
                     event.author.id,
@@ -422,94 +459,52 @@ class fmPlugin(Plugin):
         else:
             api_loop(event.channel.send_message, f"No {meta_type}s found.")
 
-    def search_artist_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data=data,
-            index=index,
-            names=(("name", ), ),
-            name_format="[{}]: {}",
-            values=(("listeners", ), ("mbid", )),
-            value_format="Listeners: {}, MBID: {}",
-            item="Artist",
-            **kwargs
-        )
-
-    def search_album_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data,
-            index=index,
-            names=(("artist", ), ("name", )),
-            name_format="[{}]: {} - {}",
-            values=(("mbid", ), ),
-            value_format="MBID: {}",
-            item="Album",
-            **kwargs,
-        )
-
-    def search_track_react(self, data, index, **kwargs):
-        return None, self.search_embed(
-            data,
-            index=index,
-            names=(("artist", ), ("name", )),
-            name_format="[{}]: {} - {}",
-            values=(("listeners", ), ("mbid", )),
-            value_format="Listeners: {}, MBID: {}",
-            item="Track",
-            **kwargs,
-        )
-
     @Plugin.command(
         "albums",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettopalbums",
             "meta_type": "album",
-            "secondary_kwargs": {
-                "data_map": ("topalbums", "album"),
-                "name_format": ("playcount", "raw:plays"),
-                "value_format": ("artist", ),
-                "artist_map": ("artist", "name"),
-            }
+            "data_map": ("topalbums", "album"),
+            "name_format": ("playcount", "raw:plays"),
+            "value_format": ("artist", ),
+            "artist_map": ("artist", "name"),
         })
     @Plugin.command(
         "artists",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettopartists",
             "meta_type": "artist",
-            "secondary_kwargs": {
-                "data_map": ("topartists", "artist"),
-                "name_format": ("playcount", "raw:plays"),
-            }
+            "data_map": ("topartists", "artist"),
+            "name_format": ("playcount", "raw:plays"),
         })
     @Plugin.command(
         "tracks",
         "[username:str...]",
         group="top",
-        metadata={"help": "last.fm"},
+        metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS},
         context={
             "method": "user.gettoptracks",
             "meta_type": "track",
-            "secondary_kwargs": {
-                "data_map": ("toptracks", "track"),
-                "name_format": ("playcount", "raw:plays"),
-                "value_format": ("artist", ),
-                "artist_map": ("artist", "name"),
-            }
+            "data_map": ("toptracks", "track"),
+            "name_format": ("playcount", "raw:plays"),
+            "value_format": ("artist", ),
+            "artist_map": ("artist", "name"),
         })
     def on_top_items_command(
             self,
             event,
             method,
             meta_type,
-            secondary_kwargs,
-            username=None):
+            username=None,
+            **kwargs):
         """
-        Get an account's top played item.
+        Get an account's top played {meta_type}s.
         This command will default to the author.
         But will target another user if their ID, @ or nickname is passed.
         Returns the top items of the target user's Last.FM account.
@@ -517,10 +512,11 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
+
         period = self.get_period(event.author.id)
         fm_embed, lastname = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
             description=(f"Top {meta_type}s "
                          f"{self.beautify_period(period, over=True)}."),
         )
@@ -535,7 +531,7 @@ class fmPlugin(Plugin):
             params=params,
             limit=limit,
             singular=False,
-            **secondary_kwargs,
+            **kwargs,
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
@@ -546,7 +542,7 @@ class fmPlugin(Plugin):
         Accepts a string argument from one of the options below.
             Overall
             7 days
-            1 months
+            1 month
             3 months
             6 months
             12 months
@@ -624,7 +620,8 @@ class fmPlugin(Plugin):
                      f"set to ``{username}``."),
                 )
 
-    @Plugin.command("user", "[username:str...]", aliases=["np", "now"], metadata={"help": "last.fm"})
+    @Plugin.command("user", "[username:str...]", aliases=["np", "now"],
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_command(self, event, username=None):
         """
         Get basic stats from last.fm account.
@@ -636,7 +633,7 @@ class fmPlugin(Plugin):
             username = event.author.id
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
         )
         params = {
             "method": "user.getrecenttracks",
@@ -656,7 +653,8 @@ class fmPlugin(Plugin):
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("recent", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("recent", "[username:str...]",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_recent_command(self, event, username=None):
         """
         Get an account's recent tracks.
@@ -667,9 +665,10 @@ class fmPlugin(Plugin):
         limit = 5
         if username is None:
             username = event.author.id
+
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
             description="Recent tracks",
         )
         params = {
@@ -690,7 +689,8 @@ class fmPlugin(Plugin):
         )
         api_loop(event.channel.send_message, embed=fm_embed)
 
-    @Plugin.command("full", "[username:str...]", metadata={"help": "last.fm"})
+    @Plugin.command("full", "[username:str...]",
+                    metadata={"help": "last.fm", "perms": Permissions.EMBED_LINKS})
     def on_user_full_command(self, event, username=None):
         """
         Get stats from a last.fm account.
@@ -700,9 +700,10 @@ class fmPlugin(Plugin):
         """
         if username is None:
             username = event.author.id
+
         fm_embed, username = self.generic_user_data(
             username,
-            guild=(event.channel.is_dm or event.guild.id),
+            channel=event.channel,
         )
         message = api_loop(event.channel.send_message, "Searching for user.")
         period = self.get_period(event.author.id)
@@ -785,13 +786,14 @@ class fmPlugin(Plugin):
             self,
             username,
             title_template="{}",
-            guild=None,
+            channel=None,
             **kwargs):
-        user_data = self.get_user(username, guild)
+        user_data = self.get_user(username, channel)
         username = user_data["name"]
         if username is None:
             raise CommandError("User should set a last.fm account "
                                f"using ``{bot.prefix}username``")
+
         registered = strftime(
             "%Y-%m-%dT%H:%M:%S",
             gmtime(user_data["registered"]["#text"]),
@@ -813,15 +815,6 @@ class fmPlugin(Plugin):
         )
         return fm_embed, user_data["name"]
 
-    def get_artist(self, artist: str):
-        params = {"method": "artist.getinfo"}
-        if self.mbid_reg.fullmatch(artist):
-            params.update({"mbid": artist.lower()})
-        else:
-            params.update({"artist": artist.lower()})
-        artist_data = self.get_cached(params, cool_down=3600, item="artist")
-        return artist_data
-
     class cached_object:
         __slots__ = (
             "exists",
@@ -836,6 +829,12 @@ class fmPlugin(Plugin):
             self.data = data
             self.error = error
 
+        def validity_check(self):
+            return self.exists and not self.expired_check()
+
+        def expired_check(self):
+            return time() > self.expire
+
     def get_cached(
             self,
             params: dict,
@@ -846,12 +845,11 @@ class fmPlugin(Plugin):
         params = {str(key): str(value) for key, value in params.items()}
         get = self.s.prepare_request(Request("GET", url, params=params))
         url = get.url
-        if (url not in self.cache or self.cache[url].exists and
-                time() >= self.cache[url].expire):
+        if url not in self.cache or not self.cache[url].expired_check():
             try:
                 r = self.s.send(get)
             except requestCError as e:
-                log.warning(e)
+                self.log.warning(e)
                 raise CommandError("Last.FM isn't available right now.")
 
             if r.status_code == 200:
@@ -870,7 +868,8 @@ class fmPlugin(Plugin):
                     error=f"404 - {item} doesn't exist.",
                 )
                 raise fmEntryNotFound(self.cache[url].error)
-            log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
+
+            self.log.warning(f"Last.FM threw error {r.status_code}: {r.text}")
             if bot.config.exception_webhooks:
                 exception_webhooks(
                     self.client,
@@ -878,16 +877,19 @@ class fmPlugin(Plugin):
                     content=(f"Last.FM threw error {r.status_code}: "
                              f"```{redact(r.text)[:1950]}```"),
                 )
+
             try:
-                message = ": " + r.json().get("message", ".")
+                message = ": " + r.json().get("message", "")
             except JSONDecodeError:
                 message = "."
             else:
                 message = redact(message)
             raise fmEntryNotFound(f"{r.status_code} - Last.fm threw "
                                   f"unexpected HTTP status code{message}")
-        if self.cache[url].exists and time() <= self.cache[url].expire:
+
+        if self.cache[url].validity_check():
             return self.cache[url].data
+
         raise fmEntryNotFound(self.cache[url].error)
 
     class fm_format_mapping:
@@ -898,17 +900,17 @@ class fmPlugin(Plugin):
 
         @staticmethod
         def artist(data, artist_map, **kwargs):
-            try:
-                artist = get_dict_item(data, artist_map)
-            except (IndexError, KeyError):
+            artist = get_dict_item(data, artist_map)
+            if artist is None:
                 artist = "Unset"
             return f"{artist} -"
 
         @staticmethod
         def ago(data, time_map=("date", "uts"), **kwargs):
-            try:
-                delta = str(time_since(get_dict_item(data, time_map)))
-            except (IndexError, KeyError):
+            delta = get_dict_item(data, time_map)
+            if delta is not None:
+                delta = str(time_since(delta))
+            else:
                 delta = "Now"
             return delta.capitalize()
 
@@ -937,13 +939,22 @@ class fmPlugin(Plugin):
             end_value_map=("name", ),
             **kwargs):
         data = self.get_cached(params, url=url, cool_down=cool_down)
-        if len(get_dict_item(data, data_map)) < limit:
-            limit = len(get_dict_item(data, data_map))
+        data = get_dict_item(data, data_map)
+        if data and len(data) < limit:
+            limit = len(data)
+        elif not data:
+            limit = 0
         if limit != 0:
             name = ""
             value = ""
             for index in range(limit):
-                position = get_dict_item(data, data_map)[index]
+                try:
+                    position = data[index]
+                except (IndexError, ValueError):
+                    position = None
+                if not position:
+                    break
+
                 if not singular or not name:
                     for method in (name_format or ()):
                         function = getattr(
@@ -991,18 +1002,26 @@ class fmPlugin(Plugin):
                 inline=inline,
             )
 
-    def get_user(self, username: str, guild: int = None):
+    def get_user(self, username: str, channel=None):
         username = str(username)
+        result = None
         try:
-            result = self.get_user_info(username, guild=guild).last_username
+            result = self.get_user_info(username, channel)
         except CommandError:
             pass
         else:
-            if result:
-                username = result
+            if result.last_username:
+                username = result.last_username
             elif discord_regex.match(username):
                 raise CommandError("User should set a last.fm account "
                                    f"using ``{bot.prefix}username``")
+
+        if result and channel and ((channel.is_dm and result.user_id not in
+                                    channel.recipients.keys()) or
+                                   (not channel.is_dm and not
+                                    channel.guild.get_member(result.user_id))):
+            raise CommandError("User not found in this guild.")
+
         return self.get_last_account(username)["user"]
 
     def get_last_account(self, username: str):
@@ -1013,10 +1032,11 @@ class fmPlugin(Plugin):
             }
             user_data = self.get_cached(params, cool_down=1800, item="user")
             return user_data
+
         raise CommandError("Invalid username format.")
 
     @staticmethod
-    def get_user_info(target: str, guild: int = None):
+    def get_user_info(target: str, channel=None):
         """
         Used to get a Discord user's information from the SQL server.
 
@@ -1042,25 +1062,25 @@ class fmPlugin(Plugin):
                 The guild id used for alias lookup.
         """
         try:
-            target = AT_to_id(target)
+            user_id = AT_to_id(target)
         except CommandError as e:
-            if guild is not None and not isinstance(guild, bool):
+            if channel and not channel.is_dm:
                 data = bot.sql(bot.sql.aliases.query.filter(
-                    bot.sql.aliases.guild_id == guild,
-                    bot.sql.aliases.alias.like(target)
+                    bot.sql.aliases.guild_id == channel.guild_id,
+                    bot.sql.aliases.alias.like(target.lower())
                     ).first)
                 if data:
-                    target = data.user_id
+                    user_id = data.user_id
                 else:
                     raise CommandError("User alias not found.")
-            elif isinstance(guild, bool):
+            elif channel:
                 raise CommandError("User aliases aren't enabled in DMs.")
             else:
                 raise e
-        data = bot.sql(bot.sql.users.query.get, target)
+        data = bot.sql(bot.sql.users.query.get, user_id)
         if data is None:
             return bot.sql.users(
-                user_id=target,
+                user_id=user_id,
             )
         return data
 
@@ -1131,7 +1151,7 @@ class fmPlugin(Plugin):
     #    if not kwargs.get("thumbnail"):
     #        name = data[index].get("name")
     #        kwargs["thumbnail"] = self.get_artwork(name, item)
-        return bot.generic_embed(
+        return None, bot.generic_embed(
             title=f"{item} results.",
             url=get_dict_item(data[index], url_index),
             fields=fields,
@@ -1147,6 +1167,7 @@ class fmPlugin(Plugin):
         art_type = type_match.get(art_type.lower())
         if not (art_type and self.discogs_secret and self.discogs_key):
             return
+
         endpoint = "https://api.discogs.com/database/search"
         headers = {
             "Authorization": (f"Discogs key={self.discogs_key},"
@@ -1161,10 +1182,10 @@ class fmPlugin(Plugin):
         try:
             r = get(endpoint, headers=headers, params=params)
         except requestCError as e:
-            log.warning(e)
+            self.log.warning(e)
         else:
             if r.status_code < 400:
                 data = r.json().get("results")
                 return (data[0].get("thumb") if data else data)
-            log.warning(f"{r.status_code} returned "
-                        f"by Discogs: {r.text}")
+            self.log.warning(f"{r.status_code} returned "
+                             f"by Discogs: {r.text}")

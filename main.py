@@ -3,20 +3,11 @@ The CLI module is a small utility that can be used as an easy entry point for
 creating and running bots/clients.
 """
 import os
-import subprocess
-import sys
 import logging
 
 from gevent import monkey
 
 monkey.patch_all()
-
-try:
-    from pip import __path__ as pip
-except ImportError:
-    pip = None
-
-log = logging.getLogger(__name__)
 
 
 def disco_main():
@@ -36,30 +27,6 @@ def disco_main():
     from bot.base import bot
 
     args = bot.config.disco
-
-    if pip and sys.platform == "linux" or sys.platform == "linux2":
-        print("Sudo access may be required to keep youtube-dl up to date.")
-        if (any("voice" in plug for plug in bot.config.disco.plugin) or
-                any("voice" in plug for plug in bot.config.disco.bot.plugins)):
-            path = [
-                "sudo",
-                sys.executable,
-                pip[0],
-                "install",
-                "--upgrade",
-                "youtube-dl",
-            ]
-            try:
-                subprocess.call(path)
-            except FileNotFoundError as e:
-                if e.filename == "sudo":
-                    path.pop(0)
-                    subprocess.call(path)
-                else:
-                    print(f"Failed to update/install yt-dl {e}")
-    else:
-        print(f"System {sys.platform} may not be supported, "
-              "Linux is suggested or pip isn't installed.")
 
     # Create the base configuration object
     config = ClientConfig(args.to_dict())
@@ -102,6 +69,7 @@ if __name__ == '__main__':
     try:
         disco.run_forever()
     except KeyboardInterrupt:
+        log = logging.getLogger(__name__)
         log.info("Keyboard interrupt received, unloading plugins.")
         for plugin in disco.plugins.copy().values():
             log.info("Unloading plugin: " + plugin.__class__.__name__)

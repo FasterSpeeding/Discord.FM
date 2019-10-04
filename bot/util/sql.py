@@ -191,7 +191,8 @@ class sql_instance:
         friends,
         aliases,
     )
-    tables = {}
+    autocommit = True
+    autoflush = True
     session = None
     engine = None
     _driver_ssl_checks = {  # starts from self.session.connection()
@@ -208,7 +209,8 @@ class sql_instance:
             password=None,
             database=None,
             query=None,
-            args=None):
+            args=None,
+            local_path=None):
         self.session, self.engine = self.create_engine_session_safe(
             drivername,
             host,
@@ -218,6 +220,7 @@ class sql_instance:
             database,
             query,
             args,
+            local_path,
         )
         self.check_tables()
         self.spwan_binded_tables()
@@ -268,6 +271,7 @@ class sql_instance:
 
     def commit(self):
         self(self.session.commit)
+        self.flush()
 
     def ssl_check(self):
         driver = self.session.connection().engine.driver
@@ -280,6 +284,7 @@ class sql_instance:
         for attr in check_map:
             if not position:
                 break
+
             position = getattr(position, attr, None)
         log.info(f"SQL SSL status: {position or 'unknown'}")
         return position
@@ -293,7 +298,8 @@ class sql_instance:
             password=None,
             database=None,
             query=None,
-            args=None):
+            args=None,
+            local_path=None):
 
         # Pre_establish settings
         if host:
@@ -311,7 +317,7 @@ class sql_instance:
             if not os.path.exists("data"):
                 os.makedirs("data")
             args = {}
-            settings = "sqlite+pysqlite:///data/data.db"
+            settings = f"sqlite+pysqlite:///{local_path or 'data/data.db'}"
 
         # Connect to server
         return spawn_engine(
@@ -332,7 +338,8 @@ class sql_instance:
             password=None,
             database=None,
             query=None,
-            args=None):
+            args=None,
+            local_path=None):
 
         engine = self.create_engine(
             drivername,
@@ -343,6 +350,7 @@ class sql_instance:
             database,
             query,
             args,
+            local_path,
         )
 
         # Verify connection.
@@ -351,12 +359,12 @@ class sql_instance:
         except exc.OperationalError as e:
             log.warning("Unable to connect to database, "
                         "defaulting to sqlite: " + str(e))
-            engine = self.create_engine()
+            engine = self.create_engine(local_path=local_path)
 
         session = scoped_session(
             sessionmaker(
-                autocommit=True,
-                autoflush=True,
+                autocommit=self.autocommit,
+                autoflush=self.autoflush,
                 bind=engine,
             ),
         )

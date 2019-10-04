@@ -10,11 +10,10 @@ from disco import VERSION as DISCO_VERSION
 from disco.bot import Plugin
 from disco.api.http import APIException
 from disco.bot.command import CommandError, CommandEvent, CommandLevels
-from disco.types.base import Unset
+from disco.types.base import UNSET
 from disco.types.channel import ChannelType
 from disco.types.permissions import Permissions
 from disco.util.sanitize import S as sanitize
-from disco.util.logging import logging
 
 
 from bot import __GIT__
@@ -23,8 +22,6 @@ from bot.util.misc import (
     api_loop, dm_default_send, exception_webhooks,
     exception_dms, redact
 )
-
-log = logging.getLogger(__name__)
 
 
 class CorePlugin(Plugin):
@@ -39,15 +36,16 @@ class CorePlugin(Plugin):
                 else:
                     bot.prefix_cache[guild.guild_id] = bot.prefix
         except CommandError as e:
-            log.critical("Failed to load guild data from SQL "
-                         "servers, they're probably down.")
+            self.log.critical("Failed to load guild data from SQL "
+                              "servers, they're probably down.")
             log.exception(e.original_exception)
+
         if bot.config.monitor_usage:
             if not os.path.exists("data/status/"):
                 os.makedirs("data/status/")
             self.register_schedule(
                 self.log_stats,
-                60,
+                bot.config.monitor_usage,
                 repeat=True,
                 init=False,
             )
@@ -65,8 +63,8 @@ class CorePlugin(Plugin):
                 )
             except APIException as e:  # Unknown message, Missing permissions
                 if e.code not in (10008, 50013):
-                    log.warning("Api exception caught while "
-                                f"unloading Core module: {e}")
+                    self.log.warning("Api exception caught while "
+                                     f"unloading Core module: {e}")
             del bot.reactor.events[event.message_id]
         super(CorePlugin, self).unload(ctx)
 
@@ -75,20 +73,18 @@ class CorePlugin(Plugin):
         try:
             self.custom_prefix(event)
         except Exception as e:
-            log.exception(e)
+            self.exception_response(event, e)
+            self.log.exception(e)
 
     @Plugin.listen("GuildCreate")
     def on_guild_join(self, event):
-        if isinstance(event.unavailable, Unset):
+        if event.unavailable is UNSET:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
-            if not guild or guild.prefix is None:
-                bot.prefix_cache[event.guild.id] = bot.prefix
-            else:
-                bot.prefix_cache[event.guild.id] = guild.prefix
+            bot.prefix_cache[event.guild.id] = guild.prefix if guild else None
 
     @Plugin.listen("GuildDelete")
     def on_guild_leave(self, event):
-        if isinstance(event.unavailable, Unset):
+        if event.unavailable is UNSET:
             bot.prefix_cache.pop(event.id, None)
             guild = bot.sql(bot.sql.guilds.query.get, event.id)
             if guild:
@@ -104,6 +100,7 @@ class CorePlugin(Plugin):
                     event.channel.send_message,
                     "This command cannot be used in DMs.",
                 )
+
         member = event.guild.get_member(event.author)
         if member.permissions.can(Permissions.ADMINISTRATOR):
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
@@ -140,46 +137,19 @@ class CorePlugin(Plugin):
         """
         React to message reaction add.
         """
-        if not trigger_event.guild.get_member(trigger_event.user_id).user.bot:
-            message_id = trigger_event.message_id
-            event = bot.reactor.events.get(message_id, None)
-            if event and time() < event.end_time and event.conditions:
-                for condition in event.conditions:
-                    if (not condition.auth or
-                            trigger_event.user_id == condition.owner_id and
-                            trigger_event.emoji.name == condition.reactor):
-                        try:
-                            self.client.api.channels_messages_reactions_delete(
-                                channel=event.channel_id,
-                                message=message_id,
-                                emoji=condition.reactor,
-                                user=condition.owner_id,
-                            )
-                        except APIException as e:
-                            if e.code == 10008:  # Unknown message
-                                if message_id in bot.reactor.events:
-                                    del bot.reactor.events[message_id]
-                                return
+        if self.client.state.users.get(trigger_event.user_id).bot:
+            return
 
-                            if e.code != 50013:  # Missing permissions
-                                raise e
-                        index = condition.function(
-                            client=self,
-                            message_id=message_id,
-                            channel_id=event.channel_id,
-                            reactor=condition.reactor,
-                            **event.kwargs,
-                            **condition.kwargs,
-                        )
-                        if (index is not None and
-                                message_id in bot.reactor.events):
-                            bot.reactor.events[
-                                message_id
-                            ].kwargs["index"] = index
-                            event.end_time += 10
-                        elif message_id in bot.reactor.events:
-                            del bot.reactor.events[message_id]
-            elif event and time() > event.end_time:
+        message_id = trigger_event.message_id
+        event = bot.reactor.events.get(message_id, None)
+        if not event:
+            return
+
+        self_perms = trigger_event.channel.get_permissions(
+            self.bot.client.state.me,
+        )
+        if event.del_check():
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
                 try:
                     self.client.api.channels_messages_reactions_delete_all(
                         channel=event.channel_id,
@@ -188,10 +158,50 @@ class CorePlugin(Plugin):
                 except APIException as e:  # Unknown message, Missing permissions
                     if e.code not in (10008, 50013):
                         raise e
-                if message_id in bot.reactor.events:
-                    del bot.reactor.events[message_id]
 
-    @Plugin.command("help", "[command:str...]", metadata={"help": "miscellaneous"})
+            if message_id in bot.reactor.events:
+                del bot.reactor.events[message_id]
+
+            return
+
+        condition = event.get_condition(trigger_event)
+        if condition:
+            if self_perms.can(int(Permissions.MANAGE_MESSAGES)):
+                try:
+                    self.client.api.channels_messages_reactions_delete(
+                        channel=event.channel_id,
+                        message=message_id,
+                        emoji=trigger_event.emoji.name,
+                        user=trigger_event.user_id,
+                    )
+                except APIException as e:
+                    if e.code == 10008:  # Unknown message
+                        if message_id in bot.reactor.events:
+                            del bot.reactor.events[message_id]
+                        return
+
+                    if e.code != 50013:  # Missing permissions
+                        raise e
+
+            index = condition.function(
+                client=self.client,
+                message_id=message_id,
+                channel_id=event.channel_id,
+                reactor=condition.reactor,
+                **event.kwargs,
+                **condition.kwargs,
+            )
+            if (index is not None and
+                    message_id in bot.reactor.events):
+                bot.reactor.events[
+                    message_id
+                ].kwargs["index"] = index
+                event.end_time += 10
+            elif message_id in bot.reactor.events:
+                del bot.reactor.events[message_id]
+
+    @Plugin.command("help", "[command:str...]",
+                    metadata={"help": "miscellaneous"})  # , "perms": Permissions.EMBED_LINKS})
     def on_help_command(self, event, command=None):
         """
         Get a list of the commands in a module.
@@ -202,11 +212,12 @@ class CorePlugin(Plugin):
             channel = api_loop(event.author.open_dm)
         else:
             channel = event.channel
-        if command is None:  # _attrs may not work in 1.0.0
+        if command is None:
             for name, embed in bot.help_embeds.copy().items():
-                level = CommandLevels._attrs.get(name, None)
+                level = getattr(CommandLevels, name.upper(), None)
                 if level and level > self.bot.get_level(event.author):
                     continue
+
                 dm_default_send(event, channel, embed=embed)
         else:
             if command.startswith(bot.prefix):
@@ -216,7 +227,7 @@ class CorePlugin(Plugin):
             # Check for module match.
             embed = bot.help_embeds.get(command.lower())
             if embed:
-                level = CommandLevels._attrs.get(command.lower(), None)
+                level = getattr(CommandLevels, command.upper(), None)
                 if not level or level <= self.bot.get_level(event.author):
                     return dm_default_send(event, channel, embed=embed)
 
@@ -225,34 +236,17 @@ class CorePlugin(Plugin):
             for command_obj in self.bot.commands:
                 match = command_obj.compiled_regex.match(command)
                 if (match and (not command_obj.level or
-                               author_level >= command_obj.level)):
+                               author_level >= command_obj.level)
+                        and command_obj.metadata.get("help", None)):
                     break
 
-            if match:
-                if command_obj.raw_args is not None:
-                    args = " " + command_obj.raw_args + "; "
-                else:
-                    args = str()
-                array_name = command_obj.metadata.get("metadata", None)
-                if array_name:
-                    array_name = array_name.get("help", None)
-                if array_name:
-                    docstring = command_obj.get_docstring()
-                    docstring = docstring.replace("    ", "").strip("\n")
-                    if command_obj.group:
-                        triggers_formatted = command_obj.group + " ("
-                    else:
-                        triggers_formatted = "("
-
-                    for trigger in command_obj.triggers:
-                        triggers_formatted += f"**{trigger}** | "
-                    triggers_formatted = triggers_formatted[:-3] + "):"
-                    embed = bot.generic_embed(
-                        title=(f"{bot.prefix}{triggers_formatted}{args} "
-                               f"a command in the {array_name} module."),
-                        description=docstring,
-                    )
-                    dm_default_send(event, channel, embed=embed)
+            data = bot.generate_command_info(commanb_obj, all_triggers=True)
+            if match and data:
+                embed = bot.generic_embed(
+                    title=data[0] + f" a command in the {data[3]} module.",
+                    description=data[2],
+                )
+                dm_default_send(event, channel, embed=embed)
             else:
                 command = sanitize(command, escape_codeblocks=True)
                 dm_default_send(
@@ -277,8 +271,8 @@ class CorePlugin(Plugin):
         """
         api_loop(
             event.channel.send_message,
-            ("https://discordapp.com/oauth2/authorize?client_id="
-             f"{self.state.me.id}&scope=bot&permissions={104197184}"),
+            (f"https://discordapp.com/oauth2/authorize?client_id={self.state.me.id}"
+             f"&scope=bot&permissions={bot.config.default_permissions}"),
         )
 
     @Plugin.command("prefix", "[prefix:str...]", metadata={"help": "miscellaneous"})
@@ -293,6 +287,7 @@ class CorePlugin(Plugin):
                 event.channel.send_message,
                 "This command can only be used in guilds.",
             )
+
         if prefix is None:
             guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
             if not guild or guild.prefix is None:
@@ -323,13 +318,13 @@ class CorePlugin(Plugin):
             elif guild:
                 guild.prefix = new_prefix
                 bot.sql.flush()
-            bot.prefix_cache[event.guild.id] = prefix
+            bot.prefix_cache[event.guild.id] = new_prefix
             api_loop(
                 event.channel.send_message,
                 f"Prefix changed to ``{prefix}``",
             )
 
-    @Plugin.command("about", metadata={"help": "miscellaneous"})
+    @Plugin.command("about", metadata={"help": "miscellaneous", "perms": Permissions.EMBED_LINKS})
     def on_info_command(self, event):
         """
         Get information about this bot's instance.
@@ -377,8 +372,8 @@ class CorePlugin(Plugin):
             ("Uptime", uptime),
             ("Process", (f"{memory_usage:.2f} MiB ({memory_percent:.0f}%)"
                          f"\n{cpu_usage:.2f}% CPU")),
-            ("Members", (f"{member_count} total\n"
-                         f"{len(self.client.state.users)} unique" + online)),
+            ("Users", (f"{member_count} total\n"
+                       f"{len(self.client.state.users)} unique" + online)),
             ("Channels", (f"{len(self.client.state.channels)} total\n"
                           f"{voice_count} voice\n{text_count} text\n"
                           f"{len(self.client.state.dms)} open "
@@ -400,46 +395,64 @@ class CorePlugin(Plugin):
     def log_stats(self):
         start_date = datetime.fromtimestamp(self.process.create_time())
         uptime = datetime.now() - start_date
+        member_count = 0
+        cached_member_count = 0
+        for guild in self.client.state.guilds.copy().values():
+            member_count += guild.member_count
+            cached_member_count += len(guild.members)
         fields = {
             "Uptime": uptime.seconds,
             "Voice Instances": len(self.client.state.voice_clients),
             "Memory usage": self.process.memory_full_info().uss / 1024**2,
             "Memory %": self.process.memory_percent(),
             "CPU %": self.process.cpu_percent() / psutil.cpu_count(),
-            "Guild count": len(self.client.state.guilds),
-            "Members": len(self.client.state.users),
+            "Guilds": len(self.client.state.guilds),
+            "Users": len(self.client.state.users),
+            "Member Count": member_count,
+            "Cached Member Count": cached_member_count,
             "Channels": len(self.client.state.channels),
+            "DMs": len(self.client.state.dms),
         }
         try:
             with open(f"data/status/{start_date}.csv", mode="a+") as csv_file:
                 writer = csv.DictWriter(csv_file, fieldnames=fields.keys())
                 writer.writerow(fields)
         except (IOError, OSError) as e:
-            log.warning(f"Unable to log status to csv: {e}")
+            self.log.warning(f"Unable to log status to csv: {e}")
 
     def custom_prefix(self, event):
+        def get_prefix(event):
+            if event.channel.is_dm:
+                return bot.prefix
+
+            #  check prefix cache return default prefix if is None
+            prefix = bot.prefix_cache.get(event.guild_id, UNSET)
+            if prefix is not UNSET:
+                return bot.prefix if prefix is None else prefix
+
+            #  check sql and cache value returned or default
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
+            bot.prefix_cache[event.guild_id] = guild.prefix if guild else None
+            return bot.prefix if not guild or guild.prefix is None else guild.prefix
+
+        def get_missing_perms(PermissionValue, self_perms):
+            perms = [perm for perm in Permissions.keys()
+                     if (int(PermissionValue) & getattr(Permissions, perm))
+                     == getattr(Permissions, perm)]
+            return [perm for perm in perms
+                    if not self_perms.can(getattr(Permissions, perm))]
+
         if event.author.bot:
             return
 
+        #  Enforce guild whitelist
         if ((event.channel.is_dm and "DM" in bot.config.blacklist or
              bot.config.whitelist and event.guild_id not in bot.config.whitelist
              or bot.config.blacklist and event.guild_id in bot.config.blacklist)
                 and event.author.id not in bot.config.uservetos):
             return
 
-        if event.channel.is_dm:
-            prefix = bot.prefix
-        else:
-            prefix = bot.prefix_cache.get(event.guild_id, None)
-            if prefix is None:
-                guild = bot.sql(bot.sql.guilds.query.get, event.guild_id)
-                if not guild or guild.prefix is None:
-                    prefix = bot.prefix
-                    bot.prefix_cache[event.guild_id] = prefix
-                else:
-                    prefix = guild.prefix
-                    bot.prefix_cache[event.guild_id] = guild.prefix
-
+        prefix = get_prefix(event)
         require_mention = self.bot.config.commands_require_mention
         if not event.message.content.startswith(prefix):
             require_mention = True
@@ -447,6 +460,7 @@ class CorePlugin(Plugin):
         elif (len(event.message.content) > len(prefix) and
                 event.message.content[len(prefix)] == " "):
             prefix += " "
+
         commands = list(self.bot.get_commands_for_message(
             require_mention,
             self.bot.config.commands_mention_rules,
@@ -455,13 +469,24 @@ class CorePlugin(Plugin):
         ))
         if not commands:
             return
+
         for command, match in commands:
             if not self.bot.check_command_permissions(command, event):
                 continue
-            try:
-                command.plugin.execute(CommandEvent(command, event, match))
-            except Exception as e:
-                self.exception_response(event, e)
+
+            if not event.channel.is_dm:
+                self_perms = event.channel.get_permissions(
+                    self.bot.client.state.me,
+                )
+                PermissionValue = command.metadata.get("perms", None)
+                if PermissionValue and not self_perms.can(int(PermissionValue)):
+                    return api_loop(
+                        event.channel.send_message,
+                        ("Missing permission(s) required to respond: `" +
+                         f"{get_missing_perms(PermissionValue, self_perms)}`"),
+                    )
+
+            command.plugin.execute(CommandEvent(command, event, match))
             break
 
     def exception_response(self, event, exception, respond: bool = True):
@@ -511,38 +536,4 @@ class CorePlugin(Plugin):
                 bot.config.exception_webhooks,
                 embeds=[embed.to_dict(), ],
             )
-        log.exception(exception)
-
-
-def event_channel_guild_check(self, event):
-    """
-    Used to work around a bug with the etf encoder
-    where certain guilds will stop returning
-    Guild objects in Message Create Events at seemingly random intervals.
-    """
-    if ((not hasattr(event, "channel") or event.channel is None) and
-            not isinstance(event.guild_id, Unset)):
-        guild = getattr(event, "guild", None)
-        if guild is None:
-            event.guild = self.client.state.guilds.get(
-                event.guild_id,
-                None,
-            )
-            if event.guild is None:
-                self.client.state.guilds[event.guild_id] = api_loop(
-                    self.client.api.guilds_get,
-                    event.guild_id,
-                )
-                event.guild = self.client.state.guilds[event.guild_id]
-        event.channel = event.guild.channels.get(event.channel_id, None)
-        if event.channel is None:
-            event.channel = api_loop(
-                self.client.api.channels_get,
-                event.channel_id,
-            )
-    elif ((not hasattr(event, "channel") or event.channel is None) and
-            isinstance(event.guild_id, Unset)):
-        event.channel = api_loop(
-            self.client.api.channels_get,
-            event.message.channel_id,
-        )
+        self.log.exception(exception)

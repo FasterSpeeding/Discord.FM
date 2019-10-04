@@ -1,7 +1,7 @@
 import logging
 
 
-from disco.types.user import Game, Status, GameType
+from disco.types.user import Activity, Status, ActivityTypes
 from requests import post, RequestException
 
 
@@ -131,8 +131,8 @@ class status_handler(object):
             presence = self.presence.format(**guilds_payload.to_dict())
             self.bot.client.update_presence(
                 Status.online,
-                Game(
-                    type=GameType.listening,
+                Activity(
+                    type=ActivityTypes.listening,
                     name=presence,
                 )
             )

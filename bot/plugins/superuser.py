@@ -6,16 +6,13 @@ import textwrap
 from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
-from disco.util.logging import logging
+from disco.types.permissions import Permissions
 from requests import get
 
 
 from bot.base import bot
 from bot.util.misc import api_loop
 from bot.util.status import status_handler, guildCount
-
-
-log = logging.getLogger(__name__)
 
 
 class superuserPlugin(Plugin):
@@ -61,10 +58,11 @@ class superuserPlugin(Plugin):
         for plug in self.bot.plugins.copy().values():
             if issubclass(plug.__class__, self.__class__):
                 continue
+
             if hasattr(plug, "__check__") and not plug.__check__():
                 self.bot.rmv_plugin(plug.__class__)
-                log.info(plug.__class__.__name__ +
-                         " failed check and has been unloaded.")
+                self.log.info(plug.__class__.__name__ +
+                              " failed check and has been unloaded.")
 
     @Plugin.command("restart", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_restart_command(self, event):
@@ -72,7 +70,7 @@ class superuserPlugin(Plugin):
         Used to reload all the bot's modules.
         """
         api_loop(event.channel.send_message, "Restarting")
-        log.info("Soft restart initiated.")
+        self.log.info("Soft restart initiated.")
         self.register_schedule(
             self.restart,
             0,
@@ -83,10 +81,10 @@ class superuserPlugin(Plugin):
     def restart(self):
         for plugin in self.bot.plugins.copy().values():
             if not issubclass(plugin.__class__, self.__class__):
-                log.info("Reloading plugin: " + plugin.__class__.__name__)
+                self.log.info("Reloading plugin: " + plugin.__class__.__name__)
                 plugin.reload()  # check this
-                log.info("Successfully reloaded plugin: "
-                         + plugin.__class__.__name__)
+                self.log.info("Successfully reloaded plugin: "
+                              + plugin.__class__.__name__)
 
     @Plugin.command("shutdown", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_shutdown_command(self, event):
@@ -94,7 +92,7 @@ class superuserPlugin(Plugin):
         Used to unload all the bot's modules and end the script.
         """
         api_loop(event.channel.send_message, "Shutting down.")
-        log.info("Soft shutdown initiated.")
+        self.log.info("Soft shutdown initiated.")
         self.register_schedule(
             self.shutdown,
             0,
@@ -105,12 +103,12 @@ class superuserPlugin(Plugin):
     def shutdown(self):
         for plugin in self.bot.plugins.copy().values():
             if not issubclass(plugin.__class__, self.__class__):
-                log.info("Unloading plugin: " + plugin.__class__.__name__)
+                self.log.info("Unloading plugin: " + plugin.__class__.__name__)
                 self.bot.rmv_plugin(plugin.__class__)
-                log.info("Successfully unloaded plugin: "
-                         + plugin.__class__.__name__)
+                self.log.info("Successfully unloaded plugin: "
+                              + plugin.__class__.__name__)
             else:
-                log.info("Caught self")
+                self.log.info("Caught self")
         bot.sql.flush()
         exit(0)
 
@@ -125,6 +123,7 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 f"{plugin_name} does not exist.",
             )
+
         self.bot.rmv_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
@@ -137,6 +136,7 @@ class superuserPlugin(Plugin):
 
         if plugin is None:
             return api_loop(event.msg.reply, f"{plugin_name} does not exist.")
+
         self.bot.reload_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
@@ -205,23 +205,26 @@ class superuserPlugin(Plugin):
         self.status.update_presence(payload)
         api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("eval", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("eval", level=CommandLevels.OWNER,
+                    metadata={"help": "owner", "perms": Permissions.ATTACH_FILES})
     def on_eval_command(self, event):
         """
         Used to evaluate raw python3 code.
         The available classes are:
-        "bot", "state", "client", "event", "sql", "config" and "prefix_cache".
+        "bot", "client", "config", "event", "plugins",
+        "prefix_cache", "sql" and "state".
         To get an output, you have to assign the data to a variable
         with "out"/"output" being preferred over other variables.
         """
         ctx = {
             "bot": self.bot,
-            "state": self.bot.client.state,
             "client": self.bot.client,
-            "event": event,
-            "sql": bot.sql,
             "config": bot.config,
+            "event": event,
+            "plugins": self.bot.plugins,
             "prefix_cache": bot.prefix_cache,
+            "sql": bot.sql,
+            "state": self.bot.client.state,
         }
         response_block = "```python\n{}\n```"
         code = event.codeblock.replace("py\n", "").replace("python\n", "")
@@ -234,7 +237,7 @@ class superuserPlugin(Plugin):
             ctx["func"](ctx)
         except Exception as e:
             response = response_block.format(
-                (type(e).__name__ + ": " + str(e))[:1980]
+                (type(e).__name__ + ": " + str(e))
             )
         else:
             del ctx["results"]["ctx"]
@@ -280,11 +283,13 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 "Guild removed from filter :ok_hand:",
             )
+
         if guild != "DM" and not self.client.state.guilds.get(guild):
             return api_loop(
                 event.channel.send_message,
                 "Guild not found :shrug:",
             )
+
         filter_list.append(guild)
         api_loop(
             event.channel.send_message,
@@ -358,6 +363,17 @@ class superuserPlugin(Plugin):
             payload,
         )
 
+    @Plugin.command("permission check",
+                    metadata={"help": "miscellaneous", "perms": bot.config.default_permissions})
+    def on_permission_check(self, event):
+        """
+        Check if this bot has the right permissions in this channel.
+        """
+        api_loop(
+            event.channel.send_message,
+            "Looks good to me :thumbsup:",
+        )
+
     @Plugin.command("ping", metadata={"help": "miscellaneous"})
     def on_ping_command(self, event):
         """
@@ -368,7 +384,7 @@ class superuserPlugin(Plugin):
         try:
             self.client.gw.ws.sock.ping()
         except Exception as e:
-            log.warning(f"Websocket exception on ping: {e}")
+            self.log.warning(f"Websocket exception on ping: {e}")
             websocket_ping = None
         message_ping = time()
         bot_message = api_loop(
@@ -387,19 +403,20 @@ class superuserPlugin(Plugin):
             message,
         )
 
-    @Plugin.command("register error webhook", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command("register error webhook", level=CommandLevels.OWNER,
+                    metadata={"help": "owner", "perms": Permissions.MANAGE_WEBHOOKS})
     def on_register_error_webhook_command(self, event):
         """
         Used to register a webhook in the current channel for error messages.
         """
         #  attempt to get bot's current avatar as base64.
-        url = self.state.me.get_avatar_url(fmt="png")
+        url = self.state.me.get_avatar_url(still_format="png")
         try:
             r = get(url)
             avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
                       + base64.b64encode(r.content).decode("utf-8"))
         except Exception as e:
-            log.warning(f"failed to get webhook image {e}")
+            self.log.warning(f"failed to get webhook image {e}")
             avatar = None
 
         #  create webhook
@@ -412,7 +429,7 @@ class superuserPlugin(Plugin):
         except (APIException, CommandError) as e:
             api_loop(
                 event.channel.send_message,
-                f"Unable to make webhook: ```{e.msg}```",
+                f"Unable to make webhook: ``{e.msg}``",
             )
         else:
             #  save webhook to config
