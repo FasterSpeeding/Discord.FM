@@ -437,9 +437,10 @@ class CorePlugin(Plugin):
 
         def get_missing_perms(PermissionValue, self_perms):
             perms = [perm for perm in Permissions.keys()
-                     if (int(PermissionValue) & perm.value) == perm.value]
-            return [perm.name for perm in perms
-                    if not self_perms.can(perm.value)]
+                     if (int(PermissionValue) & getattr(Permissions, perm))
+                     == getattr(Permissions, perm)]
+            return [perm for perm in perms
+                    if not self_perms.can(getattr(Permissions, perm))]
 
         if event.author.bot:
             return
