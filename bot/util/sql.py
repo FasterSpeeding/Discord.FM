@@ -244,7 +244,7 @@ class filter(Base):
     )
     status = Column(
         "status",
-        INTEGER(1),
+        INTEGER(1, unsigned=True),
         nullable=False,
     )
 
