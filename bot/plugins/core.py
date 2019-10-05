@@ -446,10 +446,8 @@ class CorePlugin(Plugin):
             return
 
         #  Enforce guild whitelist
-        if ((event.channel.is_dm and "DM" in bot.config.blacklist or
-             bot.config.whitelist and event.guild_id not in bot.config.whitelist
-             or bot.config.blacklist and event.guild_id in bot.config.blacklist)
-                and event.author.id not in bot.config.uservetos):
+        status = bot.sql.softget(bot.sql.filter, channel=event.channel)[0]
+        if status.blacklist_status() or not status.whitelist_status():
             return
 
         prefix = get_prefix(event)

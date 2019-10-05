@@ -144,9 +144,6 @@ class config(custom_base):
     presence: str = "{count} guilds | {prefix}help"
     default_permissions: int = 104197184
     monitor_usage: int = None
-    whitelist: list = []
-    blacklist: list = []
-    uservetos: list = []
     about_links: dict = {}
     api: api = api()
     disco: disco = disco()

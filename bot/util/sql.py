@@ -5,6 +5,7 @@ import os
 
 
 from disco.bot.command import CommandError
+from disco.types.base import BitsetMap, BitsetValue, enum
 from sqlalchemy import (
     create_engine as spawn_engine, PrimaryKeyConstraint,
     Column, exc, ForeignKey,
@@ -184,12 +185,150 @@ class aliases(Base):
         return f"aliases({self.guild_id}: {self.alias})"
 
 
+class Filter_Status(BitsetValue):
+    class map(BitsetMap):
+        WHITELISTED = 1 << 0
+        BLACKLISTED = 1 << 1
+        _all = {"WHITELISTED": WHITELISTED, "BLACKLISTED": BLACKLISTED}
+
+    def __int__(self):
+        return self.value
+
+
+class filter_types:
+    USER = 0
+    GUILD = 1
+    DM = 2
+    _type_associations = {
+        USER: ["user", ["guilds", "get"]],
+        DM: ["channel", ["channels", "get"]],
+        GUILD: ["guild", ["guilds", "get"]],
+    }
+
+    @staticmethod
+    def get(state, target, target_type):
+        target_type = getattr(filter_types, target_type.upper(), None)
+
+        result = filter_types._type_associations.get(target_type, None)
+        if not result:
+            raise CommandError("Invalid type.")
+
+        key, path = result
+        for attr in path:
+            state = getattr(state, attr)
+
+        target = state(target)
+        if not target:
+            raise CommandError(f"{key.capitalize()} not found.")
+
+        return key, target
+
+
+class filter(Base):
+    __tablename__ = "filter"
+    __table_args__ = (
+        PrimaryKeyConstraint(
+            "target",
+            "target_type",
+        ),
+    )
+    target = Column(
+        "target",
+        BIGINT(18, unsigned=True),
+        nullable=False,
+    )
+    target_type = Column(
+        "target_type",
+        INTEGER(1, unsigned=True),
+        nullable=False,
+    )
+    status = Column(
+        "status",
+        INTEGER(1),
+        nullable=False,
+    )
+
+    def __init__(self, status=0, channel=None, guild=None, user=None):
+        data = self._search_kwargs(channel=channel, guild=guild, user=user)
+        self.target = data["target"]
+        self.target_type = data["target_type"]
+        self.status = int(status)
+
+    @staticmethod
+    def _search_kwargs(channel=None, guild=None, user=None, **kwargs):
+        assert channel or user or guild
+        if channel:
+            if channel.is_dm:
+                target = channel.id
+                target_type = filter_types.DM
+            else:
+                target = channel.guild_id
+                target_type = filter_types.GUILD
+        elif user:
+            target = user.id
+            target_type = filter_types.USER
+        elif guild:
+            target = guild.id
+            target_type = filter_types.GUILD
+
+        return {"target": target, "target_type": target_type}
+
+    @classmethod
+    def _get_wrapped(cls, *args, **kwargs):
+        return wrappedfilter(cls(*args, **kwargs))
+
+    @staticmethod    
+    def _wrap(obj):
+        return wrappedfilter(obj)
+
+    def __repr__(self):
+        return f"filter_status({self.target})"
+
+
+class wrappedfilter:
+    __slots__ = ("filter", "_status")
+
+    def __init__(self, filter):
+        self.filter = filter
+
+    def __call__(self, *args, **kwargs):
+        return self.filter(*args, **kwargs)
+
+    def __repr__(self):
+        return f"wrapped({self.filter})"
+
+    @property
+    def status(self):
+        if not hasattr(self, "_status"):
+            self._status = Filter_Status(self.filter.status or 0)
+
+        return self._status
+
+    def edit_status(self, value):
+        self.filter.status = int(value)
+        self._status = Filter_Status(int(value))
+
+    def blacklist_status(self):
+        return self.status.blacklisted
+
+    def whitelist_status(self):
+        if self.status.whitelisted:
+           return True
+
+        return not bool(self.get_count(Filter_Status.map.WHITELISTED))
+
+    def get_count(self, status, sql_obj=None):
+        return (sql_obj or self.filter).query.filter(
+            filter.status.op("&")(status) == status).count()
+
+
 class sql_instance:
     __tables__ = (
         guilds,
         users,
         friends,
         aliases,
+        filter,
     )
     autocommit = True
     autoflush = True
@@ -257,6 +396,20 @@ class sql_instance:
     def check_tables(self):
         for table in self.__tables__:
             self.check_engine_table(table, self.engine)
+
+    @staticmethod
+    def softget(obj, *args, **kwargs):
+        if hasattr(obj, "_search_kwargs"):
+            search_kwargs = obj._search_kwargs(*args, **kwargs)
+        else:
+            search_kwargs = kwargs
+
+        data = obj.query.filter_by(**search_kwargs).first()
+        if data:
+            return obj._wrap(data) if hasattr(obj, "_wrap") else data, True
+
+        obj = (getattr(obj, "_get_wrapped", None) or obj)(*args, **kwargs)
+        return obj, False
 
     def add(self, object):
         self(self.session.add, object)

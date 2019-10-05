@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import logging
 import humanize
 import pytz
@@ -89,6 +90,10 @@ def AT_to_id(discord_id: str):
 dictify_regex = re.compile(r"[\w\d]+\s{0,2}[=:]\s{0,2}[\w\d\s]+[,]?")
 equal_seperate = re.compile(r"[\w\d]+\s{0,2}[=]\s{0,2}[\w\d\s]+")
 colon_seperate = re.compile(r"[\w\d]+\s{0,2}[:]\s{0,2}[\w\d\s]+")
+
+
+def beautify_json(data):
+    return json.dumps(data, indent=4, sort_keys=True)
 
 
 def dictify(intake):

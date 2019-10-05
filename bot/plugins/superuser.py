@@ -11,7 +11,8 @@ from requests import get
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, beautify_json
+from bot.util.sql import Filter_Status, filter_types
 from bot.util.status import status_handler, guildCount
 
 
@@ -255,103 +256,69 @@ class superuserPlugin(Plugin):
         api_loop(event.channel.send_message, response, attachments=attachments)
 
     @Plugin.command(
-        "dms",
-        aliases=("DMs", "dm", "DM",),
-        group="block",
-        level=CommandLevels.OWNER,
-        metadata={"help": "owner"},
-        context={"guild": "DM", "filter_list": bot.config.blacklist})
-    @Plugin.command(
         "blacklist",
-        "<guild:snowflake>",
+        "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"filter_list": bot.config.blacklist})
+        context={"status": Filter_Status.map.BLACKLISTED})
     @Plugin.command(
         "whitelist",
-        "<guild:snowflake>",
+        "<target:snowflake>  [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"filter_list": bot.config.whitelist})
-    def on_filter_command(self, event, guild, filter_list):
-        """
-        Used to add or remove an item from the guild/DM filter.
-        """
-        if guild in filter_list:
-            filter_list.remove(guild)
-            return api_loop(
-                event.channel.send_message,
-                "Guild removed from filter :ok_hand:",
-            )
+        context={"status": Filter_Status.map.WHITELISTED})
+    def add_to_filter(self, event, target, status, target_type="guild"):
+        key, target  = filter_types.get(self.state, target, target_type)
+        data, present = bot.sql.softget(
+            bot.sql.filter, **{key: target})
 
-        if guild != "DM" and not self.client.state.guilds.get(guild):
-            return api_loop(
-                event.channel.send_message,
-                "Guild not found :shrug:",
-            )
+        if present:
+            if data.status.check(status):
+                data.status.sub(status)
+                api_loop(event.channel.send_message, "Target removed from list.")
+            else:
+                data.status.add(status)
+                api_loop(event.channel.send_message, "Target added to list.")
 
-        filter_list.append(guild)
-        api_loop(
-            event.channel.send_message,
-            "Guild added to filter :thumbsup:",
-        )
-
-    @Plugin.command("veto", "<target:snowflake>", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_veto_command(self, event, target=None):
-        """
-        Used to whitelist a user from the guild/DM filter.
-        """
-        if not target:
-            target = event.author.id
-        if target in bot.config.uservetos:
-            bot.config.uservetos.remove(target)
-            api_loop(
-                event.channel.send_message,
-                f"User removed from veto list :ok_hand:",
-            )
+            data.edit_status(data.status)
+            bot.sql.flush()
         else:
-            bot.config.uservetos.append(target)
-            api_loop(
-                event.channel.send_message,
-                f"User added to veto list :thumbsup:",
-            )
+            data.status.add(status)
+            data.edit_status(data.status)
+            bot.sql.add(data.filter)
+            api_loop(event.channel.send_message, "Target added. :thumbsup:")
 
-    @Plugin.command("reset", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_filter_reset(self, event):
-        """
-        Used to reset the guild filter (including the DM block).
-        """
-        bot.config.whitelist.clear()
-        bot.config.blacklist.clear()
-        api_loop(event.channel.send_message, ":thumbsup:")
+        if data.status.value == 0:
+            bot.sql.filter.query.filter_by(
+                target=data.filter.target,
+                target_type=data.filter.target_type).delete()
 
     @Plugin.command(
-        "dms",
-        aliases=("DMs", "dm", "DM"),
-        group="filter",
-        level=CommandLevels.OWNER,
-        metadata={"help": "owner"},
-        context={"guild": "DM"})
-    @Plugin.command("query", "[guild:snowflake]", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_filter_query_command(self, event, guild=None):
+        "query",
+        "[target:snowflake] [target_type:str]",
+        group="filter", level=CommandLevels.OWNER,
+        metadata={"help": "owner"})
+    def on_filter_query_command(self, event, target=None, target_type="guild"):
         """
         Used to retrieve the status of a guild or DMs in the filter.
         """
-        if guild:
-            whitelisted = guild in bot.config.whitelist
-            blacklisted = guild in bot.config.blacklist
-            api_loop(
-                event.channel.send_message,
-                (f"Guild status:```Whitelisted: {whitelisted}\n"
-                 f"Blacklisted: {blacklisted}```"),
-            )
+        if target:
+            key, target = filter_types.get(self.state, target, target_type)
+            data = bot.sql.softget(
+                bot.sql.filter, **{key: target})[0].status.to_dict()
+
+            return api_loop(event.channel.send_message,
+                            f"Current status:\n```json\n{beautify_json(data)}```")
         else:
-            api_loop(
-                event.channel.send_message,
-                (f"There are currently ``{len(bot.config.whitelist)}`` "
-                 f"guilds whitelisted, and ``{len(bot.config.blacklist)}``"
-                 " guilds blacklisted."),
-            )
+            data = {}
+            status = bot.sql.filter._wrap(bot.sql.filter)
+            for item, value in Filter_Status.map._all.items():
+                data[item] = status.get_count(value)
+
+            data["Total"] = bot.sql.filter.query.count()
+
+        return api_loop(event.channel.send_message,
+                        f"Current status:\n```json\n{beautify_json(data)}```")
 
     @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_echo_command(self, event, payload):
