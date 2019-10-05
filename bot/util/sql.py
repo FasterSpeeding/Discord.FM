@@ -306,7 +306,10 @@ class wrappedfilter:
 
     def edit_status(self, value):
         self.filter.status = int(value)
-        self._status = Filter_Status(int(value))
+        if hasattr(self, "_status"):
+            self._status.value = int(value)
+        else:
+            self._status = Filter_Status(int(value))
 
     def blacklist_status(self):
         return self.status.blacklisted
