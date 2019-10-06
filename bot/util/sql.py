@@ -200,9 +200,9 @@ class filter_types:
     GUILD = 1
     DM = 2
     _type_associations = {
-        USER: ["user", ["guilds", "get"]],
-        DM: ["channel", ["channels", "get"]],
-        GUILD: ["guild", ["guilds", "get"]],
+        USER: ("user", ("guilds", "get")),
+        DM: ("channel", ("channels", "get")),
+        GUILD: ("guild", ("guilds", "get")),
     }
 
     @staticmethod
@@ -433,7 +433,7 @@ class sql_instance:
         driver = self.session.connection().engine.driver
         check_map = self._driver_ssl_checks.get(driver)
         if not check_map:
-            log.warning(f"Unknown engine {driver}, unable to get sql")
+            log.warning(f"Unknown engine {driver}, unable to get ssl status")
             return
 
         position = self.session.connection()

@@ -1,5 +1,5 @@
 from time import time
-import base64
+import re
 import textwrap
 
 
@@ -11,7 +11,7 @@ from requests import get
 
 
 from bot.base import bot
-from bot.util.misc import api_loop, beautify_json
+from bot.util.misc import api_loop, beautify_json, get_base64_image
 from bot.util.sql import Filter_Status, filter_types
 from bot.util.status import status_handler, guildCount
 
@@ -250,7 +250,7 @@ class superuserPlugin(Plugin):
                 result = "None"
             response = response_block.format(str(result))
         if len(response) > 2000:
-            attachments = [["output.txt", str(result)], ]
+            attachments = [["the_full_response.txt", str(result)], ]
             response = ("It's dangerous to go without "
                         "the full response! Take this.")
         api_loop(event.channel.send_message, response, attachments=attachments)
@@ -306,9 +306,6 @@ class superuserPlugin(Plugin):
             key, target = filter_types.get(self.state, target, target_type)
             data = bot.sql.softget(
                 bot.sql.filter, **{key: target})[0].status.to_dict()
-
-            return api_loop(event.channel.send_message,
-                            f"Current status:\n```json\n{beautify_json(data)}```")
         else:
             data = {}
             status = bot.sql.filter._wrap(bot.sql.filter)
@@ -379,9 +376,7 @@ class superuserPlugin(Plugin):
         #  attempt to get bot's current avatar as base64.
         url = self.state.me.get_avatar_url(still_format="png")
         try:
-            r = get(url)
-            avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
-                      + base64.b64encode(r.content).decode("utf-8"))
+            avatar = get_base64_image(url)
         except Exception as e:
             self.log.warning(f"failed to get webhook image {e}")
             avatar = None
@@ -432,3 +427,59 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 f":thumbsup:",
             )
+
+    @Plugin.command("steal", "<message:snowflake> [channel:snowflake]",
+                    level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_steal_command(self, event, message, channel=None):
+        if channel:
+            channel = self.state.channels.get(channel)
+        else:
+            channel = event.channel
+        if not channel:
+            raise CommandError("Channel not found.")
+
+        try:
+            message = channel.get_message(message)
+        except APIException as e:
+            raise CommandError(str(e))
+
+        animated_emojis = re.findall(r"<a:\w{2,}:\d+>", message.content)
+        emojis = re.findall(r"<\w{2,}:\d+>", message.content)
+        if not emojis and not animated_emojis:
+            raise CommandError("No emojis found in message.")
+
+        def get_emoji_info(emoji, file_type):
+            name = re.search(r"\w{2,}", emoji).group()
+            url = ("https://cdn.discordapp.com/emojis/" +
+                   re.search(r"\d+", emoji).group() + f".{file_type}?v=1")
+            return name, url
+
+        results = {}
+        for emoji in emojis:
+            info = get_emoji_info(emoji, "png")
+            results[info[0]] = info[1]
+
+        for emoji in animated_emojis:
+            info = get_emoji_info(emoji, "gif")
+            results[info[0]] = info[1]
+
+        exceptions = []
+        for name, url in results.items():
+            try:
+                self.client.api.guilds_emojis_create(
+                    bot.config.emoji_guild,
+                    reason=f"Stolen from {channel.id}:{message.id}",
+                    name=name,
+                    image=get_base64_image(url),
+                )
+            except APIException as e:
+                exceptions.append(str(e))
+
+        if exceptions:
+            return api_loop(
+                event.channel.send_message,
+                (f"{len(exceptions)} emoji(s) failed: ```python\n"
+                 f"{[exception for exception in exceptions]}```")
+            )
+
+        api_loop(event.channel.send_message, f":thumbsup: ({len(results)})")

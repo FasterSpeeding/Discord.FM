@@ -1,4 +1,5 @@
 from datetime import datetime
+import base64
 import json
 import logging
 import humanize
@@ -8,7 +9,7 @@ import re
 
 from disco.api.http import APIException
 from disco.bot.command import CommandError
-from requests import Request
+from requests import Request, get as real_get
 from requests.exceptions import ConnectionError as requestsCError
 
 log = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
 
 
 user_regex = re.compile(r"[<]?[@]?[!]?\d+[>]?")
-redact_regs = [
+redact_regs = (
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
     re.compile(r"[-._\w\d]{20,140}"),
     re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
@@ -68,7 +69,7 @@ redact_regs = [
                r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
                r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
                r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"),
-]
+)
 
 
 def redact(data):
@@ -198,3 +199,9 @@ def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
     time_passed = (datetime.now(timezone) -
                    datetime.fromtimestamp(int(time_of_event), timezone))
     return humanize.naturaltime(time_passed)
+
+
+def get_base64_image(url):
+    r = real_get(url)
+    return ("data:" + r.headers["Content-Type"] + ";base64,"
+            + base64.b64encode(r.content).decode("utf-8"))

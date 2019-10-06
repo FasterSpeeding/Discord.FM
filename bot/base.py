@@ -143,6 +143,7 @@ class config(custom_base):
     exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
     default_permissions: int = 104197184
+    emoji_guild: int = None
     monitor_usage: int = None
     about_links: dict = {}
     api: api = api()

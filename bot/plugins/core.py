@@ -1,5 +1,4 @@
 from datetime import datetime
-from time import time
 from traceback import extract_stack
 import os
 import psutil
@@ -34,7 +33,8 @@ class CorePlugin(Plugin):
                 if guild.prefix is not None:
                     bot.prefix_cache[guild.guild_id] = guild.prefix
                 else:
-                    bot.prefix_cache[guild.guild_id] = bot.prefix
+                    bot.prefix_cache[guild.guild_id] = None
+
         except CommandError as e:
             self.log.critical("Failed to load guild data from SQL "
                               "servers, they're probably down.")

@@ -1,4 +1,4 @@
-git+https://github.com/LMByrne/disco#egg=disco-py[voice]
+git+https://github.com/LMByrne/disco#egg=disco-py
 fuzzywuzzy
 humanize
 lyrics-extractor
@@ -8,4 +8,3 @@ pymysql
 python-Levenshtein
 pytz
 sqlalchemy
-youtube-dl
