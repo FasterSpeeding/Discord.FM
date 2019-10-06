@@ -474,13 +474,13 @@ class superuserPlugin(Plugin):
                     image=get_base64_image(url),
                 )
             except APIException as e:
-                exceptions.append(str(e))
+                exceptions.append(f"{name}|{url}: {e}")
 
         if exceptions:
             return api_loop(
                 event.channel.send_message,
-                (f"{len(exceptions)} emoji(s) failed: ```python\n"
-                 f"{[exception for exception in exceptions]}```")
+                (f"{len(exceptions)} out of {len(results)} "
+                 f"emoji(s) failed: ```python\n{exceptions}```")
             )
 
         api_loop(event.channel.send_message, f":thumbsup: ({len(results)})")
