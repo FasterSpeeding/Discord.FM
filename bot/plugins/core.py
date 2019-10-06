@@ -30,10 +30,7 @@ class CorePlugin(Plugin):
         self.process = psutil.Process()
         try:
             for guild in bot.sql(bot.sql.guilds.query.all):
-                if guild.prefix is not None:
-                    bot.prefix_cache[guild.guild_id] = guild.prefix
-                else:
-                    bot.prefix_cache[guild.guild_id] = None
+                bot.prefix_cache[guild.guild_id] = guild.prefix
 
         except CommandError as e:
             self.log.critical("Failed to load guild data from SQL "

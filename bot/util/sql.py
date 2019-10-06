@@ -291,25 +291,23 @@ class wrappedfilter:
     def __init__(self, filter):
         self.filter = filter
 
-    def __call__(self, *args, **kwargs):
-        return self.filter(*args, **kwargs)
-
     def __repr__(self):
         return f"wrapped({self.filter})"
 
     @property
     def status(self):
         if not hasattr(self, "_status"):
-            self._status = Filter_Status(self.filter.status or 0)
+            if hasattr(self, "filter") and self.filter.status:
+                value = self.filter.status
+            else:
+                value = 0
+            self._status = Filter_Status(value)
 
         return self._status
 
     def edit_status(self, value):
         self.filter.status = int(value)
-        if hasattr(self, "_status"):
-            self._status.value = int(value)
-        else:
-            self._status = Filter_Status(int(value))
+        self.status.value = int(value)
 
     def blacklist_status(self):
         return self.status.blacklisted
