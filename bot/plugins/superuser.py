@@ -450,9 +450,9 @@ class superuserPlugin(Plugin):
 
         def get_emoji_info(emoji, file_type):
             name = re.search(r"(<|:)\w{2,}", emoji).group()[1:]
-            id = re.search(r"\d+>", emoji).group()[:-1]
+            emoji_id = re.search(r"\d+>", emoji).group()[:-1]
             url = ("https://cdn.discordapp.com/emojis/" +
-                   id + f".{file_type}?v=1")
+                   emoji_id + f".{file_type}?v=1")
             return name, url
 
         results = {}
