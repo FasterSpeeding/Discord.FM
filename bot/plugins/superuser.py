@@ -449,9 +449,10 @@ class superuserPlugin(Plugin):
             raise CommandError("No emojis found in message.")
 
         def get_emoji_info(emoji, file_type):
-            name = re.search(r"\w{2,}", emoji).group()
+            name = re.search(r"(<|:)\w{2,}", emoji).group()[1:]
+            id = re.search(r"\d+>", emoji).group()[:-1]
             url = ("https://cdn.discordapp.com/emojis/" +
-                   re.search(r"\d+", emoji).group() + f".{file_type}?v=1")
+                   id + f".{file_type}?v=1")
             return name, url
 
         results = {}
