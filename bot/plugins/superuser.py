@@ -444,12 +444,12 @@ class superuserPlugin(Plugin):
             raise CommandError(str(e))
 
         animated_emojis = re.findall(r"<a:\w{2,}:\d+>", message.content)
-        emojis = re.findall(r"<\w{2,}:\d+>", message.content)
+        emojis = re.findall(r"<:\w{2,}:\d+>", message.content)
         if not emojis and not animated_emojis:
             raise CommandError("No emojis found in message.")
 
         def get_emoji_info(emoji, file_type):
-            name = re.search(r"(<|:)\w{2,}", emoji).group()[1:]
+            name = re.search(r":\w{2,}", emoji).group()[1:]
             emoji_id = re.search(r"\d+>", emoji).group()[:-1]
             url = ("https://cdn.discordapp.com/emojis/" +
                    emoji_id + f".{file_type}?v=1")
