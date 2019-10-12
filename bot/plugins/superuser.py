@@ -182,6 +182,7 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 "No status sites are enabled in config.",
             )
+
         guild_count = len(self.client.state.guilds)
         shard_id = self.bot.client.config.shard_id
         shard_count = self.bot.client.config.shard_count
@@ -268,7 +269,7 @@ class superuserPlugin(Plugin):
         metadata={"help": "owner"},
         context={"status": Filter_Status.map.WHITELISTED})
     def add_to_filter(self, event, target, status, target_type="guild"):
-        key, target  = filter_types.get(self.state, target, target_type)
+        key, target = filter_types.get(self.state, target, target_type)
         data, present = bot.sql.softget(
             bot.sql.filter, **{key: target})
 
@@ -286,7 +287,7 @@ class superuserPlugin(Plugin):
             data.status.add(status)
             data.edit_status(data.status)
             bot.sql.add(data.filter)
-            api_loop(event.channel.send_message, "Target added. :thumbsup:")
+            api_loop(event.channel.send_message, "Target added :thumbsup:")
 
         if data.status.value == 0:
             bot.sql.filter.query.filter_by(
@@ -443,29 +444,23 @@ class superuserPlugin(Plugin):
         except APIException as e:
             raise CommandError(str(e))
 
-        animated_emojis = re.findall(r"<a:\w{2,}:\d+>", message.content)
-        emojis = re.findall(r"<:\w{2,}:\d+>", message.content)
-        if not emojis and not animated_emojis:
+        emojis = re.findall(r"<a?:\w+:\d+>", message.content)
+        if not emojis:
             raise CommandError("No emojis found in message.")
 
-        def get_emoji_info(emoji, file_type):
-            name = re.search(r":\w{2,}", emoji).group()[1:]
-            emoji_id = re.search(r"\d+>", emoji).group()[:-1]
-            url = ("https://cdn.discordapp.com/emojis/" +
-                   emoji_id + f".{file_type}?v=1")
-            return name, url
-
-        results = {}
-        for emoji in emojis:
-            info = get_emoji_info(emoji, "png")
-            results[info[0]] = info[1]
-
-        for emoji in animated_emojis:
-            info = get_emoji_info(emoji, "gif")
-            results[info[0]] = info[1]
+        def get_emojis_info(emojis):
+            for emoji in emojis:
+                name = re.search(r":\w+:", emoji).group()[1:-1]
+                emoji_id = re.search(r":\d+>", emoji).group()[1:-1]
+                # Check if emoji is animated or not.
+                file_type = "gif" if emoji[1] == "a" else "png"
+                url = ("https://cdn.discordapp.com/emojis/"
+                       f"{emoji_id}.{file_type}?v=1")
+                yield name, url
 
         exceptions = []
-        for name, url in results.items():
+        count = 0
+        for name, url in get_emojis_info(emojis):
             try:
                 self.client.api.guilds_emojis_create(
                     bot.config.emoji_guild,
@@ -475,12 +470,14 @@ class superuserPlugin(Plugin):
                 )
             except APIException as e:
                 exceptions.append(f"{name}|{url}: {e}")
+            finally:
+                count += 1
 
         if exceptions:
             return api_loop(
                 event.channel.send_message,
-                (f"{len(exceptions)} out of {len(results)} "
+                (f"{len(exceptions)} out of {count} "
                  f"emoji(s) failed: ```python\n{exceptions}```")
             )
 
-        api_loop(event.channel.send_message, f":thumbsup: ({len(results)})")
+        api_loop(event.channel.send_message, f":thumbsup: ({count})")

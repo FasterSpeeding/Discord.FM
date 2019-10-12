@@ -488,6 +488,9 @@ class CorePlugin(Plugin):
         if isinstance(exception, APIException) and exception.code == 50013:
             return
 
+        if bot.config.no_exception_response:
+            raise exception
+
         if respond:
             api_loop(
                 event.channel.send_message,
