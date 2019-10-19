@@ -464,8 +464,8 @@ class superuserPlugin(Plugin):
                 name = re.search(r":\w+:", emoji).group()[1:-1]
                 emoji_id = re.search(r":\d+>", emoji).group()[1:-1]
                 # Check if emoji is animated or not.
-                file_type = "gif" if emoji[1] == "a" else "png"
-                url = (f"{emoji_id}.{file_type}")
+                url = f"{emoji_id}."
+                url += "gif" if emoji[1] == "a" else "png"
                 yield name, url
 
         def attributed_with_emoji(objs):
