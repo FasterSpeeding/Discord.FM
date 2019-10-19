@@ -264,7 +264,7 @@ class superuserPlugin(Plugin):
         context={"status": Filter_Status.map.BLACKLISTED})
     @Plugin.command(
         "whitelist",
-        "<target:snowflake>  [target_type:str]",
+        "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
         context={"status": Filter_Status.map.WHITELISTED})
@@ -463,7 +463,7 @@ class superuserPlugin(Plugin):
             for emoji in emojis:
                 name = re.search(r":\w+:", emoji).group()[1:-1]
                 emoji_id = re.search(r":\d+>", emoji).group()[1:-1]
-                #  Check if emoji is animated or not.
+                # Check if emoji is animated or not.
                 file_type = "gif" if emoji[1] == "a" else "png"
                 url = (f"{emoji_id}.{file_type}")
                 yield name, url
@@ -478,15 +478,15 @@ class superuserPlugin(Plugin):
                 yield obj.emoji.name, url
 
         if args and args.split(" ")[-1].lower() == "r":
-            #  Form a generator of the emojis from the message's reactions.
+            # Form a generator of the emojis from the message's reactions.
             results = attributed_with_emoji(message.reactions)
         elif user:
             if not user.presence:
                 raise CommandError("User is offline.")
-            #  Form a generator of the user's activities for stealing emoji.
+            # Form a generator of the user's activities for stealing emoji.
             results = attributed_with_emoji(user.presence.activities)
         else:
-            #  Extract emojis from message contents.
+            # Extract emojis from message contents.
             emojis = re.findall(r"<a?:\w+:\d+>", message.content)
             if not emojis:
                 raise CommandError("No emojis found in message.")
