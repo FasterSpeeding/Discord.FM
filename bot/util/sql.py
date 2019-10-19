@@ -208,7 +208,6 @@ class filter_types:
     @staticmethod
     def get(state, target, target_type):
         target_type = getattr(filter_types, target_type.upper(), None)
-
         result = filter_types._type_associations.get(target_type, None)
         if not result:
             raise CommandError("Invalid type.")
