@@ -210,8 +210,8 @@ class bot_frame:
         if not handlers[0]:
             raise Exception("Handler for file type "
                             f"'{config_path.split('.')[-1]}' is not present.")
-
-        data = handlers[0](open(config_path, "r"))
+        with open(config_path, "r") as file:
+            data = handlers[0](file)
         self.config_meta = config_path
         return data
 

@@ -316,11 +316,15 @@ class wrappedfilter:
         if self.status.whitelisted:
            return True
 
-        return not bool(self.get_count(Filter_Status.map.WHITELISTED))
+        return not bool(self.get_count(
+            Filter_Status.map.WHITELISTED,
+            target_type=self.filter.target_type,
+        ))
 
-    def get_count(self, status, sql_obj=None):
+    def get_count(self, status, target_type=None, sql_obj=None):
         return (sql_obj or self.filter).query.filter(
-            filter.status.op("&")(status) == status).count()
+            filter.status.op("&")(status) == status and
+            (not target_type or filter.target_type == target_type)).count()
 
 
 class sql_instance:

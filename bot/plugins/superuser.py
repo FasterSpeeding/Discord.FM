@@ -429,42 +429,85 @@ class superuserPlugin(Plugin):
                 f":thumbsup:",
             )
 
-    @Plugin.command("steal", "<message:snowflake> [channel:snowflake]",
+    @Plugin.command("steal", "<target:snowflake> [args:str...]",
                     level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_steal_command(self, event, message, channel=None):
-        if channel:
-            channel = self.state.channels.get(channel)
+    def on_steal_command(self, event, target, args=""):
+        """
+        Used to steal emojis from messages content or reactions.
+        Pass "r" as the last argument to steal from the message reactions.
+        Pass "u" or "c" or "s" to steal from a user custom status.
+        """
+        channel = None
+        user = None
+        if args and args.split(" ")[-1].lower() in ("c", "u", "s"):
+            # Get the target user for their custom status.
+            user = self.state.users.get(target)
+            if not user:
+                raise CommandError("Couldn't find target user.")
         else:
-            channel = event.channel
-        if not channel:
-            raise CommandError("Channel not found.")
+            # Get the target channel.
+            channel_target = re.match(r"\d+", args.split(" ", 1)[0])
+            if channel_target:
+                channel = self.state.channels.get(int(channel_target.string))
+            else:
+                channel = event.channel
+            if not channel:
+                raise CommandError("Channel not found.")
 
-        try:
-            message = channel.get_message(message)
-        except APIException as e:
-            raise CommandError(str(e))
+            try:
+                message = channel.get_message(target)
+            except APIException as e:
+                raise CommandError(str(e))
 
-        emojis = re.findall(r"<a?:\w+:\d+>", message.content)
-        if not emojis:
-            raise CommandError("No emojis found in message.")
-
-        def get_emojis_info(emojis):
+        def get_info_from_string(emojis):
             for emoji in emojis:
                 name = re.search(r":\w+:", emoji).group()[1:-1]
                 emoji_id = re.search(r":\d+>", emoji).group()[1:-1]
-                # Check if emoji is animated or not.
+                #  Check if emoji is animated or not.
                 file_type = "gif" if emoji[1] == "a" else "png"
-                url = ("https://cdn.discordapp.com/emojis/"
-                       f"{emoji_id}.{file_type}?v=1")
+                url = (f"{emoji_id}.{file_type}")
                 yield name, url
+
+        def attributed_with_emoji(objs):
+            for obj in objs:
+                if not obj.emoji or not obj.emoji.id:
+                    continue
+
+                url = f"{obj.emoji.id}."
+                url += "gif" if obj.emoji.animated else "png"
+                yield obj.emoji.name, url
+
+        if args and args.split(" ")[-1].lower() == "r":
+            #  Form a generator of the emojis from the message's reactions.
+            results = attributed_with_emoji(message.reactions)
+        elif user:
+            if not user.presence:
+                raise CommandError("User is offline.")
+            #  Form a generator of the user's activities for stealing emoji.
+            results = attributed_with_emoji(user.presence.activities)
+        else:
+            #  Extract emojis from message contents.
+            emojis = re.findall(r"<a?:\w+:\d+>", message.content)
+            if not emojis:
+                raise CommandError("No emojis found in message.")
+
+            results = get_info_from_string(emojis)
 
         exceptions = []
         count = 0
-        for name, url in get_emojis_info(emojis):
+        for name, url in results:
+            url = "https://cdn.discordapp.com/emojis/" + url + "?v=1"
+            reason = "Stolen from "
+            if channel:
+                reason += f"msg {channel.id}:"
+            else:
+                reason += "custom status "
+            reason += str(target)
+
             try:
                 self.client.api.guilds_emojis_create(
                     bot.config.emoji_guild,
-                    reason=f"Stolen from {channel.id}:{message.id}",
+                    reason=reason,
                     name=name,
                     image=get_base64_image(url),
                 )

@@ -237,7 +237,7 @@ class CorePlugin(Plugin):
                         and command_obj.metadata.get("help", None)):
                     break
 
-            data = bot.generate_command_info(commanb_obj, all_triggers=True)
+            data = bot.generate_command_info(command_obj, all_triggers=True)
             if match and data:
                 embed = bot.generic_embed(
                     title=data[0] + f" a command in the {data[3]} module.",
@@ -442,11 +442,6 @@ class CorePlugin(Plugin):
         if event.author.bot:
             return
 
-        #  Enforce guild whitelist
-        status = bot.sql.softget(bot.sql.filter, channel=event.channel)[0]
-        if status.blacklist_status() or not status.whitelist_status():
-            return
-
         prefix = get_prefix(event)
         require_mention = self.bot.config.commands_require_mention
         if not event.message.content.startswith(prefix):
@@ -480,6 +475,14 @@ class CorePlugin(Plugin):
                         ("Missing permission(s) required to respond: `" +
                          f"{get_missing_perms(PermissionValue, self_perms)}`"),
                     )
+
+            #  Enforce guild/channel and user whitelist.
+            CStatus = bot.sql.softget(bot.sql.filter, channel=event.channel)[0]
+            AStatus = bot.sql.softget(bot.sql.filter, user=event.author)[0]
+            if (CStatus.blacklist_status() or AStatus.blacklist_status()
+                    or not CStatus.whitelist_status()
+                    or not AStatus.whitelist_status()):
+                return
 
             command.plugin.execute(CommandEvent(command, event, match))
             break
