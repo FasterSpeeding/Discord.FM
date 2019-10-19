@@ -482,7 +482,7 @@ class superuserPlugin(Plugin):
             results = attributed_with_emoji(message.reactions)
         elif user:
             if not user.presence:
-                raise CommandError("User is offline.")
+                raise CommandError("Target user is currently invisible.")
             # Form a generator of the user's activities for stealing emoji.
             results = attributed_with_emoji(user.presence.activities)
         else:
