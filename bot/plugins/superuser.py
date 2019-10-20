@@ -495,15 +495,15 @@ class superuserPlugin(Plugin):
 
         exceptions = []
         count = 0
-        for name, url in results:
-            url = "https://cdn.discordapp.com/emojis/" + url + "?v=1"
-            reason = "Stolen from "
-            if channel:
-                reason += f"msg {channel.id}:"
-            else:
-                reason += "custom status "
-            reason += str(target)
+        reason = "Stolen from "
+        if channel:
+            reason += f"msg {channel.id}:"
+        else:
+            reason += "custom status "
+        reason += str(target)
 
+        for name, url in results:
+            url = f"https://cdn.discordapp.com/emojis/{url}?v=1"
             try:
                 self.client.api.guilds_emojis_create(
                     bot.config.emoji_guild,
