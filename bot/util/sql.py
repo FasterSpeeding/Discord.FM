@@ -289,8 +289,8 @@ class cfilter(Base):
 class wrappedfilter:
     __slots__ = ("filter", "_status")
 
-    def __init__(self, filter):
-        self.filter = filter
+    def __init__(self, cfilter):
+        self.filter = cfilter
 
     def __repr__(self):
         return f"wrapped({self.filter})"
