@@ -5,7 +5,7 @@ import os
 
 
 from disco.bot.command import CommandError
-from disco.types.base import BitsetMap, BitsetValue, enum
+from disco.types.base import BitsetMap, BitsetValue
 from sqlalchemy import (
     create_engine as spawn_engine, PrimaryKeyConstraint,
     Column, exc, ForeignKey,
@@ -223,7 +223,7 @@ class filter_types:
         return key, target
 
 
-class filter(Base):
+class cfilter(Base):
     __tablename__ = "filter"
     __table_args__ = (
         PrimaryKeyConstraint(
@@ -255,7 +255,9 @@ class filter(Base):
 
     @staticmethod
     def _search_kwargs(channel=None, guild=None, user=None, **kwargs):
-        assert channel or user or guild
+        if not (channel or user or guild):
+            raise TypeError("Missing targeted object.")
+
         if channel:
             if channel.is_dm:
                 target = channel.id
@@ -276,7 +278,7 @@ class filter(Base):
     def _get_wrapped(cls, *args, **kwargs):
         return wrappedfilter(cls(*args, **kwargs))
 
-    @staticmethod    
+    @staticmethod
     def _wrap(obj):
         return wrappedfilter(obj)
 
@@ -313,12 +315,12 @@ class wrappedfilter:
 
     def whitelist_status(self):
         if self.status.whitelisted:
-           return True
+            return True
 
-        return not bool(self.get_count(
+        return not self.get_count(
             Filter_Status.map.WHITELISTED,
             target_type=self.filter.target_type,
-        ))
+        )
 
     def get_count(self, status, target_type=None, sql_obj=None):
         return (sql_obj or self.filter).query.filter(
@@ -332,7 +334,7 @@ class sql_instance:
         users,
         friends,
         aliases,
-        filter,
+        cfilter,
     )
     autocommit = True
     autoflush = True

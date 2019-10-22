@@ -7,7 +7,6 @@ from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
 from disco.types.permissions import Permissions
-from requests import get
 
 
 from bot.base import bot
@@ -271,12 +270,13 @@ class superuserPlugin(Plugin):
     def add_to_filter(self, event, target, status, target_type="guild"):
         key, target = filter_types.get(self.state, target, target_type)
         data, present = bot.sql.softget(
-            bot.sql.filter, **{key: target})
+            bot.sql.cfilter, **{key: target})
 
         if present:
             if data.status.check(status):
                 data.status.sub(status)
-                api_loop(event.channel.send_message, "Target removed from list.")
+                api_loop(
+                    event.channel.send_message, "Target removed from list.")
             else:
                 data.status.add(status)
                 api_loop(event.channel.send_message, "Target added to list.")
@@ -290,7 +290,7 @@ class superuserPlugin(Plugin):
             api_loop(event.channel.send_message, "Target added :thumbsup:")
 
         if data.status.value == 0:
-            bot.sql.filter.query.filter_by(
+            bot.sql.cfilter.query.filter_by(
                 target=data.filter.target,
                 target_type=data.filter.target_type).delete()
 
@@ -306,14 +306,14 @@ class superuserPlugin(Plugin):
         if target:
             key, target = filter_types.get(self.state, target, target_type)
             data = bot.sql.softget(
-                bot.sql.filter, **{key: target})[0].status.to_dict()
+                bot.sql.cfilter, **{key: target})[0].status.to_dict()
         else:
             data = {}
-            status = bot.sql.filter._wrap(bot.sql.filter)
+            status = bot.sql.cfilter._wrap(bot.sql.cfilter)
             for item, value in Filter_Status.map._all.items():
                 data[item] = status.get_count(value)
 
-            data["Total"] = bot.sql.filter.query.count()
+            data["Total"] = bot.sql.cfilter.query.count()
 
         return api_loop(event.channel.send_message,
                         f"Current status:\n```json\n{beautify_json(data)}```")
