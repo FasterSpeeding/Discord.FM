@@ -477,7 +477,8 @@ class CorePlugin(Plugin):
                     )
 
             #  Enforce guild/channel and user whitelist.
-            CStatus = bot.sql.softget(bot.sql.cfilter, channel=event.channel)[0]
+            CStatus = bot.sql.softget(
+                bot.sql.cfilter, channel=event.channel)[0]
             AStatus = bot.sql.softget(bot.sql.cfilter, user=event.author)[0]
             if (CStatus.blacklist_status() or AStatus.blacklist_status()
                     or not CStatus.whitelist_status()
