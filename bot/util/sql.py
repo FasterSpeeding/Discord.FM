@@ -20,9 +20,6 @@ from sqlalchemy.orm import (
 )
 
 
-log = logging.getLogger(__name__)
-
-
 Base = declarative_base()
 
 
@@ -30,6 +27,25 @@ class SQLexception(CommandError):
     def __init__(self, msg, original_exception):
         self.msg = msg
         self.original_exception = original_exception
+
+
+class BaseWrapper:
+    __slots__ = ("sql_obj", "_found")
+
+    def __init__(self, sql_obj):
+        self.sql_obj = sql_obj
+
+    def __repr__(self):
+        return f"wrapped({self.sql_obj})"
+
+    @property
+    def found(self):
+        try:
+            return self._found
+        except AttributeError:
+            self._found = False
+
+        return self._found
 
 
 class guilds(Base):
@@ -142,7 +158,7 @@ class friends(Base):
         nullable=False,
     )
 
-    def __init__(self, master_id: int, slave_id: int, index: int = None):
+    def __init__(self, master_id: int, slave_id: int):
         self.master_id = master_id
         self.slave_id = slave_id
 
@@ -224,7 +240,7 @@ class filter_types:
 
 
 class cfilter(Base):
-    __tablename__ = "filter"
+    __tablename__ = "cfilter"
     __table_args__ = (
         PrimaryKeyConstraint(
             "target",
@@ -248,10 +264,10 @@ class cfilter(Base):
     )
 
     def __init__(self, status=0, channel=None, guild=None, user=None):
+        self.status = int(status)
         data = self._search_kwargs(channel=channel, guild=guild, user=user)
         self.target = data["target"]
         self.target_type = data["target_type"]
-        self.status = int(status)
 
     @staticmethod
     def _search_kwargs(channel=None, guild=None, user=None, **kwargs):
@@ -286,28 +302,27 @@ class cfilter(Base):
         return f"filter_status({self.target})"
 
 
-class wrappedfilter:
-    __slots__ = ("filter", "_status")
-
-    def __init__(self, cfilter):
-        self.filter = cfilter
-
-    def __repr__(self):
-        return f"wrapped({self.filter})"
+class wrappedfilter(BaseWrapper):
+    __slots__ = ("sql_obj", "_status", "_found")
 
     @property
     def status(self):
-        if not hasattr(self, "_status"):
-            if hasattr(self, "filter") and self.filter.status:
-                value = self.filter.status
+        try:
+            return self._status
+        except AttributeError:
+            if hasattr(self, "sql_obj") and self.sql_obj.status:
+                value = self.sql_obj.status
             else:
                 value = 0
             self._status = Filter_Status(value)
 
         return self._status
 
+    def deletable(self):
+        return self.sql_obj.status == 0
+
     def edit_status(self, value):
-        self.filter.status = int(value)
+        self.sql_obj.status = int(value)
         self.status.value = int(value)
 
     def blacklist_status(self):
@@ -319,13 +334,46 @@ class wrappedfilter:
 
         return not self.get_count(
             Filter_Status.map.WHITELISTED,
-            target_type=self.filter.target_type,
+            target_type=self.sql_obj.target_type,
         )
 
     def get_count(self, status, target_type=None, sql_obj=None):
-        return (sql_obj or self.filter).query.filter(
+        return (sql_obj or self.sql_obj).query.filter(
             filter.status.op("&")(status) == status and
             (not target_type or filter.target_type == target_type)).count()
+
+
+class Reference:
+    defaulted_attrs = {}
+    ignored_attrs = []
+    renamed_attrs = {}
+    type_conversion = {}
+
+    def run_through_columns(self, source_table, target_table):
+        # Hack around to let us spawn an empty instance.
+        if hasattr(target_table, "__init__"):
+            del target_table.__init__
+
+        for column in source_table.query.all():
+            new_column = target_table()
+            self.run_through_attrs(column, new_column)
+            target_table.query.session.add(new_column)
+
+    def run_through_attrs(self, source_column, target_column):
+        for attr in {*source_column.__table__.columns.keys(),
+                     *self.defaulted_attrs.keys()}:
+            if attr in self.ignored_attrs:
+                continue
+
+            target_attr = self.renamed_attrs.get(attr, attr)
+            value = getattr(
+                source_column, attr, self.defaulted_attrs.get(attr))
+            # TODO: explicity continue on unset item
+            converter = self.type_conversion.get(attr)
+            if converter:
+                value = converter(value)
+
+            setattr(target_column, target_attr, value)
 
 
 class sql_instance:
@@ -346,29 +394,31 @@ class sql_instance:
     }
 
     def __init__(
-            self,
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+            self, drivername=None, host=None,
+            port=None, username=None, password=None,
+            database=None, query=None, args=None, local_path=None):
         self.session, self.engine = self.create_engine_session_safe(
-            drivername,
-            host,
-            port,
-            username,
-            password,
-            database,
-            query,
-            args,
-            local_path,
-        )
+            drivername, host, port,
+            username, password, database,
+            query, args, local_path)
         self.check_tables()
         self.spwan_binded_tables()
+
+    @property
+    def tables(self):
+        for table in self.__tables__:
+            table = getattr(self, table.__tablename__, None)
+            if table:
+                yield table
+
+    @property
+    def log(self):
+        try:
+            return self._log
+        except AttributeError:
+            self._log = logging.getLogger(self.__class__.__name__)
+
+        return self._log
 
     @staticmethod
     def __call__(function, *args, **kwargs):
@@ -393,15 +443,12 @@ class sql_instance:
             table_copy.query = self.session.query_property()
             setattr(self, table.__tablename__, table_copy)
 
-    @staticmethod
-    def check_engine_table(table, engine):
-        if not engine.dialect.has_table(engine, table.__tablename__):
-            log.info(f"Creating table {table.__tablename__}")
-            table.__table__.create(engine)
-
     def check_tables(self):
         for table in self.__tables__:
-            self.check_engine_table(table, self.engine)
+            if not self.engine.dialect.has_table(
+                    self.engine, table.__tablename__):
+                self.log.info(f"Creating table {table.__tablename__}")
+                table.__table__.create(self.engine)
 
     @staticmethod
     def softget(obj, *args, **kwargs):
@@ -412,10 +459,13 @@ class sql_instance:
 
         data = obj.query.filter_by(**search_kwargs).first()
         if data:
-            return obj._wrap(data) if hasattr(obj, "_wrap") else data, True
+            obj = obj._wrap(data) if hasattr(obj, "_wrap") else data
+            obj._found = True
+            return
 
         obj = (getattr(obj, "_get_wrapped", None) or obj)(*args, **kwargs)
-        return obj, False
+        obj._found = False
+        return obj
 
     def add(self, object):
         self(self.session.add, object)
@@ -436,7 +486,8 @@ class sql_instance:
         driver = self.session.connection().engine.driver
         check_map = self._driver_ssl_checks.get(driver)
         if not check_map:
-            log.warning(f"Unknown engine {driver}, unable to get ssl status")
+            self.log.warning(f"Unknown engine {driver}, "
+                             "unable to get ssl status")
             return
 
         position = self.session.connection()
@@ -445,32 +496,20 @@ class sql_instance:
                 break
 
             position = getattr(position, attr, None)
-        log.info(f"SQL SSL status: {position or 'unknown'}")
+        self.log.info(f"SQL SSL status: {position or 'unknown'}")
         return position
 
     @staticmethod
     def create_engine(
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+            drivername=None, host=None, port=None,
+            username=None, password=None, database=None,
+            query=None, args=None, local_path=None):
 
         # Pre_establish settings
         if host:
             settings = SQLurl(
-                drivername,
-                username,
-                password,
-                host,
-                port,
-                database,
-                query,
-            )
+                drivername, username, password,
+                host, port, database, query)
             args = (args or {})
         else:
             if not os.path.exists("data"):
@@ -489,35 +528,21 @@ class sql_instance:
         )
 
     def create_engine_session_safe(
-            self,
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+            self, drivername=None, host=None, port=None,
+            username=None, password=None, database=None,
+            query=None, args=None, local_path=None):
 
         engine = self.create_engine(
-            drivername,
-            host,
-            port,
-            username,
-            password,
-            database,
-            query,
-            args,
-            local_path,
-        )
+            drivername, host, port,
+            username, password, database,
+            query, args, local_path)
 
         # Verify connection.
         try:
             engine.execute("SELECT 1")
         except exc.OperationalError as e:
-            log.warning("Unable to connect to database, "
-                        "defaulting to sqlite: " + str(e))
+            self.log.warning("Unable to connect to database, "
+                             f"defaulting to sqlite: {e}")
             engine = self.create_engine(local_path=local_path)
 
         session = scoped_session(
@@ -528,3 +553,49 @@ class sql_instance:
             ),
         )
         return session, engine
+
+    @classmethod
+    def spawn_disconnected_instance(cls, tables=None):
+        if tables:
+            cls.__tables__ = tables
+
+        del cls.__init__
+        return cls()
+
+    def create_engine_table_strict(self, *args, tables=None, **kwargs):
+        self.engine = self.create_engine(*args, **kwargs)
+        try:
+            self.engine.execute("SELECT 1")
+        except exc.OperationalError as e:
+            raise SQLexception(f"Unable to connect to source database {e}", e)
+
+        self.session = scoped_session(
+            sessionmaker(
+                autocommit=self.autocommit,
+                autoflush=self.autoflush,
+                bind=self.engine,
+            ),
+        )
+
+    def transfer_from_source(self, *args, tables=None, **kwargs):
+        # Initalise the target db session.
+        self.source_inst = self.spawn_disconnected_instance(tables=tables)
+        self.source_inst.create_engine_table_strict(*args, **kwargs)
+        self.source_inst.spwan_binded_tables()
+
+        # Run through every initalised table.
+        for table in self.source_inst.tables:
+            if not self.source_inst.engine.dialect.has_table(
+                self.source_inst.engine, table.__tablename__):
+               continue
+
+            getattr(table, "_reference", Reference()).run_through_columns(
+                table, getattr(self, table.__tablename__))
+
+if __name__ == "__main__":
+    test_instance = sql_instance(local_path="data/test.db")
+    test_instance.transfer_from_source()
+    #        (self, drivername=None, host=None, port=None,
+    #        username=None, password=None, database=None,
+    #        query=None, args=None, local_path=None):
+        

@@ -1,13 +1,9 @@
-import logging
-
-
 from disco.types.user import Activity, Status, ActivityTypes
+from disco.util.logging import LoggingClass
 from requests import post, RequestException
 
 
 from bot.base import optional
-
-log = logging.getLogger(__name__)
 
 
 class api_basis:
@@ -85,7 +81,7 @@ class guildCount:
                 for key in self.__slots__}
 
 
-class status_handler(object):
+class status_handler(LoggingClass):
     services = []
 
     def __init__(
@@ -116,15 +112,16 @@ class status_handler(object):
                 headers=service.headers,
             )
         except RequestException as e:
-            log.debug("Failed to post server count "
-                      f"to {service.__name__}: {e}")
+            self.log.debug("Failed to post server count "
+                           f"to {service.__name__}: {e}")
         else:
             if r.status_code == 200:
-                log.debug("Posted guild count "
-                          f"({guilds_payload.Count}) to {service.__name__}")
+                self.log.debug("Posted guild count ({guilds_payload.Count})"
+                               f" to {service.__name__}")
             else:
-                log.debug("Failed to post guild count to "
-                          f"{service.__name__} ({r.status_code}): {r.text}")
+                self.log.debug("Failed to post guild count to "
+                              f"{service.__name__} "
+                              f"({r.status_code}): {r.text}")
 
     def update_presence(self, guilds_payload):
         if self.presence:
@@ -156,7 +153,7 @@ class status_handler(object):
         This function updates the server amount status per interval
         and ensures the integrity of the guild data.
         """
-        log.debug("Updating stats.")
+        self.log.debug("Updating stats.")
         guild_count = len(self.bot.client.state.guilds)
         shard_id = self.bot.bot.client.config.shard_id
         shard_count = self.bot.bot.client.config.shard_count

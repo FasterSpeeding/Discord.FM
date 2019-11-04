@@ -269,10 +269,10 @@ class superuserPlugin(Plugin):
         context={"status": Filter_Status.map.WHITELISTED})
     def add_to_filter(self, event, target, status, target_type="guild"):
         key, target = filter_types.get(self.state, target, target_type)
-        data, present = bot.sql.softget(
+        data = bot.sql.softget(
             bot.sql.cfilter, **{key: target})
 
-        if present:
+        if data.found:
             if data.status.check(status):
                 data.status.sub(status)
                 api_loop(
@@ -289,7 +289,7 @@ class superuserPlugin(Plugin):
             bot.sql.add(data.filter)
             api_loop(event.channel.send_message, "Target added :thumbsup:")
 
-        if data.status.value == 0:
+        if data.deletable():
             bot.sql.cfilter.query.filter_by(
                 target=data.filter.target,
                 target_type=data.filter.target_type).delete()
@@ -306,7 +306,7 @@ class superuserPlugin(Plugin):
         if target:
             key, target = filter_types.get(self.state, target, target_type)
             data = bot.sql.softget(
-                bot.sql.cfilter, **{key: target})[0].status.to_dict()
+                bot.sql.cfilter, **{key: target}).status.to_dict()
         else:
             data = {}
             status = bot.sql.cfilter._wrap(bot.sql.cfilter)

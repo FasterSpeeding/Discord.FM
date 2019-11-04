@@ -1,5 +1,4 @@
 from time import sleep, time
-import logging
 
 
 from disco.api.http import APIException
@@ -7,8 +6,6 @@ from disco.types.permissions import Permissions
 
 
 from bot.util.misc import api_loop
-
-log = logging.getLogger(__name__)
 
 
 class reactor_condition:
