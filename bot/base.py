@@ -21,8 +21,6 @@ from bot import __GIT__
 from bot.util.react import reactors_handler
 from bot.util.sql import sql_instance
 
-log = logging.getLogger(__name__)
-
 
 def optional(**kwargs):
     return {index: data for index, data in kwargs.items() if data is not None}
@@ -37,14 +35,23 @@ class unset:
 
 
 class custom_base(BaseModel):
+    @property
+    def log(self):
+        try:
+            return self._log
+        except AttributeError:
+            self._log = logging.getLogger(self.__class__.__name__)
+
+        return self._log
+
     def get(self, context, *args):
         for arg in args:
             local = getattr(self, arg, unset)
             if local is not unset:
                 setattr(context, arg, local)
             else:
-                log.warning(f"Invalid or unset argument `{arg}` "
-                            f"in get `{self.__name__}`.")
+                self.log.warning(f"Invalid or unset argument `{arg}` "
+                                 f"in get `{self.__name__}`.")
 
     def to_dict(self):
         return {key: value for key, value in self.dict().items()
