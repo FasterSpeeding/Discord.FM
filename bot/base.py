@@ -143,10 +143,9 @@ class config(custom_base):
     exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
     default_permissions: int = 104197184
+    emoji_guild: int = None
     monitor_usage: int = None
-    whitelist: list = []
-    blacklist: list = []
-    uservetos: list = []
+    no_exception_response: bool = False
     about_links: dict = {}
     api: api = api()
     disco: disco = disco()
@@ -183,13 +182,12 @@ class bot_frame:
         for key, value in self.config.embed_values.to_dict().items():
             if key not in kwargs:
                 kwargs[key] = value
+
         timestamp = kwargs.pop("timestamp", None)
         embed = MessageEmbed(kwargs)
-    #    for field in embed.field:
-    #        field.name = field.name[:256]
-    #        field.value = field.value[:2048]
         if timestamp:
             embed.timestamp = timestamp
+
         return embed
 
     def get_config(self, config_path=None):
@@ -212,8 +210,8 @@ class bot_frame:
         if not handlers[0]:
             raise Exception("Handler for file type "
                             f"'{config_path.split('.')[-1]}' is not present.")
-
-        data = handlers[0](open(config_path, "r"))
+        with open(config_path, "r") as file:
+            data = handlers[0](file)
         self.config_meta = config_path
         return data
 

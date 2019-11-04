@@ -1,5 +1,5 @@
 from time import time
-import base64
+import re
 import textwrap
 
 
@@ -7,11 +7,11 @@ from disco.api.http import APIException
 from disco.bot import Plugin
 from disco.bot.command import CommandError, CommandLevels
 from disco.types.permissions import Permissions
-from requests import get
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, beautify_json, get_base64_image
+from bot.util.sql import Filter_Status, filter_types
 from bot.util.status import status_handler, guildCount
 
 
@@ -181,6 +181,7 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 "No status sites are enabled in config.",
             )
+
         guild_count = len(self.client.state.guilds)
         shard_id = self.bot.client.config.shard_id
         shard_count = self.bot.client.config.shard_count
@@ -249,109 +250,73 @@ class superuserPlugin(Plugin):
                 result = "None"
             response = response_block.format(str(result))
         if len(response) > 2000:
-            attachments = [["output.txt", str(result)], ]
+            attachments = [["the_full_response.txt", str(result)], ]
             response = ("It's dangerous to go without "
                         "the full response! Take this.")
         api_loop(event.channel.send_message, response, attachments=attachments)
 
     @Plugin.command(
-        "dms",
-        aliases=("DMs", "dm", "DM",),
-        group="block",
-        level=CommandLevels.OWNER,
-        metadata={"help": "owner"},
-        context={"guild": "DM", "filter_list": bot.config.blacklist})
-    @Plugin.command(
         "blacklist",
-        "<guild:snowflake>",
+        "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"filter_list": bot.config.blacklist})
+        context={"status": Filter_Status.map.BLACKLISTED})
     @Plugin.command(
         "whitelist",
-        "<guild:snowflake>",
+        "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"filter_list": bot.config.whitelist})
-    def on_filter_command(self, event, guild, filter_list):
-        """
-        Used to add or remove an item from the guild/DM filter.
-        """
-        if guild in filter_list:
-            filter_list.remove(guild)
-            return api_loop(
-                event.channel.send_message,
-                "Guild removed from filter :ok_hand:",
-            )
+        context={"status": Filter_Status.map.WHITELISTED})
+    def add_to_filter(self, event, target, status, target_type="guild"):
+        key, target = filter_types.get(self.state, target, target_type)
+        data, present = bot.sql.softget(
+            bot.sql.cfilter, **{key: target})
 
-        if guild != "DM" and not self.client.state.guilds.get(guild):
-            return api_loop(
-                event.channel.send_message,
-                "Guild not found :shrug:",
-            )
+        if present:
+            if data.status.check(status):
+                data.status.sub(status)
+                api_loop(
+                    event.channel.send_message, "Target removed from list.")
+            else:
+                data.status.add(status)
+                api_loop(event.channel.send_message, "Target added to list.")
 
-        filter_list.append(guild)
-        api_loop(
-            event.channel.send_message,
-            "Guild added to filter :thumbsup:",
-        )
-
-    @Plugin.command("veto", "<target:snowflake>", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_veto_command(self, event, target=None):
-        """
-        Used to whitelist a user from the guild/DM filter.
-        """
-        if not target:
-            target = event.author.id
-        if target in bot.config.uservetos:
-            bot.config.uservetos.remove(target)
-            api_loop(
-                event.channel.send_message,
-                f"User removed from veto list :ok_hand:",
-            )
+            data.edit_status(data.status)
+            bot.sql.flush()
         else:
-            bot.config.uservetos.append(target)
-            api_loop(
-                event.channel.send_message,
-                f"User added to veto list :thumbsup:",
-            )
+            data.status.add(status)
+            data.edit_status(data.status)
+            bot.sql.add(data.filter)
+            api_loop(event.channel.send_message, "Target added :thumbsup:")
 
-    @Plugin.command("reset", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_filter_reset(self, event):
-        """
-        Used to reset the guild filter (including the DM block).
-        """
-        bot.config.whitelist.clear()
-        bot.config.blacklist.clear()
-        api_loop(event.channel.send_message, ":thumbsup:")
+        if data.status.value == 0:
+            bot.sql.cfilter.query.filter_by(
+                target=data.filter.target,
+                target_type=data.filter.target_type).delete()
 
     @Plugin.command(
-        "dms",
-        aliases=("DMs", "dm", "DM"),
-        group="filter",
-        level=CommandLevels.OWNER,
-        metadata={"help": "owner"},
-        context={"guild": "DM"})
-    @Plugin.command("query", "[guild:snowflake]", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_filter_query_command(self, event, guild=None):
+        "query",
+        "[target:snowflake] [target_type:str]",
+        group="filter", level=CommandLevels.OWNER,
+        metadata={"help": "owner"})
+    def on_filter_query_command(self, event, target=None, target_type="guild"):
         """
         Used to retrieve the status of a guild or DMs in the filter.
         """
-        if guild:
-            whitelisted = guild in bot.config.whitelist
-            blacklisted = guild in bot.config.blacklist
-            api_loop(
-                event.channel.send_message,
-                (f"Guild status:```Whitelisted: {whitelisted}\n"
-                 f"Blacklisted: {blacklisted}```"),
-            )
+        if target:
+            key, target = filter_types.get(self.state, target, target_type)
+            data = bot.sql.softget(
+                bot.sql.cfilter, **{key: target})[0].status.to_dict()
         else:
-            api_loop(
-                event.channel.send_message,
-                (f"There are currently ``{len(bot.config.whitelist)}`` "
-                 f"guilds whitelisted, and ``{len(bot.config.blacklist)}``"
-                 " guilds blacklisted."),
-            )
+            data = {}
+            status = bot.sql.cfilter._wrap(bot.sql.cfilter)
+            for item, value in Filter_Status.map._all.items():
+                data[item] = status.get_count(value)
+
+            data["Total"] = bot.sql.cfilter.query.count()
+
+        return api_loop(event.channel.send_message,
+                        f"Current status:\n```json\n{beautify_json(data)}```")
 
     @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_echo_command(self, event, payload):
@@ -412,9 +377,7 @@ class superuserPlugin(Plugin):
         #  attempt to get bot's current avatar as base64.
         url = self.state.me.get_avatar_url(still_format="png")
         try:
-            r = get(url)
-            avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
-                      + base64.b64encode(r.content).decode("utf-8"))
+            avatar = get_base64_image(url)
         except Exception as e:
             self.log.warning(f"failed to get webhook image {e}")
             avatar = None
@@ -465,3 +428,99 @@ class superuserPlugin(Plugin):
                 event.channel.send_message,
                 f":thumbsup:",
             )
+
+    @Plugin.command("steal", "<target:snowflake> [args:str...]",
+                    level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_steal_command(self, event, target, args=""):
+        """
+        Used to steal emojis from messages content or reactions.
+        Pass "r" as the last argument to steal from the message reactions.
+        Pass "u" or "c" or "s" to steal from a user custom status.
+        """
+        channel = None
+        user = None
+        if args and args.split(" ")[-1].lower() in ("c", "u", "s"):
+            # Get the target user for their custom status.
+            user = self.state.users.get(target)
+            if not user:
+                raise CommandError("Couldn't find target user.")
+        else:
+            # Get the target channel.
+            channel_target = re.match(r"\d+", args.split(" ", 1)[0])
+            if channel_target:
+                channel = self.state.channels.get(int(channel_target.string))
+            else:
+                channel = event.channel
+            if not channel:
+                raise CommandError("Channel not found.")
+
+            try:
+                message = channel.get_message(target)
+            except APIException as e:
+                raise CommandError(str(e))
+
+        def get_info_from_string(emojis):
+            for emoji in emojis:
+                name = re.search(r":\w+:", emoji).group()[1:-1]
+                emoji_id = re.search(r":\d+>", emoji).group()[1:-1]
+                # Check if emoji is animated or not.
+                url = f"{emoji_id}."
+                url += "gif" if emoji[1] == "a" else "png"
+                yield name, url
+
+        def attributed_with_emoji(objs):
+            for obj in objs:
+                if not obj.emoji or not obj.emoji.id:
+                    continue
+
+                url = f"{obj.emoji.id}."
+                url += "gif" if obj.emoji.animated else "png"
+                yield obj.emoji.name, url
+
+        if args and args.split(" ")[-1].lower() == "r":
+            # Form a generator of the emojis from the message's reactions.
+            results = attributed_with_emoji(message.reactions)
+        elif user:
+            if not user.presence:
+                raise CommandError("Target user is currently invisible.")
+            # Form a generator of the user's activities for stealing emoji.
+            results = attributed_with_emoji(user.presence.activities)
+        else:
+            # Extract emojis from message contents.
+            emojis = re.findall(r"<a?:\w+:\d+>", message.content)
+            if not emojis:
+                raise CommandError("No emojis found in message.")
+
+            results = get_info_from_string(emojis)
+
+        exceptions = []
+        count = 0
+        reason = "Stolen from "
+        if channel:
+            reason += f"msg {channel.id}:"
+        else:
+            reason += "custom status "
+        reason += str(target)
+
+        for name, url in results:
+            url = f"https://cdn.discordapp.com/emojis/{url}?v=1"
+            try:
+                self.client.api.guilds_emojis_create(
+                    bot.config.emoji_guild,
+                    reason=reason,
+                    name=name,
+                    image=get_base64_image(url),
+                )
+            except APIException as e:
+                exceptions.append(f"{name}|{url}: {e}")
+            finally:
+                count += 1
+
+        if exceptions:
+            return api_loop(
+                event.channel.send_message,
+                (f"{len(exceptions)} out of {count} "
+                 f"emoji(s) failed: ```python\n{exceptions}```")
+            )
+
+        api_loop(event.channel.send_message, f":thumbsup: ({count})")

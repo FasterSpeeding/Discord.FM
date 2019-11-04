@@ -116,15 +116,15 @@ class status_handler(object):
                 headers=service.headers,
             )
         except RequestException as e:
-            log.warning("Failed to post server count "
-                        f"to {service.__name__}: {e}")
+            log.debug("Failed to post server count "
+                      f"to {service.__name__}: {e}")
         else:
             if r.status_code == 200:
                 log.debug("Posted guild count "
                           f"({guilds_payload.Count}) to {service.__name__}")
             else:
-                log.warning("Failed to post guild count to "
-                            f"{service.__name__} ({r.status_code}): {r.text}")
+                log.debug("Failed to post guild count to "
+                          f"{service.__name__} ({r.status_code}): {r.text}")
 
     def update_presence(self, guilds_payload):
         if self.presence:

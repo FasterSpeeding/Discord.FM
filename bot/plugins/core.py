@@ -1,5 +1,4 @@
 from datetime import datetime
-from time import time
 from traceback import extract_stack
 import os
 import psutil
@@ -31,10 +30,8 @@ class CorePlugin(Plugin):
         self.process = psutil.Process()
         try:
             for guild in bot.sql(bot.sql.guilds.query.all):
-                if guild.prefix is not None:
-                    bot.prefix_cache[guild.guild_id] = guild.prefix
-                else:
-                    bot.prefix_cache[guild.guild_id] = bot.prefix
+                bot.prefix_cache[guild.guild_id] = guild.prefix
+
         except CommandError as e:
             self.log.critical("Failed to load guild data from SQL "
                               "servers, they're probably down.")
@@ -240,7 +237,7 @@ class CorePlugin(Plugin):
                         and command_obj.metadata.get("help", None)):
                     break
 
-            data = bot.generate_command_info(commanb_obj, all_triggers=True)
+            data = bot.generate_command_info(command_obj, all_triggers=True)
             if match and data:
                 embed = bot.generic_embed(
                     title=data[0] + f" a command in the {data[3]} module.",
@@ -445,13 +442,6 @@ class CorePlugin(Plugin):
         if event.author.bot:
             return
 
-        #  Enforce guild whitelist
-        if ((event.channel.is_dm and "DM" in bot.config.blacklist or
-             bot.config.whitelist and event.guild_id not in bot.config.whitelist
-             or bot.config.blacklist and event.guild_id in bot.config.blacklist)
-                and event.author.id not in bot.config.uservetos):
-            return
-
         prefix = get_prefix(event)
         require_mention = self.bot.config.commands_require_mention
         if not event.message.content.startswith(prefix):
@@ -486,12 +476,24 @@ class CorePlugin(Plugin):
                          f"{get_missing_perms(PermissionValue, self_perms)}`"),
                     )
 
+            #  Enforce guild/channel and user whitelist.
+            CStatus = bot.sql.softget(
+                bot.sql.cfilter, channel=event.channel)[0]
+            AStatus = bot.sql.softget(bot.sql.cfilter, user=event.author)[0]
+            if (CStatus.blacklist_status() or AStatus.blacklist_status()
+                    or not CStatus.whitelist_status()
+                    or not AStatus.whitelist_status()):
+                return
+
             command.plugin.execute(CommandEvent(command, event, match))
             break
 
     def exception_response(self, event, exception, respond: bool = True):
         if isinstance(exception, APIException) and exception.code == 50013:
             return
+
+        if bot.config.no_exception_response:
+            raise exception
 
         if respond:
             api_loop(
