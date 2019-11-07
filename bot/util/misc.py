@@ -38,6 +38,20 @@ def api_loop(command, *args, log_50007=True, **kwargs):
             retries += 1
 
 
+def auto_file_response(
+        content, response, file_name="the_full_response.txt",
+        response_type="py", overflow_content=None):
+    if len(content) + len(str(response)) + len(response_type) >= 1980:
+        if overflow_content:
+            content = overflow_content
+        attachments = [[file_name, str(response)]]
+    else:
+        attachments = None
+        content += f"```{response_type}\n{response}```"
+
+    return {"content": content, "attachments": attachments}
+
+
 def dm_default_send(event, dm_channel, *args, **kwargs):
     """
     Attempt to send a message to the user's DM

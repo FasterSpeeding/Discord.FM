@@ -13,6 +13,7 @@ from bot.base import bot
 from bot.util.misc import api_loop, beautify_json, get_base64_image
 from bot.util.sql import Filter_Status, filter_types
 from bot.util.status import status_handler, guildCount
+from bot.util.misc import auto_file_response
 
 
 class superuserPlugin(Plugin):
@@ -227,19 +228,15 @@ class superuserPlugin(Plugin):
             "sql": bot.sql,
             "state": self.bot.client.state,
         }
-        response_block = "```python\n{}\n```"
         code = event.codeblock.replace("py\n", "").replace("python\n", "")
         code = (f"def func(ctx):\n  try:\n{textwrap.indent(code, '    ')}"
                 "\n  finally:\n    ctx['results'] = locals()")
-        attachments = None
 
         try:
             exec(code, ctx)
             ctx["func"](ctx)
         except Exception as e:
-            response = response_block.format(
-                (type(e).__name__ + ": " + str(e))
-            )
+            result = type(e).__name__ + ": " + str(e)
         else:
             del ctx["results"]["ctx"]
             result = ctx["results"].get("output") or ctx["results"].get("out")
@@ -247,13 +244,17 @@ class superuserPlugin(Plugin):
                                 if not key.startswith("_")}):
                 result = list(ctx["results"].values())[0]  # assumptions have
             elif not result:  # been made about how python populates local()
-                result = "None"
-            response = response_block.format(str(result))
-        if len(response) > 2000:
-            attachments = [["the_full_response.txt", str(result)], ]
-            response = ("It's dangerous to go without "
-                        "the full response! Take this.")
-        api_loop(event.channel.send_message, response, attachments=attachments)
+                result = "Unset"
+
+        api_loop(
+            event.channel.send_message, 
+            **auto_file_response(
+                "",
+                result,
+                overflow_content=("It's dangerous to go without "
+                                  "the full response! Take this.")
+            )
+        )
 
     @Plugin.command(
         "blacklist",
@@ -437,6 +438,9 @@ class superuserPlugin(Plugin):
         Pass "r" as the last argument to steal from the message reactions.
         Pass "u" or "c" or "s" to steal from a user custom status.
         """
+        if not bot.config.emoji_guild:
+            raise CommandError("Emoji Guild not set.")
+
         channel = None
         user = None
         if args and args.split(" ")[-1].lower() in ("c", "u", "s"):
@@ -519,8 +523,10 @@ class superuserPlugin(Plugin):
         if exceptions:
             return api_loop(
                 event.channel.send_message,
-                (f"{len(exceptions)} out of {count} "
-                 f"emoji(s) failed: ```python\n{exceptions}```")
+                **auto_file_response(
+                    f"{len(exceptions)} out of {count} emoji(s) failed:",
+                    exceptions,
+                )
             )
 
         api_loop(event.channel.send_message, f":thumbsup: ({count})")
