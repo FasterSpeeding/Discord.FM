@@ -339,7 +339,7 @@ class wrappedfilter(BaseWrapper):
 
     def get_count(self, status, target_type=None, sql_obj=None):
         return (sql_obj or self.sql_obj).query.filter(
-            filter.status.op("&")(status) == status and
+            cfilter.status.op("&")(status) == status and
             (not target_type or filter.target_type == target_type)).count()
 
 
