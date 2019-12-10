@@ -1,16 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import base64
 import json
 import logging
-import humanize
-import pytz
 import re
 
 
+import humanize
 from disco.api.http import APIException
 from disco.bot.command import CommandError
 from requests import Request, get as real_get
 from requests.exceptions import ConnectionError as requestsCError
+
 
 log = logging.getLogger(__name__)
 
@@ -24,14 +24,15 @@ def api_loop(command, *args, log_50007=True, **kwargs):
         try:
             return command(*args, **kwargs)
         except requestsCError as e:
-            log.info(f"Caught discord-request error {e}.")
+            log.info(f"Caught discord-request error %.", e)
         except APIException as e:
             if e.code == 50013:  # Missing permissions
-                raise CommandError("Missing permissions to respond "
-                                   "(possibly Embed Links).")
+                raise CommandError(
+                    "Missing permissions to respond (possibly Embed Links)."
+                )
 
             if e.code != 50007 or log_50007:  # Cannot send messages to user
-                log.critical(f"Api exception: {e.code}: {e}")
+                log.critical(f"Api exception: %: %", e.code, e)
             raise e
 
         finally:
@@ -57,18 +58,20 @@ redact_regs = (
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
     re.compile(r"[-._\w\d]{20,140}"),
     re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
-    re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
-               r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
-               r"|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0"
-               r"-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA"
-               r"-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,"
-               r"4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0"
-               r"-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80"
-               r":(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}"
-               r"){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
-               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
-               r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
-               r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"),
+    re.compile(
+        r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
+        r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
+        r"|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0"
+        r"-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA"
+        r"-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,"
+        r"4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0"
+        r"-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80"
+        r":(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}"
+        r"){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+        r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]"
+        r"{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.)"
+        r"{3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))"
+    ),
 )
 
 
@@ -116,12 +119,12 @@ def dictify(intake):
     return data
 
 
-def get_dict_item(data: dict, Dict_map: list):
+def get_dict_item(data: dict, dict_map: list):
     """
     Get the element embeded in layered dictionaries and lists
     based off a list of indexs and keys.
     """
-    for index in Dict_map:
+    for index in dict_map:
         try:
             data = data[index]
         except (IndexError, KeyError):
@@ -131,11 +134,8 @@ def get_dict_item(data: dict, Dict_map: list):
 
 
 def get(
-        self,
-        params: dict = None,
-        endpoint: str = "",
-        url: str = None,
-        item: str = "item"):
+    self, params: dict = None, endpoint: str = "", url: str = None, item: str = "item"
+):
     url = (url or self.BASE_URL) + endpoint
     if params:
         params = {str(key): str(value) for key, value in params.items()}
@@ -153,55 +153,20 @@ def get(
     if r.status_code == 404:
         raise CommandError(f"404 - {item} doesn't exist.")
 
-    raise CommandError(f"{r.status_code} - {service} threw "
-                       f"unexpected error: {redact(r.text)}")
+    raise CommandError(
+        f"{r.status_code} - {service} threw unexpected error: {redact(r.text)}"
+    )
 
 
-def exception_webhooks(client, exception_webhooks, **kwargs):
-    for webhook_id, token in exception_webhooks.copy().items():
-        try:
-            api_loop(
-                client.api.webhooks_token_execute,
-                webhook_id,
-                token,
-                data=kwargs,
-            )
-        except APIException as e:
-            if e.code in (10015, 50001):
-                log.warning("Unable to send exception "
-                            f"webook - {webhook_id}: {e}")
-                del exception_webhooks[webhook_id]
-            else:
-                raise e
-        except CommandError as e:
-            log.warning(e)
-
-
-def exception_dms(client, exception_dms, *args, **kwargs):
-    for target in exception_dms.copy():
-        target_dm = client.api.users_me_dms_create(target)
-        try:
-            api_loop(target_dm.send_message, *args, **kwargs)
-        except APIException as e:  # Missing permissions, Missing access,
-            if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
-                log.warning("Unable to send exception DM - "
-                            f"{target}: {e}")
-                exception_dms.remove(target)
-            else:
-                raise e
-
-
-def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
+def time_since(time_of_event: int, tz=timezone.utc):
     """
-    A command used get the time passed since a unix time stamp
+    A command used get the duration passed since a unix duration stamp
     and output it as a human readable string.
     """
-    time_passed = (datetime.now(timezone) -
-                   datetime.fromtimestamp(int(time_of_event), timezone))
+    time_passed = datetime.now(tz) - datetime.fromtimestamp(int(time_of_event), tz)
     return humanize.naturaltime(time_passed)
 
 
 def get_base64_image(url):
     r = real_get(url)
-    return ("data:" + r.headers["Content-Type"] + ";base64,"
-            + base64.b64encode(r.content).decode("utf-8"))
+    return f"data:{r.headers['Content-Type']};base64,{base64.b64encode(r.content).decode('utf-8')}"

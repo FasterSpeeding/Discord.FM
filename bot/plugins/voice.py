@@ -1,11 +1,8 @@
 from disco.bot import Plugin
-from disco.util.logging import logging
 
 
 from bot.base import bot
 from bot.util.misc import api_loop
-
-log = logging.getLogger(__name__)
 
 
 class MusicPlugin(Plugin):
@@ -25,6 +22,8 @@ class MusicPlugin(Plugin):
         """
         api_loop(
             event.channel.send_message,
-            ("Voice has been temporarily disabled due to technical issues"
-             " and will be back when it's in more stable condition.")
+            (
+                "Voice has been temporarily disabled due to technical issues"
+                " and will be back when it's in more stable condition."
+            ),
         )

@@ -7,16 +7,24 @@ import os
 from disco.bot.command import CommandError
 from disco.types.base import BitsetMap, BitsetValue
 from sqlalchemy import (
-    create_engine as spawn_engine, PrimaryKeyConstraint,
-    Column, exc, ForeignKey,
+    create_engine as spawn_engine,
+    PrimaryKeyConstraint,
+    Column,
+    exc,
+    ForeignKey,
 )
 from sqlalchemy.dialects.mysql import (
-    TEXT, BIGINT, INTEGER, VARCHAR,
+    TEXT,
+    BIGINT,
+    INTEGER,
+    VARCHAR,
 )
-from sqlalchemy.engine.url import URL as SQLurl
+from sqlalchemy.engine.url import URL as SQU_URL
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
-    scoped_session, sessionmaker, relationship,
+    scoped_session,
+    sessionmaker,
+    relationship,
 )
 
 
@@ -35,38 +43,21 @@ class SQLexception(CommandError):
 class guilds(Base):
     __tablename__ = "guilds"
     guild_id = Column(
-        "guild_id",
-        BIGINT(18, unsigned=True),
-        nullable=False,
-        primary_key=True,
+        "guild_id", BIGINT(18, unsigned=True), nullable=False, primary_key=True,
     )
-    prefix = Column(
-        "prefix",
-        TEXT,
-        nullable=True,
-    )
-    lyrics_limit = Column(
-        "lyrics_limit",
-        INTEGER,
-        nullable=True,
-    )
+    prefix = Column("prefix", TEXT, nullable=True,)
+    lyrics_limit = Column("lyrics_limit", INTEGER, nullable=True,)
     alias_list = relationship(
-        "aliases",
-        cascade="all, delete-orphan",
-        backref="guilds",
+        "aliases", cascade="all, delete-orphan", backref="guilds",
     )
 
-    def __init__(
-            self,
-            guild_id: int,
-            prefix: str = None,
-            lyrics_limit: int = None):
+    def __init__(self, guild_id: int, prefix: str = None, lyrics_limit: int = None):
         self.guild_id = guild_id
         self.prefix = prefix
         self.lyrics_limit = lyrics_limit
 
     def __repr__(self):
-        return (f"guilds {self.guild_id}")
+        return f"guilds {self.guild_id}"
 
 
 periods = {
@@ -82,37 +73,14 @@ periods = {
 class users(Base):
     __tablename__ = "users"
     user_id = Column(
-        "user_id",
-        BIGINT(18, unsigned=True),
-        nullable=False,
-        primary_key=True,
+        "user_id", BIGINT(18, unsigned=True), nullable=False, primary_key=True,
     )
-    last_username = Column(
-        "last_username",
-        TEXT,
-        nullable=True,
-    )
-    period = Column(
-        "period",
-        INTEGER,
-        nullable=True,
-    )
-    friends = relationship(
-        "friends",
-        cascade="all, delete-orphan",
-        backref="users",
-    )
-    aliases = relationship(
-        "aliases",
-        cascade="all, delete-orphan",
-        backref="users",
-    )
+    last_username = Column("last_username", TEXT, nullable=True,)
+    period = Column("period", INTEGER, nullable=True,)
+    friends = relationship("friends", cascade="all, delete-orphan", backref="users",)
+    aliases = relationship("aliases", cascade="all, delete-orphan", backref="users",)
 
-    def __init__(
-            self,
-            user_id: int,
-            last_username: str = None,
-            period: int = None):
+    def __init__(self, user_id: int, last_username: str = None, period: int = None):
         self.user_id = user_id
         self.last_username = last_username
         self.period = period
@@ -123,12 +91,7 @@ class users(Base):
 
 class friends(Base):
     __tablename__ = "friends"
-    __table_args__ = (
-        PrimaryKeyConstraint(
-            "master_id",
-            "slave_id",
-        ),
-    )
+    __table_args__ = (PrimaryKeyConstraint("master_id", "slave_id",),)
 
     master_id = Column(
         "master_id",
@@ -136,11 +99,7 @@ class friends(Base):
         ForeignKey(users.user_id, ondelete="CASCADE"),
         nullable=False,
     )
-    slave_id = Column(
-        "slave_id",
-        BIGINT(18, unsigned=True),
-        nullable=False,
-    )
+    slave_id = Column("slave_id", BIGINT(18, unsigned=True), nullable=False,)
 
     def __init__(self, master_id: int, slave_id: int, index: int = None):
         self.master_id = master_id
@@ -152,12 +111,7 @@ class friends(Base):
 
 class aliases(Base):
     __tablename__ = "aliases"
-    __table_args__ = (
-        PrimaryKeyConstraint(
-            "guild_id",
-            "alias",
-        ),
-    )
+    __table_args__ = (PrimaryKeyConstraint("guild_id", "alias",),)
     user_id = Column(
         "user_id",
         BIGINT(18, unsigned=True),
@@ -170,11 +124,7 @@ class aliases(Base):
         ForeignKey(guilds.guild_id, ondelete="CASCADE"),
         nullable=False,
     )
-    alias = Column(
-        "alias",
-        VARCHAR(30),
-        nullable=False,
-    )
+    alias = Column("alias", VARCHAR(30), nullable=False,)
 
     def __init__(self, user_id, guild_id, alias):
         self.user_id = user_id
@@ -225,27 +175,10 @@ class filter_types:
 
 class cfilter(Base):
     __tablename__ = "filter"
-    __table_args__ = (
-        PrimaryKeyConstraint(
-            "target",
-            "target_type",
-        ),
-    )
-    target = Column(
-        "target",
-        BIGINT(18, unsigned=True),
-        nullable=False,
-    )
-    target_type = Column(
-        "target_type",
-        INTEGER(1, unsigned=True),
-        nullable=False,
-    )
-    status = Column(
-        "status",
-        INTEGER(1, unsigned=True),
-        nullable=False,
-    )
+    __table_args__ = (PrimaryKeyConstraint("target", "target_type",),)
+    target = Column("target", BIGINT(18, unsigned=True), nullable=False,)
+    target_type = Column("target_type", INTEGER(1, unsigned=True), nullable=False,)
+    status = Column("status", INTEGER(1, unsigned=True), nullable=False,)
 
     def __init__(self, status=0, channel=None, guild=None, user=None):
         data = self._search_kwargs(channel=channel, guild=guild, user=user)
@@ -318,17 +251,21 @@ class wrappedfilter:
             return True
 
         return not self.get_count(
-            Filter_Status.map.WHITELISTED,
-            target_type=self.filter.target_type,
+            Filter_Status.map.WHITELISTED, target_type=self.filter.target_type,
         )
 
     def get_count(self, status, target_type=None, sql_obj=None):
-        return (sql_obj or self.filter).query.filter(
-            filter.status.op("&")(status) == status and
-            (not target_type or filter.target_type == target_type)).count()
+        return (
+            (sql_obj or self.filter)
+            .query.filter(
+                filter.status.op("&")(status) == status
+                and (not target_type or filter.target_type == target_type)
+            )
+            .count()
+        )
 
 
-class sql_instance:
+class SqlInstance:
     __tables__ = (
         guilds,
         users,
@@ -346,16 +283,17 @@ class sql_instance:
     }
 
     def __init__(
-            self,
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+        self,
+        drivername=None,
+        host=None,
+        port=None,
+        username=None,
+        password=None,
+        database=None,
+        query=None,
+        args=None,
+        local_path=None,
+    ):
         self.session, self.engine = self.create_engine_session_safe(
             drivername,
             host,
@@ -377,8 +315,7 @@ class sql_instance:
         while True:
             if tries >= 5:
                 raise SQLexception(
-                    "Failed to access data.",
-                    root_exception,
+                    "Failed to access data.", root_exception,
                 )
             try:
                 return function(*args, **kwargs)
@@ -450,28 +387,23 @@ class sql_instance:
 
     @staticmethod
     def create_engine(
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+        drivername=None,
+        host=None,
+        port=None,
+        username=None,
+        password=None,
+        database=None,
+        query=None,
+        args=None,
+        local_path=None,
+    ):
 
         # Pre_establish settings
         if host:
-            settings = SQLurl(
-                drivername,
-                username,
-                password,
-                host,
-                port,
-                database,
-                query,
+            settings = SQU_URL(
+                drivername, username, password, host, port, database, query,
             )
-            args = (args or {})
+            args = args or {}
         else:
             if not os.path.exists("data"):
                 os.makedirs("data")
@@ -489,16 +421,17 @@ class sql_instance:
         )
 
     def create_engine_session_safe(
-            self,
-            drivername=None,
-            host=None,
-            port=None,
-            username=None,
-            password=None,
-            database=None,
-            query=None,
-            args=None,
-            local_path=None):
+        self,
+        drivername=None,
+        host=None,
+        port=None,
+        username=None,
+        password=None,
+        database=None,
+        query=None,
+        args=None,
+        local_path=None,
+    ):
 
         engine = self.create_engine(
             drivername,
@@ -516,15 +449,14 @@ class sql_instance:
         try:
             engine.execute("SELECT 1")
         except exc.OperationalError as e:
-            log.warning("Unable to connect to database, "
-                        "defaulting to sqlite: " + str(e))
+            log.warning(
+                "Unable to connect to database, " "defaulting to sqlite: " + str(e)
+            )
             engine = self.create_engine(local_path=local_path)
 
         session = scoped_session(
             sessionmaker(
-                autocommit=self.autocommit,
-                autoflush=self.autoflush,
-                bind=engine,
+                autocommit=self.autocommit, autoflush=self.autoflush, bind=engine,
             ),
         )
         return session, engine

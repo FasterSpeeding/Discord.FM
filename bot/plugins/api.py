@@ -29,17 +29,17 @@ class ApiPlugin(Plugin):
             "google_cse_engine_ID",
         )
         bot.load_help_embeds(self)
-        self.lyrics = Song_Lyrics(
-            self.google_key,
-            self.google_cse_engine_ID,
-        )
+        self.lyrics = Song_Lyrics(self.google_key, self.google_cse_engine_ID,)
 
     def unload(self, ctx):
         bot.unload_help_embeds(self)
         super(ApiPlugin, self).unload(ctx)
 
-    @Plugin.command("lyrics", "<content:str...>",
-                    metadata={"help": "api", "perms": Permissions.EMBED_LINKS})
+    @Plugin.command(
+        "lyrics",
+        "<content:str...>",
+        metadata={"help": "Api", "perms": Permissions.EMBED_LINKS},
+    )
     def on_lyrics_command(self, event, content):
         """
         Return lyrics for a song.
@@ -59,18 +59,14 @@ class ApiPlugin(Plugin):
                     "This command has been disabled in this guild.",
                 )
 
-        first_message = api_loop(
-            event.channel.send_message,
-            "Searching for lyrics...",
-        )
+        first_message = api_loop(event.channel.send_message, "Searching for lyrics...",)
         title, lyrics = self.lyrics.get_lyrics(quote_plus(content))
 
         if not lyrics:
             content = sanitize(content, escape_codeblocks=True)
             try:
                 return api_loop(
-                    first_message.edit,
-                    f"No lyrics found for ``{content}``",
+                    first_message.edit, f"No lyrics found for ``{content}``",
                 )
             except APIException as e:
                 if e.code in (10003, 10004, 10008):
@@ -90,9 +86,7 @@ class ApiPlugin(Plugin):
             "icon_url": event.author.get_avatar_url(size=32),
         }
         lyrics_embed = bot.generic_embed(
-            title=title,
-            footer=footer,
-            timestamp=event.msg.timestamp.isoformat(),
+            title=title, footer=footer, timestamp=event.msg.timestamp.isoformat(),
         )
         try:
             first_message.delete()
@@ -110,12 +104,12 @@ class ApiPlugin(Plugin):
                 tmp_to_shift = lyrics_embed.description.splitlines()[-1]
                 lyrics = tmp_to_shift + lyrics
                 lyrics_embed.description = lyrics_embed.description[
-                    :-len(tmp_to_shift)
+                    : -len(tmp_to_shift)
                 ]
             api_loop(event.channel.send_message, embed=lyrics_embed)
             responses += 1
 
-    @Plugin.command("limit lyrics", "[limit:int]", metadata={"help": "api"})
+    @Plugin.command("limit lyrics", "[limit:int]", metadata={"help": "Api"})
     def on_lyrics_limit_command(self, event, limit=None):
         """
         Used to set the maximum amount of embeds sent by the lyrics command.
@@ -124,8 +118,7 @@ class ApiPlugin(Plugin):
         """
         if event.channel.is_dm:
             return api_loop(
-                event.channel.send_message,
-                "This command cannot be used in DMs.",
+                event.channel.send_message, "This command cannot be used in DMs.",
             )
 
         if limit is not None:
@@ -139,10 +132,7 @@ class ApiPlugin(Plugin):
 
                 guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
-                    guild = bot.sql.guilds(
-                        guild_id=event.guild_id,
-                        lyrics_limit=limit,
-                    )
+                    guild = bot.sql.guilds(guild_id=event.guild_id, lyrics_limit=limit,)
                     bot.sql.add(guild)
                 else:
                     guild.lyrics_limit = limit
@@ -163,11 +153,12 @@ class ApiPlugin(Plugin):
             else:
                 limit = bot.config.api.default_lyrics_limit
             api_loop(
-                    event.channel.send_message,
-                    f"The current limit is set to {limit}",
-                )
+                event.channel.send_message, f"The current limit is set to {limit}",
+            )
 
-    @Plugin.command("spotify", "<sp_type:str> [search:str...]", metadata={"help": "api"})
+    @Plugin.command(
+        "spotify", "<sp_type:str> [search:str...]", metadata={"help": "Api"}
+    )
     def on_spotify_command(self, event, sp_type, search=""):
         """
         Search for an item on Spotify.
@@ -185,10 +176,7 @@ class ApiPlugin(Plugin):
             sp_type = "track"
         r = get(
             "https://api.spotify.com/v1/search",
-            params={
-                "q": search,
-                "type": sp_type,
-            },
+            params={"q": search, "type": sp_type,},
             headers={
                 "Authorization": f"Bearer {self.spotify_auth}",
                 "User-Agent": self.user_agent,
@@ -196,20 +184,18 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code == 200:
-            if not r.json()[sp_type+"s"]["items"]:
+            if not r.json()[sp_type + "s"]["items"]:
                 search = sanitize(search, escape_codeblocks=True)
                 return api_loop(
-                    event.channel.send_message,
-                    f"{sp_type}: ``{search}`` not found."
+                    event.channel.send_message, f"{sp_type}: ``{search}`` not found."
                 )
 
-            url = r.json()[sp_type+"s"]["items"][0]["external_urls"]["spotify"]
+            url = r.json()[sp_type + "s"]["items"][0]["external_urls"]["spotify"]
             reply = api_loop(event.channel.send_message, url)
-            if (len(r.json()[sp_type+"s"]["items"]) > 1 and
-                    not event.channel.is_dm):
+            if len(r.json()[sp_type + "s"]["items"]) > 1 and not event.channel.is_dm:
                 bot.reactor.init_event(
                     message=reply,
-                    data=r.json()[sp_type+"s"]["items"],
+                    data=r.json()[sp_type + "s"]["items"],
                     index=0,
                     amount=1,
                     edit_message=self.spotify_react,
@@ -229,12 +215,13 @@ class ApiPlugin(Plugin):
                 exception_webhooks(
                     self.client,
                     bot.config.exception_webhooks,
-                    content=(f"Spotify threw error {r.status_code}: "
-                             f"```{redact(r.text)[:1950]}```"),
+                    content=(
+                        f"Spotify threw error {r.status_code}: "
+                        f"```{redact(r.text)[:1950]}```"
+                    ),
                 )
             api_loop(
-                event.channel.send_message,
-                f"Error code {r.status_code} returned.",
+                event.channel.send_message, f"Error code {r.status_code} returned.",
             )
 
     def get_spotify_auth(self):
@@ -245,10 +232,7 @@ class ApiPlugin(Plugin):
         r = post(
             "https://accounts.spotify.com/api/token",
             data={"grant_type": "client_credentials"},
-            headers={
-                "Authorization": f"Basic {auth}",
-                "User-Agent": self.user_agent,
-            },
+            headers={"Authorization": f"Basic {auth}", "User-Agent": self.user_agent,},
         )
         if r.status_code != 200:
             self.log.warning(redact(str(r.text)))
@@ -256,12 +240,12 @@ class ApiPlugin(Plugin):
                 exception_webhooks(
                     self.client,
                     bot.config.exception_webhooks,
-                    content=(f"Spotify OAUTH threw error {r.status_code}: "
-                             f"```{redact(r.text)[:1950]}```"),
+                    content=(
+                        f"Spotify OAUTH threw error {r.status_code}: "
+                        f"```{redact(r.text)[:1950]}```"
+                    ),
                 )
-            raise CommandError(
-                f"Error code {r.status_code} returned by oauth flow"
-            )
+            raise CommandError(f"Error code {r.status_code} returned by oauth flow")
         self.spotify_auth = r.json()["access_token"]
         self.spotify_auth_expire = r_time + r.json()["expires_in"]
 
@@ -269,7 +253,12 @@ class ApiPlugin(Plugin):
     def spotify_react(data, index, **kwargs):
         return data[index]["external_urls"]["spotify"], None
 
-    @Plugin.command("youtube", "<yt_type:str> [content:str...]", aliases=["yt"], metadata={"help": "api"})
+    @Plugin.command(
+        "youtube",
+        "<yt_type:str> [content:str...]",
+        aliases=["yt"],
+        metadata={"help": "Api"},
+    )
     def on_youtube_command(self, event, yt_type, content=""):
         """
         Search for a Youtube video.
@@ -280,10 +269,7 @@ class ApiPlugin(Plugin):
         """
         self.pre_check("google_key")
         yt_types_indexs = {
-            "video": {
-                "index": "videoId",
-                "url": "https://www.youtube.com/watch?v={}",
-            },
+            "video": {"index": "videoId", "url": "https://www.youtube.com/watch?v={}",},
             "channel": {
                 "index": "channelId",
                 "url": "https://www.youtube.com/channel/{}",
@@ -312,19 +298,17 @@ class ApiPlugin(Plugin):
         )
         if r.status_code == 200:
             if r.json()["pageInfo"]["totalResults"] != 0:
-                response = r.json()["items"][0]["id"][
-                    yt_types_indexs[yt_type]["index"]
-                ]
+                response = r.json()["items"][0]["id"][yt_types_indexs[yt_type]["index"]]
                 reply = api_loop(
                     event.channel.send_message,
-                    yt_types_indexs[yt_type]["url"].format(response)
+                    yt_types_indexs[yt_type]["url"].format(response),
                 )
-                if (r.json()["pageInfo"]["totalResults"] > 1 and
-                        not event.channel.is_dm):
+                if r.json()["pageInfo"]["totalResults"] > 1 and not event.channel.is_dm:
                     bot.reactor.init_event(
                         message=reply,
                         data=r.json()["items"],
-                        index=0, amount=1,
+                        index=0,
+                        amount=1,
                         index_type=yt_types_indexs[yt_type]["index"],
                         url_format=yt_types_indexs[yt_type]["url"],
                         edit_message=self.youtube_react,
@@ -346,23 +330,25 @@ class ApiPlugin(Plugin):
                 exception_webhooks(
                     self.client,
                     bot.config.exception_webhooks,
-                    content=(f"Youtube threw error {r.status_code}: "
-                             f"```{redact(r.text)[:1950]}```"),
+                    content=(
+                        f"Youtube threw error {r.status_code}: "
+                        f"```{redact(r.text)[:1950]}```"
+                    ),
                 )
             api_loop(
-                event.channel.send_message,
-                f"Error code {r.status_code} returned.",
+                event.channel.send_message, f"Error code {r.status_code} returned.",
             )
 
     @staticmethod
     def youtube_react(data, index, **kwargs):
-        return kwargs["url_format"].format(
-                data[index]["id"][kwargs["index_type"]],
-            ), None
+        return (
+            kwargs["url_format"].format(data[index]["id"][kwargs["index_type"]],),
+            None,
+        )
 
     def pre_check(self, *args):
         """
-        Checks to see if api key(s) are available.
+        Checks to see if Api key(s) are available.
         raises a CommandError if not present
         """
         for key in args:

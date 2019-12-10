@@ -20,15 +20,10 @@ class superuserPlugin(Plugin):
         super(superuserPlugin, self).load(ctx)
         bot.load_help_embeds(self)
         self.register_schedule(
-            self.__check__,
-            5,
-            repeat=False,
-            init=False,
+            self.__check__, 5, repeat=False, init=False,
         )
         presence = bot.config.presence.format(
-            count="{count}",
-            shardcount="{shardcount}",
-            prefix=bot.prefix,
+            count="{count}", shardcount="{shardcount}", prefix=bot.prefix,
         )
         self.status = status_handler(
             self,
@@ -39,15 +34,10 @@ class superuserPlugin(Plugin):
             presence=presence,
         )
         self.register_schedule(
-            self.status.update_stats,
-            300,
-            init=False,
+            self.status.update_stats, 300, init=False,
         )
         self.register_schedule(
-            self.status.setup_services,
-            60,
-            repeat=False,
-            init=False,
+            self.status.setup_services, 60, repeat=False, init=False,
         )
 
     def unload(self, ctx):
@@ -61,8 +51,9 @@ class superuserPlugin(Plugin):
 
             if hasattr(plug, "__check__") and not plug.__check__():
                 self.bot.rmv_plugin(plug.__class__)
-                self.log.info(plug.__class__.__name__ +
-                              " failed check and has been unloaded.")
+                self.log.info(
+                    plug.__class__.__name__ + " failed check and has been unloaded."
+                )
 
     @Plugin.command("restart", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_restart_command(self, event):
@@ -72,10 +63,7 @@ class superuserPlugin(Plugin):
         api_loop(event.channel.send_message, "Restarting")
         self.log.info("Soft restart initiated.")
         self.register_schedule(
-            self.restart,
-            0,
-            repeat=False,
-            init=False,
+            self.restart, 0, repeat=False, init=False,
         )
 
     def restart(self):
@@ -83,8 +71,9 @@ class superuserPlugin(Plugin):
             if not issubclass(plugin.__class__, self.__class__):
                 self.log.info("Reloading plugin: " + plugin.__class__.__name__)
                 plugin.reload()  # check this
-                self.log.info("Successfully reloaded plugin: "
-                              + plugin.__class__.__name__)
+                self.log.info(
+                    "Successfully reloaded plugin: " + plugin.__class__.__name__
+                )
 
     @Plugin.command("shutdown", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_shutdown_command(self, event):
@@ -94,10 +83,7 @@ class superuserPlugin(Plugin):
         api_loop(event.channel.send_message, "Shutting down.")
         self.log.info("Soft shutdown initiated.")
         self.register_schedule(
-            self.shutdown,
-            0,
-            repeat=False,
-            init=False,
+            self.shutdown, 0, repeat=False, init=False,
         )
 
     def shutdown(self):
@@ -105,14 +91,20 @@ class superuserPlugin(Plugin):
             if not issubclass(plugin.__class__, self.__class__):
                 self.log.info("Unloading plugin: " + plugin.__class__.__name__)
                 self.bot.rmv_plugin(plugin.__class__)
-                self.log.info("Successfully unloaded plugin: "
-                              + plugin.__class__.__name__)
+                self.log.info(
+                    "Successfully unloaded plugin: " + plugin.__class__.__name__
+                )
             else:
                 self.log.info("Caught self")
         bot.sql.flush()
         exit(0)
 
-    @Plugin.command("unload", "<plugin_name:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "unload",
+        "<plugin_name:str>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_plugin_unload(self, event, plugin_name):
         """
         Used to unload a specific plugin.
@@ -120,14 +112,18 @@ class superuserPlugin(Plugin):
         plugin = self.bot.plugins.get(plugin_name)
         if plugin is None:
             return api_loop(
-                event.channel.send_message,
-                f"{plugin_name} does not exist.",
+                event.channel.send_message, f"{plugin_name} does not exist.",
             )
 
         self.bot.rmv_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("reload", "<plugin_name:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "reload",
+        "<plugin_name:str>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_plugin_reload(self, event, plugin_name):
         """
         Used to reload a specific plugin.
@@ -140,8 +136,10 @@ class superuserPlugin(Plugin):
         self.bot.reload_plugin(plugin.__class__)
         api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("load", "<plugin:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
-    def on_plugin_load(self, event, plugin, plugin_location="bot.disco"):
+    @Plugin.command(
+        "load", "<plugin:str>", level=CommandLevels.OWNER, metadata={"help": "owner"}
+    )
+    def on_plugin_load(self, event, plugin, plugin_location="bot.Disco"):
         """
         Used to load a specific plugin. (Not working.)
         """
@@ -162,14 +160,21 @@ class superuserPlugin(Plugin):
             str([plugin.name for plugin in self.bot.plugins.values()]),
         )
 
-    @Plugin.command("except", "<message:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "except",
+        "<message:str...>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_except_command(self, event, message):
         """
         Used to test exception handling.
         """
         raise Exception(message)
 
-    @Plugin.command("sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    @Plugin.command(
+        "sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"}
+    )
     def on_update_sites_command(self, event):
         """
         Manually post the bot's stats to the enabled bot listing sites.
@@ -178,8 +183,7 @@ class superuserPlugin(Plugin):
             self.status.setup_services()
         elif not self.status.services:
             return api_loop(
-                event.channel.send_message,
-                "No status sites are enabled in config.",
+                event.channel.send_message, "No status sites are enabled in Config.",
             )
 
         guild_count = len(self.client.state.guilds)
@@ -191,11 +195,15 @@ class superuserPlugin(Plugin):
             self.status.post(service, payload)
         guilds = [service.__name__ for service in self.status.services]
         api_loop(
-            event.channel.send_message,
-            f"Updated stats on {guilds}.",
+            event.channel.send_message, f"Updated stats on {guilds}.",
         )
 
-    @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    @Plugin.command(
+        "presence",
+        level=CommandLevels.OWNER,
+        group="update",
+        metadata={"help": "owner"},
+    )
     def on_update_presence_command(self, event):
         """
         Manually update the bot's presence.
@@ -206,53 +214,58 @@ class superuserPlugin(Plugin):
         self.status.update_presence(payload)
         api_loop(event.channel.send_message, ":thumbsup:")
 
-    @Plugin.command("eval", level=CommandLevels.OWNER,
-                    metadata={"help": "owner", "perms": Permissions.ATTACH_FILES})
+    @Plugin.command(
+        "eval",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner", "perms": Permissions.ATTACH_FILES},
+    )
     def on_eval_command(self, event):
         """
         Used to evaluate raw python3 code.
         The available classes are:
-        "bot", "client", "config", "event", "plugins",
-        "prefix_cache", "sql" and "state".
+        "bot", "client", "Config", "event", "plugins",
+        "prefix_cache", "Sql" and "state".
         To get an output, you have to assign the data to a variable
         with "out"/"output" being preferred over other variables.
         """
         ctx = {
             "bot": self.bot,
             "client": self.bot.client,
-            "config": bot.config,
+            "Config": bot.config,
             "event": event,
             "plugins": self.bot.plugins,
             "prefix_cache": bot.prefix_cache,
-            "sql": bot.sql,
+            "Sql": bot.sql,
             "state": self.bot.client.state,
         }
         response_block = "```python\n{}\n```"
         code = event.codeblock.replace("py\n", "").replace("python\n", "")
-        code = (f"def func(ctx):\n  try:\n{textwrap.indent(code, '    ')}"
-                "\n  finally:\n    ctx['results'] = locals()")
+        code = (
+            f"def func(ctx):\n  try:\n{textwrap.indent(code, '    ')}"
+            "\n  finally:\n    ctx['results'] = locals()"
+        )
         attachments = None
 
         try:
             exec(code, ctx)
             ctx["func"](ctx)
         except Exception as e:
-            response = response_block.format(
-                (type(e).__name__ + ": " + str(e))
-            )
+            response = response_block.format((type(e).__name__ + ": " + str(e)))
         else:
             del ctx["results"]["ctx"]
             result = ctx["results"].get("output") or ctx["results"].get("out")
-            if (not result and {key for key in ctx["results"]
-                                if not key.startswith("_")}):
+            if not result and {
+                key for key in ctx["results"] if not key.startswith("_")
+            }:
                 result = list(ctx["results"].values())[0]  # assumptions have
             elif not result:  # been made about how python populates local()
                 result = "None"
             response = response_block.format(str(result))
         if len(response) > 2000:
-            attachments = [["the_full_response.txt", str(result)], ]
-            response = ("It's dangerous to go without "
-                        "the full response! Take this.")
+            attachments = [
+                ["the_full_response.txt", str(result)],
+            ]
+            response = "It's dangerous to go without " "the full response! Take this."
         api_loop(event.channel.send_message, response, attachments=attachments)
 
     @Plugin.command(
@@ -260,23 +273,23 @@ class superuserPlugin(Plugin):
         "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"status": Filter_Status.map.BLACKLISTED})
+        context={"status": Filter_Status.map.BLACKLISTED},
+    )
     @Plugin.command(
         "whitelist",
         "<target:snowflake> [target_type:str]",
         level=CommandLevels.OWNER,
         metadata={"help": "owner"},
-        context={"status": Filter_Status.map.WHITELISTED})
+        context={"status": Filter_Status.map.WHITELISTED},
+    )
     def add_to_filter(self, event, target, status, target_type="guild"):
         key, target = filter_types.get(self.state, target, target_type)
-        data, present = bot.sql.softget(
-            bot.sql.cfilter, **{key: target})
+        data, present = bot.sql.softget(bot.sql.cfilter, **{key: target})
 
         if present:
             if data.status.check(status):
                 data.status.sub(status)
-                api_loop(
-                    event.channel.send_message, "Target removed from list.")
+                api_loop(event.channel.send_message, "Target removed from list.")
             else:
                 data.status.add(status)
                 api_loop(event.channel.send_message, "Target added to list.")
@@ -291,22 +304,23 @@ class superuserPlugin(Plugin):
 
         if data.status.value == 0:
             bot.sql.cfilter.query.filter_by(
-                target=data.filter.target,
-                target_type=data.filter.target_type).delete()
+                target=data.filter.target, target_type=data.filter.target_type
+            ).delete()
 
     @Plugin.command(
         "query",
         "[target:snowflake] [target_type:str]",
-        group="filter", level=CommandLevels.OWNER,
-        metadata={"help": "owner"})
+        group="filter",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_filter_query_command(self, event, target=None, target_type="guild"):
         """
         Used to retrieve the status of a guild or DMs in the filter.
         """
         if target:
             key, target = filter_types.get(self.state, target, target_type)
-            data = bot.sql.softget(
-                bot.sql.cfilter, **{key: target})[0].status.to_dict()
+            data = bot.sql.softget(bot.sql.cfilter, **{key: target})[0].status.to_dict()
         else:
             data = {}
             status = bot.sql.cfilter._wrap(bot.sql.cfilter)
@@ -315,28 +329,35 @@ class superuserPlugin(Plugin):
 
             data["Total"] = bot.sql.cfilter.query.count()
 
-        return api_loop(event.channel.send_message,
-                        f"Current status:\n```json\n{beautify_json(data)}```")
+        return api_loop(
+            event.channel.send_message,
+            f"Current status:\n```json\n{beautify_json(data)}```",
+        )
 
-    @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "echo",
+        "<payload:str...>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_echo_command(self, event, payload):
         """
         Get's the bot to repeat a message.
         """
         api_loop(
-            event.channel.send_message,
-            payload,
+            event.channel.send_message, payload,
         )
 
-    @Plugin.command("permission check",
-                    metadata={"help": "miscellaneous", "perms": bot.config.default_permissions})
+    @Plugin.command(
+        "permission check",
+        metadata={"help": "miscellaneous", "perms": bot.config.default_permissions},
+    )
     def on_permission_check(self, event):
         """
         Check if this bot has the right permissions in this channel.
         """
         api_loop(
-            event.channel.send_message,
-            "Looks good to me :thumbsup:",
+            event.channel.send_message, "Looks good to me :thumbsup:",
         )
 
     @Plugin.command("ping", metadata={"help": "miscellaneous"})
@@ -352,10 +373,7 @@ class superuserPlugin(Plugin):
             self.log.warning(f"Websocket exception on ping: {e}")
             websocket_ping = None
         message_ping = time()
-        bot_message = api_loop(
-            event.channel.send_message,
-            "***RADIO STATIC***",
-        )
+        bot_message = api_loop(event.channel.send_message, "***RADIO STATIC***",)
         message_ping = round((time() - message_ping) * 1000)
         if websocket_ping:
             websocket_ping = self.client.gw.ws.last_pong_tm - websocket_ping
@@ -364,12 +382,14 @@ class superuserPlugin(Plugin):
         if websocket_ping and 0 < websocket_ping < 1000:
             message += f"\nGateway: {websocket_ping} ms "
         api_loop(
-            bot_message.edit,
-            message,
+            bot_message.edit, message,
         )
 
-    @Plugin.command("register error webhook", level=CommandLevels.OWNER,
-                    metadata={"help": "owner", "perms": Permissions.MANAGE_WEBHOOKS})
+    @Plugin.command(
+        "register error webhook",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner", "perms": Permissions.MANAGE_WEBHOOKS},
+    )
     def on_register_error_webhook_command(self, event):
         """
         Used to register a webhook in the current channel for error messages.
@@ -385,37 +405,34 @@ class superuserPlugin(Plugin):
         #  create webhook
         try:
             webhook = api_loop(
-                event.channel.create_webhook,
-                self.state.me.username,
-                avatar,
+                event.channel.create_webhook, self.state.me.username, avatar,
             )
         except (APIException, CommandError) as e:
             api_loop(
-                event.channel.send_message,
-                f"Unable to make webhook: ``{e.msg}``",
+                event.channel.send_message, f"Unable to make webhook: ``{e.msg}``",
             )
         else:
-            #  save webhook to config
+            #  save webhook to Config
             config = bot.get_config()
-            if "exception_webhooks" not in config:
-                config["exception_webhooks"] = {}
-            config["exception_webhooks"][webhook.id] = webhook.token
+            if "webhooks" not in config:
+                config["webhooks"] = {}
+            config["webhooks"][webhook.id] = webhook.token
             bot.config.exception_webhooks[webhook.id] = webhook.token
             bot.overwrite_config(config)
             api_loop(
-                event.channel.send_message,
-                f":thumbsup:",
+                event.channel.send_message, f":thumbsup:",
             )
 
-    @Plugin.command("register error dm", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "register error dm", level=CommandLevels.OWNER, metadata={"help": "owner"}
+    )
     def on_register_error_dm_command(self, event):
         """
         Used to register the current user's DMs for error messages.
         """
         if event.author.id in bot.config.exception_dms:
             api_loop(
-                event.channel.send_message,
-                f"You're already registered :ok_hand:",
+                event.channel.send_message, f"You're already registered :ok_hand:",
             )
         else:
             config = bot.get_config()
@@ -425,12 +442,15 @@ class superuserPlugin(Plugin):
             bot.overwrite_config(config)
             bot.config.exception_dms.append(event.author.id)
             api_loop(
-                event.channel.send_message,
-                f":thumbsup:",
+                event.channel.send_message, f":thumbsup:",
             )
 
-    @Plugin.command("steal", "<target:snowflake> [args:str...]",
-                    level=CommandLevels.OWNER, metadata={"help": "owner"})
+    @Plugin.command(
+        "steal",
+        "<target:snowflake> [args:str...]",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+    )
     def on_steal_command(self, event, target, args=""):
         """
         Used to steal emojis from messages content or reactions.
@@ -519,8 +539,10 @@ class superuserPlugin(Plugin):
         if exceptions:
             return api_loop(
                 event.channel.send_message,
-                (f"{len(exceptions)} out of {count} "
-                 f"emoji(s) failed: ```python\n{exceptions}```")
+                (
+                    f"{len(exceptions)} out of {count} "
+                    f"emoji(s) failed: ```python\n{exceptions}```"
+                ),
             )
 
         api_loop(event.channel.send_message, f":thumbsup: ({count})")

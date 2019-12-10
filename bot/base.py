@@ -1,12 +1,15 @@
 from platform import python_version
-import logging
 import operator
 import os
 
 
+from disco.api.http import APIException
+from disco.types.base import UNSET
 from disco.types.message import MessageEmbed
+from disco.util.logging import LoggingClass
 from requests import __version__ as __Rversion__
 from pydantic import BaseModel
+
 try:
     import yaml
 except ImportError:
@@ -18,37 +21,29 @@ except ImportError:
 
 
 from bot import __GIT__
-from bot.util.react import reactors_handler
-from bot.util.sql import sql_instance
-
-log = logging.getLogger(__name__)
+from bot.util.react import ReactorsHandler
+from bot.util.sql import SqlInstance
 
 
 def optional(**kwargs):
     return {index: data for index, data in kwargs.items() if data is not None}
 
 
-class unset:
-    def __nonzero__(self):
-        return False
-
-    def __bool__(self):
-        return False
-
-
-class custom_base(BaseModel):
+class CustomBase(BaseModel, LoggingClass):
     def get(self, context, *args):
         for arg in args:
-            local = getattr(self, arg, unset)
-            if local is not unset:
+            local = getattr(self, arg, UNSET)
+            if local is not UNSET:
                 setattr(context, arg, local)
             else:
-                log.warning(f"Invalid or unset argument `{arg}` "
-                            f"in get `{self.__name__}`.")
+                self.log.warning(
+                    "Invalid or unset argument `%` " f"in get `%`.",
+                    arg,
+                    self.__class__.__name__,
+                )
 
     def to_dict(self):
-        return {key: value for key, value in self.dict().items()
-                if value is not None}
+        return {key: value for key, value in self.dict().items() if value is not None}
 
     def __repr__(self):
         return f"<PydanticModel {self.__class__.__name__}>"
@@ -57,14 +52,15 @@ class custom_base(BaseModel):
         return f"<PydanticModel {self.__class__.__name__}>"
 
 
-class api(custom_base):
-    user_agent: str = (f"Discord.FM @{__GIT__} "
-                       f"Python {python_version()} "
-                       f"requests/{__Rversion__}")
+class Api(CustomBase):
+    user_agent: str = (
+        f"Discord.FM @{__GIT__} "
+        f"Python {python_version()} "
+        f"requests/{__Rversion__}"
+    )
     last_key: str = None
     google_key: str = None
-    google_cse_engine_ID: str = ("0129851312360258"
-                                 "62960:rhlblfpn4hc")
+    google_cse_engine_ID: str = ("012985131236025862960:rhlblfpn4hc")
     spotify_ID: str = None
     spotify_secret: str = None
     discordbots_org: str = None
@@ -76,7 +72,7 @@ class api(custom_base):
     default_period: int = 0
 
 
-class sql(custom_base):
+class Sql(CustomBase):
     drivername: str = "mysql+pymysql"
     database: str = None
     host: str = None
@@ -88,14 +84,14 @@ class sql(custom_base):
     local_path: str = "data/data.db"
 
 
-class embed_values(custom_base):
-    __name__ = "embed_values"
+class EmbedValues(CustomBase):
+    __name__ = "EmbedValues"
     url: str = None
     color: str = None
     type: str = None
 
 
-class bot_data(custom_base):
+class BotData(CustomBase):
     levels: dict = {}
     commands_enabled: bool = False
     commands_require_mention: bool = False
@@ -120,9 +116,9 @@ class bot_data(custom_base):
     ]
 
 
-class disco(custom_base):
+class Disco(CustomBase):
     token: str = None
-    bot: bot_data = bot_data()
+    bot: BotData = BotData()
     config: str = None
     shard_id: int = None
     shard_count: int = None
@@ -138,7 +134,7 @@ class disco(custom_base):
     shard_auto: bool = False
 
 
-class config(custom_base):
+class Config(CustomBase):
     exception_dms: list = []
     exception_webhooks: dict = {}
     presence: str = "{count} guilds | {prefix}help"
@@ -147,13 +143,36 @@ class config(custom_base):
     monitor_usage: int = None
     no_exception_response: bool = False
     about_links: dict = {}
-    api: api = api()
-    disco: disco = disco()
-    sql: sql = sql()
-    embed_values: embed_values = embed_values()
+    api: Api = Api()
+    disco: Disco = Disco()
+    sql: Sql = Sql()
+    embed_values: EmbedValues = EmbedValues()
+
+    def send_exception_webhooks(self, client, **kwargs):
+        for webhook_id, token in self.exception_webhooks.copy().items():
+            try:
+                client.api.webhooks_token_execute(webhook_id, token, data=kwargs)
+            except APIException as e:
+                if e.code in (10015, 50001):
+                    self.log.warning("Unable to send exception webhook - %: %", webhook_id, e)
+                    del self.exception_webhooks[webhook_id]
+                else:
+                    raise e
+
+    def send_exception_dms(self, client, *args, **kwargs):
+        for target in self.exception_dms.copy():
+            target_dm = client.api.users_me_dms_create(target)
+            try:
+                target_dm.send_message(*args, **kwargs)
+            except APIException as e:  # Missing permissions, Missing access,
+                if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
+                    self.log.warning("Unable to send exception DM - %: %", target, e)
+                    self.exception_dms.remove(target)
+                else:
+                    raise e
 
 
-class bot_frame:
+class BotFrame:
     __slots__ = (
         "config",
         "config_meta",
@@ -170,12 +189,13 @@ class bot_frame:
         ".yaml": yaml.dump if yaml else None,
         ".json": json.dump,
     }
-    cfg_paths = ("config.json", "config.yaml")
+    cfg_paths = ("Config.json", "Config.yaml")
+    help_embeds = None
 
     def __init__(self, config_path=None, raw_config=None):
-        self.config = config(**(raw_config or self.get_config(config_path)))
-        self.sql = sql_instance(**self.config.sql.to_dict())
-        self.reactor = reactors_handler()
+        self.config = Config(**(raw_config or self.get_config(config_path)))
+        self.sql = SqlInstance(**self.config.sql.to_dict())
+        self.reactor = ReactorsHandler()
         self.prefix_cache = {}
 
     def generic_embed(self, **kwargs):
@@ -192,24 +212,29 @@ class bot_frame:
 
     def get_config(self, config_path=None):
         meta_path = getattr(self, "config_meta", None)
-        if (not (config_path or meta_path) or
-                not os.path.isfile(config_path or meta_path)):
-            locations = [path for path in self.cfg_paths
-                         if os.path.isfile(path)]
+        if not (config_path or meta_path) or not os.path.isfile(
+            config_path or meta_path
+        ):
+            locations = [path for path in self.cfg_paths if os.path.isfile(path)]
             if not locations:
                 raise Exception("Config location not found.")
 
             config_path = locations[0]
         else:
             config_path = config_path or meta_path
-        handlers = [handler for type, handler in self.cfg_read.items()
-                    if config_path.endswith(type)]
+        handlers = [
+            handler
+            for file_type, handler in self.cfg_read.items()
+            if config_path.endswith(file_type)
+        ]
         if not handlers:
-            raise Exception("Invalid config type.")
+            raise Exception("Invalid Config type.")
 
         if not handlers[0]:
-            raise Exception("Handler for file type "
-                            f"'{config_path.split('.')[-1]}' is not present.")
+            raise Exception(
+                "Handler for file type "
+                f"'{config_path.split('.')[-1]}' is not present."
+            )
         with open(config_path, "r") as file:
             data = handlers[0](file)
         self.config_meta = config_path
@@ -219,11 +244,16 @@ class bot_frame:
         config_path = location_overwrite or self.config_meta
         if not os.path.isfile(config_path):
             raise Exception("Config location not found.")
-        handlers = [handler for type, handler in self.cfg_write.items()
-                    if config_path.endswith(type)]
+        handlers = [
+            handler
+            for file_type, handler in self.cfg_write.items()
+            if config_path.endswith(file_type)
+        ]
         if not handlers or not handlers[0]:
-            raise Exception("Invalid config type of handler for file type "
-                            f"'{config_path.split('.')[-1]}' is not present.")
+            raise Exception(
+                "Invalid Config type of handler for file type "
+                f"'{config_path.split('.')[-1]}' is not present."
+            )
 
         with open(config_path, "w") as file:
             handlers[0](data, file, indent=4)
@@ -249,23 +279,21 @@ class bot_frame:
             data = self.generate_command_info(command, spawn_embed=True)
             if data:
                 self.help_embeds[data[3]].add_field(
-                    name=data[0],
-                    value=data[1],
-                    inline=False,
+                    name=data[0], value=data[1], inline=False,
                 )
                 embeds_to_sort.append(data[3])
         for embed in embeds_to_sort:
             self.help_embeds[embed].fields = sorted(
-                self.help_embeds[embed].fields,
-                key=operator.attrgetter("name"),
+                self.help_embeds[embed].fields, key=operator.attrgetter("name"),
             )
-        self.help_embeds = {key: self.help_embeds[key] for
-                            key in sorted(self.help_embeds.keys())}
+        self.help_embeds = {
+            key: self.help_embeds[key] for key in sorted(self.help_embeds.keys())
+        }
 
     def generate_command_info(self, command, spawn_embed=False, all_triggers=False):
         embed_name = command.metadata.get("help", None)
         if not embed_name:
-            return
+            return None
 
         doc_string = command.get_docstring().strip("\n").strip("    ")
         if not doc_string:
@@ -290,18 +318,22 @@ class bot_frame:
                 command_name += f"**{trigger}** | "
                 command_name = triggers_formatted[:-3] + "):"
 
-        return (f"{self.prefix}{command_name}{args}",
-                doc_string.split("\n", 1)[0],
-                doc_string,
-                embed_name)
+        return (
+            f"{self.prefix}{command_name}{args}",
+            doc_string.split("\n", 1)[0],
+            doc_string,
+            embed_name,
+        )
 
     def generate_help_embed(self, embed_name):
         self.help_embeds[embed_name] = self.generic_embed(
             title=f"{embed_name.capitalize()} module commands.",
-            description=("Argument key: <required> [optional], "
-                         "with '...'specifying a multi-word "
-                         "argument and optional usernames "
-                         "defaulting to a user's set username."),
+            description=(
+                "Argument key: <required> [optional], "
+                "with '...'specifying a multi-word "
+                "argument and optional usernames "
+                "defaulting to a user's set username."
+            ),
         )
 
     def unload_help_embeds(self, bot):
@@ -309,13 +341,15 @@ class bot_frame:
             data = self.generate_command_info(command, spawn_embed=True)
             if data and data[3] in self.help_embeds:
                 embed_name = data[3]
-                matching_fields = [field for field in
-                                   self.help_embeds[embed_name].fields
-                                   if field.name == data[0]]
+                matching_fields = [
+                    field
+                    for field in self.help_embeds[embed_name].fields
+                    if field.name == data[0]
+                ]
                 for field in matching_fields:
                     self.help_embeds[embed_name].fields.remove(field)
                 if not self.help_embeds[embed_name].fields:
                     del self.help_embeds[embed_name]
 
 
-bot = bot_frame()
+bot = BotFrame()
