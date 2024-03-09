@@ -1,68 +1,28 @@
 from time import sleep
+import copy
 import logging
 import os
 
 
 from disco.bot.command import CommandError
 from sqlalchemy import (
-    create_engine, PrimaryKeyConstraint,
-    Column, exc, ForeignKey)
+    create_engine as spawn_engine, PrimaryKeyConstraint,
+    Column, exc, ForeignKey,
+)
 from sqlalchemy.dialects.mysql import (
     TEXT, BIGINT, INTEGER, VARCHAR,
 )
+from sqlalchemy.engine.url import URL as SQLurl
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
-    scoped_session, sessionmaker, relationship)
-# from pymysql import err
+    scoped_session, sessionmaker, relationship,
+)
 
-
-from bot.base import bot
 
 log = logging.getLogger(__name__)
 
-if bot.local.sql.server:
-    sql = bot.local.sql
-    server_payload = (f"mysql+pymysql://{sql.user}:"
-                      f"{sql.password}@{sql.server}/{sql.database}")
-    log.info(f"Connecting to SQL server @{sql.server}.")
-    args = sql.args
-else:
-    if not os.path.exists("logs"):
-        os.makedirs("data")
-    log.info("Defaulting to local SQL database.")
-    args = {}
-    server_payload = "sqlite+pysqlite:///data/database.db"
-engine = create_engine(
-    server_payload,
-    encoding="utf8",
-    pool_recycle=3600,
-    pool_pre_ping=True,
-    echo=False,
-    connect_args=args,
-)
-try:
-    engine.execute("SELECT 1")
-except exc.OperationalError as e:
-    log.warning(f"Failed to access server, defaulting to local instance: {e}")
-    if not os.path.exists("data"):
-        os.makedirs("data")
-    engine = create_engine(
-        "sqlite+pysqlite:///data/database.db",
-        encoding="utf8",
-        pool_recycle=3600,
-        pool_pre_ping=True,
-        echo=False,
-    )
-db_session = scoped_session(
-    sessionmaker(
-        autocommit=True,
-        autoflush=True,
-        bind=engine,
-    ),
-)
 
 Base = declarative_base()
-Base.query = db_session.query_property()
 
 
 class SQLexception(CommandError):
@@ -82,24 +42,12 @@ class guilds(Base):
     prefix = Column(
         "prefix",
         TEXT,
-        nullable=False,
-        default=(bot.local.disco.bot.commands_prefix or "fm."),
-    )
-    last_seen = Column(
-        "last_seen",
-        TEXT,
-        nullable=True,
-    )
-    name = Column(
-        "name",
-        TEXT,
         nullable=True,
     )
     lyrics_limit = Column(
         "lyrics_limit",
         INTEGER,
-        nullable=False,
-        default=3,
+        nullable=True,
     )
     alias_list = relationship(
         "aliases",
@@ -110,19 +58,14 @@ class guilds(Base):
     def __init__(
             self,
             guild_id: int,
-            prefix: str = (bot.local.disco.bot.commands_prefix or "fm."),
-            last_seen: str = None,
-            name: str = None,
-            lyrics_limit: int = 3):
+            prefix: str = None,
+            lyrics_limit: int = None):
         self.guild_id = guild_id
         self.prefix = prefix
-        self.last_seen = last_seen
-        self.name = name
         self.lyrics_limit = lyrics_limit
 
     def __repr__(self):
-        return (f"users({self.guild_id}, {self.prefix}, "
-                f"{self.last_seen}, {self.name})")
+        return (f"guilds {self.guild_id}")
 
 
 periods = {
@@ -151,8 +94,7 @@ class users(Base):
     period = Column(
         "period",
         INTEGER,
-        nullable=False,
-        default=0,
+        nullable=True,
     )
     friends = relationship(
         "friends",
@@ -169,13 +111,13 @@ class users(Base):
             self,
             user_id: int,
             last_username: str = None,
-            period: int = 0):
+            period: int = None):
         self.user_id = user_id
         self.last_username = last_username
         self.period = period
 
     def __repr__(self):
-        return f"users({self.user_id}, {self.last_username}, {self.period})"
+        return f"users({self.user_id}: {self.last_username})"
 
 
 class friends(Base):
@@ -239,33 +181,183 @@ class aliases(Base):
         self.alias = alias
 
     def __repr__(self):
-        return f"aliases({self.guild_id}, {self.user_id}, {self.alias})"
+        return f"aliases({self.guild_id}: {self.alias})"
 
 
-def handle_sql(f, *args, **kwargs):
-    fail = 0
-    previous_exception = None
-    while True:
-        if fail >= 10:
-            raise SQLexception(
-                "Failed at accessing data, please try again later.",
-                previous_exception,
+class sql_instance:
+    __tables__ = (
+        guilds,
+        users,
+        friends,
+        aliases,
+    )
+    tables = {}
+    session = None
+    engine = None
+    _driver_ssl_checks = {  # starts from self.session.connection()
+        "pymysql": ("connection", "connection", "ssl"),
+        "psycopg2": ("connection", "connection", "info", "ssl_in_use"),
+    }
+
+    def __init__(
+            self,
+            drivername=None,
+            host=None,
+            port=None,
+            username=None,
+            password=None,
+            database=None,
+            query=None,
+            args=None):
+        self.session, self.engine = self.create_engine_session_safe(
+            drivername,
+            host,
+            port,
+            username,
+            password,
+            database,
+            query,
+            args,
+        )
+        self.check_tables()
+        self.spwan_binded_tables()
+
+    @staticmethod
+    def __call__(function, *args, **kwargs):
+        tries = 0
+        root_exception = None
+        while True:
+            if tries >= 5:
+                raise SQLexception(
+                    "Failed to access data.",
+                    root_exception,
+                )
+            try:
+                return function(*args, **kwargs)
+            except exc.OperationalError as e:
+                sleep(2)
+                tries += 1
+                root_exception = e
+
+    def spwan_binded_tables(self):
+        for table in self.__tables__:
+            table_copy = copy.deepcopy(table)
+            table_copy.query = self.session.query_property()
+            setattr(self, table.__tablename__, table_copy)
+
+    @staticmethod
+    def check_engine_table(table, engine):
+        if not engine.dialect.has_table(engine, table.__tablename__):
+            log.info(f"Creating table {table.__tablename__}")
+            table.__table__.create(engine)
+
+    def check_tables(self):
+        for table in self.__tables__:
+            self.check_engine_table(table, self.engine)
+
+    def add(self, object):
+        self(self.session.add, object)
+        self.flush()
+
+    def delete(self, object):
+        self(self.session.delete, object)
+        self.flush()
+
+    def flush(self):
+        self(self.session.flush)
+
+    def commit(self):
+        self(self.session.commit)
+
+    def ssl_check(self):
+        driver = self.session.connection().engine.driver
+        check_map = self._driver_ssl_checks.get(driver)
+        if not check_map:
+            log.warning(f"Unknown engine {driver}, unable to get sql")
+            return
+
+        position = self.session.connection()
+        for attr in check_map:
+            if not position:
+                break
+            position = getattr(position, attr, None)
+        log.info(f"SQL SSL status: {position or 'unknown'}")
+        return position
+
+    @staticmethod
+    def create_engine(
+            drivername=None,
+            host=None,
+            port=None,
+            username=None,
+            password=None,
+            database=None,
+            query=None,
+            args=None):
+
+        # Pre_establish settings
+        if host:
+            settings = SQLurl(
+                drivername,
+                username,
+                password,
+                host,
+                port,
+                database,
+                query,
             )
+            args = (args or {})
+        else:
+            if not os.path.exists("data"):
+                os.makedirs("data")
+            args = {}
+            settings = "sqlite+pysqlite:///data/data.db"
+
+        # Connect to server
+        return spawn_engine(
+            settings,
+            encoding="utf8",
+            pool_recycle=3600,
+            pool_pre_ping=True,
+            echo=False,
+            connect_args=args,
+        )
+
+    def create_engine_session_safe(
+            self,
+            drivername=None,
+            host=None,
+            port=None,
+            username=None,
+            password=None,
+            database=None,
+            query=None,
+            args=None):
+
+        engine = self.create_engine(
+            drivername,
+            host,
+            port,
+            username,
+            password,
+            database,
+            query,
+            args,
+        )
+
+        # Verify connection.
         try:
-            return f(*args, **kwargs)
+            engine.execute("SELECT 1")
         except exc.OperationalError as e:
-            log.warning(f"SQL call failed: {e}")
-            sleep(2)
-            fail += 1
-            previous_exception = e
+            log.warning("Unable to connect to database, "
+                        "defaulting to sqlite: " + str(e))
+            engine = self.create_engine()
 
-
-for table in (guilds, users, friends, aliases):
-    if not engine.dialect.has_table(engine, table.__tablename__):
-        log.info(f"Didn't find {table.__tablename__} "
-                 "table, creating new instance.")
-        table.__table__.create(engine)
-
-if __name__ == "__main__":
-    conn = engine.connect()
-    print(dir(conn))
+        session = scoped_session(
+            sessionmaker(
+                autocommit=True,
+                autoflush=True,
+                bind=engine,
+            ),
+        )
+        return session, engine

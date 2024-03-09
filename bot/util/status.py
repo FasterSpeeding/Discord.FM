@@ -1,4 +1,3 @@
-from datetime import datetime
 import logging
 
 
@@ -7,10 +6,6 @@ from requests import post, RequestException
 
 
 from bot.base import optional
-from bot.util.sql import (
-    db_session, guilds, handle_sql,
-    SQLexception,
-)
 
 log = logging.getLogger(__name__)
 
@@ -47,7 +42,7 @@ class discordbotsorg(api_basis):
         return optional(**{
             "server_count": guildCount.Count,
             "shard_count": guildCount.shardCount,
-            "shard_id": guildCount.shardId
+            "shard_id": guildCount.shardId,
         })
 
 
@@ -59,15 +54,35 @@ class discordbotsgg(api_basis):
         return optional(**{
             "server_count": guildCount.Count,
             "shards": guildCount.shardCount,
-            "shard_id": guildCount.shardId
+            "shard_id": guildCount.shardId,
+        })
+
+
+class discordboats(api_basis):
+    __name__ = "discord.boats"
+    url = "https://discord.boats/api/v2/bot/{id}"
+
+    def __call__(self, guildCount):
+        return optional(**{
+            "server_count": guildCount.Count,
         })
 
 
 class guildCount:
+    __slots__ = (
+        "Count",
+        "shardCount",
+        "shardId",
+    )
+
     def __init__(self, Count, shardCount=None, shardId=None):
         setattr(self, "Count", Count)
         setattr(self, "shardCount", shardCount)
         setattr(self, "shardId", shardId)
+
+    def to_dict(self):
+        return {key.lower(): getattr(self, key, None)
+                for key in self.__slots__}
 
 
 class status_handler(object):
@@ -78,14 +93,18 @@ class status_handler(object):
             bot,
             db_token=None,
             gg_token=None,
+            boats_token=None,
             user_agent="Discord.FM",
-            bot_id=None):
+            bot_id=None,
+            presence="{count} guilds."):
         self.bot = bot
         self.bot_id = bot_id
         self.user_agent = user_agent
-        self.__tokens = {
+        self.presence = presence
+        self._tokens = {
             discordbotsorg: db_token,
             discordbotsgg: gg_token,
+            discordboats: boats_token,
         }
 
     @staticmethod
@@ -107,70 +126,41 @@ class status_handler(object):
                 log.warning("Failed to post guild count to "
                             f"{service.__name__} ({r.status_code}): {r.text}")
 
-    def update_presence(self, guilds_len):
-        self.bot.client.update_presence(
-            Status.online,
-            Game(
-                type=GameType.listening,
-                name=f"{guilds_len} guilds.",
+    def update_presence(self, guilds_payload):
+        if self.presence:
+            presence = self.presence.format(**guilds_payload.to_dict())
+            self.bot.client.update_presence(
+                Status.online,
+                Game(
+                    type=GameType.listening,
+                    name=presence,
+                )
             )
-        )
 
     def setup_services(self):
         """
         this exists to counter the fact that state.me isn't present at start.
         """
         self.bot_id = (self.bot_id or self.bot.state.me.id)
-        for obj, token in self.__tokens.items():
+        for obj, token in self._tokens.copy().items():
             if token is not None:
                 self.services.append(obj(
-                        url={"id": self.bot_id},
-                        auth=token,
-                        headers={"User-Agent": self.user_agent},
+                    url={"id": self.bot_id},
+                    auth=token,
+                    headers={"User-Agent": self.user_agent},
                 ))
-
-    def sql_guilds_refresh(self):
-        for guild in self.bot.client.state.guilds.copy().keys():
-            try:
-                guild_object = self.bot.client.state.guilds.get(guild, None)
-                if guild_object is not None:
-                    sql_guild = handle_sql(guilds.query.get, guild)
-                    if sql_guild is None:
-                        sql_guild = guilds(
-                            guild_id=guild,
-                            last_seen=datetime.now().isoformat(),
-                            name=guild_object.name,
-                        )
-                        handle_sql(db_session.add, sql_guild)
-                    else:
-                        try:
-                            handle_sql(
-                                guilds.query.filter_by(
-                                    guild_id=guild,
-                                ).update,
-                                {
-                                    "last_seen": datetime.now().isoformat(),
-                                    "name": guild_object.name
-                                },
-                            )
-                        except SQLexception as e:
-                            log.warning("Failed to post server to SQL server "
-                                        f"in status: {e.previous_exception}")
-                        else:
-                            handle_sql(db_session.flush)
-            except SQLexception as e:
-                log.warning(f"Failed to call SQL server: {e.msg}")
-                log.warning(str(e.original_exception))
-                break
+            del self._tokens[obj]
 
     def update_stats(self):
         """
         This function updates the server amount status per interval
         and ensures the integrity of the guild data.
         """
-        guilds_len = len(self.bot.client.state.guilds)
-        guilds_payload = guildCount(guilds_len)
-        self.update_presence(guilds_len)
+        log.debug("Updating stats.")
+        guild_count = len(self.bot.client.state.guilds)
+        shard_id = self.bot.bot.client.config.shard_id
+        shard_count = self.bot.bot.client.config.shard_count
+        guilds_payload = guildCount(guild_count, shard_count, shard_id)
+        self.update_presence(guilds_payload)
         for service in self.services:
             self.post(service, guilds_payload)
-        self.sql_guilds_refresh()

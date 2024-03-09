@@ -5,6 +5,7 @@ from urllib.parse import quote_plus
 
 from disco.bot import Plugin
 from disco.bot.command import CommandError
+from disco.types.permissions import Permissions
 from disco.util.logging import logging
 from disco.util.sanitize import S as sanitize
 from lyrics_extractor import Song_Lyrics
@@ -12,9 +13,8 @@ from requests import get, post
 
 
 from bot.base import bot
-from bot.util.misc import api_loop
+from bot.util.misc import api_loop, exception_webhooks, redact
 from bot.util.react import generic_react
-from bot.util.sql import db_session, guilds, handle_sql
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 class ApiPlugin(Plugin):
     def load(self, ctx):
         super(ApiPlugin, self).load(ctx)
-        bot.local.api.get(
+        bot.config.api.get(
             self,
             "user_agent",
             "google_key",
@@ -46,16 +46,20 @@ class ApiPlugin(Plugin):
         Return lyrics for a song.
         """
         self.pre_check("google_key", "google_cse_engine_ID")
-        guild = handle_sql(guilds.query.get, event.guild.id)
-        if not guild:
-            guild = guilds(guild_id=event.guild.id)
-            handle_sql(db_session.add, guild)
-            handle_sql(db_session.flush)
-        elif guild.lyrics_limit <= 0:
-            return api_loop(
-                event.channel.send_message,
-                "This command has been disabled in this guild.",
-            )
+        if event.channel.is_dm:
+            limit = 6
+        else:
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if not guild or guild.lyrics_limit is None:
+                limit = bot.config.api.default_lyrics_limit
+            else:
+                limit = guild.lyrics_limit
+            if limit <= 0:
+                return api_loop(
+                    event.channel.send_message,
+                    "This command has been disabled in this guild.",
+                )
+
         first_message = api_loop(
             event.channel.send_message,
             "Searching for lyrics...",
@@ -64,24 +68,40 @@ class ApiPlugin(Plugin):
 
         if not lyrics:
             content = sanitize(content, escape_codeblocks=True)
-            return api_loop(
-                first_message.edit,
-                f"No Lyrics found for ``{content}``",
-            )
-        elif len(lyrics) > 46300:
-            return first_message.edit("I doubt that's a song.")
+            try:
+                return api_loop(
+                    first_message.edit,
+                    f"No Lyrics found for ``{content}``",
+                )
+            except APIException as e:
+                if e.code in (10003, 10004, 10008):
+                    return
+                raise e
+
+        if len(lyrics) > 46300:
+            try:
+                return first_message.edit("I doubt that's a song.")
+            except APIException as e:
+                if e.code in (10003, 10005, 10008):
+                    return
+                raise e
         footer = {
             "text": f"Requested by {event.author}",
-            "img": event.author.get_avatar_url(size=32),
+            "icon_url": event.author.get_avatar_url(size=32),
         }
-        lyrics_embed = bot.generic_embed_values(
-            title={"title": title},
+        lyrics_embed = bot.generic_embed(
+            title=title,
             footer=footer,
             timestamp=event.msg.timestamp.isoformat(),
         )
-        first_message.delete()
+        try:
+            first_message.delete()
+        except APIException as e:
+            if e.code in (10003, 10004, 10008):
+                return
+            raise e
         responses = 0
-        limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+        limit = limit if limit is not None else 3
         while lyrics and responses < limit:
             lyrics_embed.description = lyrics[:2048]
             lyrics = lyrics[2048:]
@@ -108,27 +128,22 @@ class ApiPlugin(Plugin):
             )
         if limit is not None:
             member = event.guild.get_member(event.author)
-            if member.permissions.can(32):  # manage server
+            if member.permissions.can(Permissions.MANAGE_GUILD):
                 if not 0 <= limit <= 8:
                     return api_loop(
                         event.channel.send_message,
                         "The limit can only be between 0 and 8.",
                     )
-                guild = handle_sql(guilds.query.get, event.guild.id)
+                guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
                 if not guild:
-                    guild = guilds(
+                    guild = bot.sql.guilds(
                         guild_id=event.guild_id,
                         lyrics_limit=limit,
                     )
-                    handle_sql(db_session.add, guild)
-                    handle_sql(db_session.flush)
+                    bot.sql.add(guild)
                 else:
-                    handle_sql(
-                        guilds.query.filter_by(
-                            guild_id=event.guild.id,
-                        ).update,
-                        {"lyrics_limit": limit},
-                    )
+                    guild.lyrics_limit = limit
+                    bot.sql.flush()
                 api_loop(
                     event.channel.send_message,
                     f"Changed lyric response embed limit to {limit}.",
@@ -139,8 +154,11 @@ class ApiPlugin(Plugin):
                     "This command is limited to server admins.",
                 )
         else:
-            guild = handle_sql(guilds.query.get, event.guild.id)
-            limit = guild.lyrics_limit if guild.lyrics_limit is not None else 3
+            guild = bot.sql(bot.sql.guilds.query.get, event.guild.id)
+            if guild and guild.lyrics_limit is not None:
+                limit = guild.lyrics_limit
+            else:
+                limit = bot.config.api.default_lyrics_limit
             api_loop(
                     event.channel.send_message,
                     f"The current limit is set to {limit}",
@@ -187,7 +205,6 @@ class ApiPlugin(Plugin):
                     not event.channel.is_dm):
                 bot.reactor.init_event(
                     message=reply,
-                    timing=30,
                     data=r.json()[sp_type+"s"]["items"],
                     index=0,
                     amount=1,
@@ -204,6 +221,13 @@ class ApiPlugin(Plugin):
                 )
         else:
             log.warning(r.text)
+            if bot.config.exception_webhooks:
+                exception_webhooks(
+                    self.client,
+                    bot.config.exception_webhooks,
+                    content=(f"Spotify threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",
@@ -223,7 +247,14 @@ class ApiPlugin(Plugin):
             },
         )
         if r.status_code != 200:
-            log.warning(r.text)
+            log.warning(redact(str(r.text)))
+            if bot.config.exception_webhooks:
+                exception_webhooks(
+                    self.client,
+                    bot.config.exception_webhooks,
+                    content=(f"Spotify OAUTH threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
+                )
             raise CommandError(
                 f"Error code {r.status_code} returned by oauth flow"
             )
@@ -288,7 +319,6 @@ class ApiPlugin(Plugin):
                         not event.channel.is_dm):
                     bot.reactor.init_event(
                         message=reply,
-                        timing=30,
                         data=r.json()["items"],
                         index=0, amount=1,
                         index_type=yt_types_indexs[yt_type]["index"],
@@ -308,6 +338,13 @@ class ApiPlugin(Plugin):
                 api_loop(event.channel.send_message, "Video not found.")
         else:
             log.warning(r.text)
+            if bot.config.exception_webhooks:
+                exception_webhooks(
+                    self.client,
+                    bot.config.exception_webhooks,
+                    content=(f"Youtube threw error {r.status_code}: "
+                             f"```{redact(r.text)[:1950]}```"),
+                )
             api_loop(
                 event.channel.send_message,
                 f"Error code {r.status_code} returned.",

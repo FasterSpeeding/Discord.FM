@@ -1,5 +1,7 @@
-from time import time
+from datetime import datetime
 import logging
+import humanize
+import pytz
 import re
 
 
@@ -12,21 +14,23 @@ log = logging.getLogger(__name__)
 
 
 def api_loop(command, *args, log_50007=True, **kwargs):
-    init_time = time()
+    retries = 0
     while True:
-        if time() - init_time > 10:
+        if retries >= 5:
             raise CommandError("Command timed out.")
         try:
             return command(*args, **kwargs)
         except requestsCError as e:
-            log.info("Didn't catch error reset.")
+            log.info(f"Caught discord-request error {e}.")
         except APIException as e:
-            if e.code == 50013:
+            if e.code == 50013:  # Missing permissions
                 raise CommandError("Missing permissions to respond "
                                    "(possibly Embed Links).")
-            if e.code != 50007 or log_50007:
+            if e.code != 50007 or log_50007:  # Cannot send messages to user
                 log.critical(f"Api exception: {e.code}: {e}")
             raise e
+        finally:
+            retries += 1
 
 
 def dm_default_send(event, dm_channel, *args, **kwargs):
@@ -37,16 +41,16 @@ def dm_default_send(event, dm_channel, *args, **kwargs):
     try:
         api_loop(dm_channel.send_message, log_50007=False, *args, **kwargs)
     except APIException as e:
-        if e.code == 50007:  # Wasn't able to open a DM/send DM message
+        if e.code == 50007:  # Cannot send messages to user
             api_loop(event.channel.send_message, *args, **kwargs)
         else:
             raise e
 
 
-user_regex = re.compile(r"[<]?[@]?[!]?\d{18}[>]?")
+user_regex = re.compile(r"[<]?[@]?[!]?\d+[>]?")
 redact_regs = [
     re.compile(r"[-._\w\d]{30,45}.[-._\w\d]{65,80}.[-._\w\d]{35,50}"),
-    re.compile(r"[-._\w\d]{20,70}"),
+    re.compile(r"[-._\w\d]{20,140}"),
     re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
     re.compile(r"(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]"
                r"{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"
@@ -128,9 +132,56 @@ def get(
     except requestsCError as e:
         log.warning(e)
         raise CommandError(f"{service} isn't available right now.")
+
     if r.status_code < 400:
         return r.json()
-    elif r.status_code == 404:
+
+    if r.status_code == 404:
         raise CommandError(f"404 - {item} doesn't exist.")
+
     raise CommandError(f"{r.status_code} - {service} threw "
-                           f"unexpected error: {redact(r.text)}")
+                       f"unexpected error: {redact(r.text)}")
+
+
+def exception_webhooks(client, exception_webhooks, **kwargs):
+    for webhook_id, token in exception_webhooks.copy().items():
+        try:
+            api_loop(
+                client.api.webhooks_token_execute,
+                webhook_id,
+                token,
+                data=kwargs,
+            )
+        except APIException as e:
+            if e.code in (10015, 50001):
+                log.warning("Unable to send exception "
+                            f"webook - {webhook_id}: {e}")
+                del exception_webhooks[webhook_id]
+            else:
+                raise e
+        except CommandError as e:
+            log.warning(e)
+
+
+def exception_dms(client, exception_dms, *args, **kwargs):
+    for target in exception_dms.copy():
+        target_dm = client.api.users_me_dms_create(target)
+        try:
+            api_loop(target_dm.send_message, *args, **kwargs)
+        except APIException as e:  # Missing permissions, Missing access,
+            if e.code in (50013, 50001, 50007):  # Cannot send messages to this user
+                log.warning("Unable to send exception DM - "
+                            f"{target}: {e}")
+                exception_dms.remove(target)
+            else:
+                raise e
+
+
+def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
+    """
+    A command used get the time passed since a unix time stamp
+    and output it as a human readable string.
+    """
+    time_passed = (datetime.now(timezone) -
+                   datetime.fromtimestamp(int(time_of_event), timezone))
+    return humanize.naturaltime(time_passed)

@@ -1,14 +1,19 @@
-from decimal import Decimal
+from time import time
+import base64
+import textwrap
 
 
+from disco.api.http import APIException
 from disco.bot import Plugin
-from disco.bot.command import CommandLevels
+from disco.bot.command import CommandError, CommandLevels
 from disco.util.logging import logging
+from requests import get
 
 
 from bot.base import bot
 from bot.util.misc import api_loop
-from bot.util.sql import handle_sql, db_session
+from bot.util.status import status_handler, guildCount
+
 
 log = logging.getLogger(__name__)
 
@@ -20,6 +25,30 @@ class superuserPlugin(Plugin):
         self.register_schedule(
             self.__check__,
             5,
+            repeat=False,
+            init=False,
+        )
+        presence = bot.config.presence.format(
+            count="{count}",
+            shardcount="{shardcount}",
+            prefix=bot.prefix,
+        )
+        self.status = status_handler(
+            self,
+            db_token=bot.config.api.discordbots_org,
+            gg_token=bot.config.api.discord_bots_gg,
+            boats_token=bot.config.api.discordboats,
+            user_agent=bot.config.api.user_agent,
+            presence=presence,
+        )
+        self.register_schedule(
+            self.status.update_stats,
+            300,
+            init=False,
+        )
+        self.register_schedule(
+            self.status.setup_services,
+            60,
             repeat=False,
             init=False,
         )
@@ -82,7 +111,7 @@ class superuserPlugin(Plugin):
                          + plugin.__class__.__name__)
             else:
                 log.info("Caught self")
-        handle_sql(db_session.flush)
+        bot.sql.flush()
         exit(0)
 
     @Plugin.command("unload", "<plugin_name:str>", level=CommandLevels.OWNER, metadata={"help": "owner"})
@@ -140,6 +169,185 @@ class superuserPlugin(Plugin):
         """
         raise Exception(message)
 
+    @Plugin.command("sites", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    def on_update_sites_command(self, event):
+        """
+        Manually post the bot's stats to the enabled bot listing sites.
+        """
+        if not self.status.services and self.status._tokens:
+            self.status.setup_services()
+        elif not self.status.services:
+            return api_loop(
+                event.channel.send_message,
+                "No status sites are enabled in config.",
+            )
+        guild_count = len(self.client.state.guilds)
+        shard_id = self.bot.client.config.shard_id
+        shard_count = self.bot.client.config.shard_count
+        payload = guildCount(guild_count, shard_count, shard_id)
+
+        for service in self.status.services:
+            self.status.post(service, payload)
+        guilds = [service.__name__ for service in self.status.services]
+        api_loop(
+            event.channel.send_message,
+            f"Updated stats on {guilds}.",
+        )
+
+    @Plugin.command("presence", level=CommandLevels.OWNER, group="update", metadata={"help": "owner"})
+    def on_update_presence_command(self, event):
+        """
+        Manually update the bot's presence.
+        """
+        guild_count = len(self.client.state.guilds)
+        shard_count = self.bot.client.config.shard_count
+        payload = guildCount(guild_count, shard_count)
+        self.status.update_presence(payload)
+        api_loop(event.channel.send_message, ":thumbsup:")
+
+    @Plugin.command("eval", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_eval_command(self, event):
+        """
+        Used to evaluate raw python3 code.
+        The available classes are:
+        "bot", "state", "client", "event", "sql", "config" and "prefix_cache".
+        To get an output, you have to assign the data to a variable
+        with "out"/"output" being preferred over other variables.
+        """
+        ctx = {
+            "bot": self.bot,
+            "state": self.bot.client.state,
+            "client": self.bot.client,
+            "event": event,
+            "sql": bot.sql,
+            "config": bot.config,
+            "prefix_cache": bot.prefix_cache,
+        }
+        response_block = "```python\n{}\n```"
+        code = event.codeblock.replace("py\n", "").replace("python\n", "")
+        code = (f"def func(ctx):\n  try:\n{textwrap.indent(code, '    ')}"
+                "\n  finally:\n    ctx['results'] = locals()")
+        attachments = None
+
+        try:
+            exec(code, ctx)
+            ctx["func"](ctx)
+        except Exception as e:
+            response = response_block.format(
+                (type(e).__name__ + ": " + str(e))[:1980]
+            )
+        else:
+            del ctx["results"]["ctx"]
+            result = ctx["results"].get("output") or ctx["results"].get("out")
+            if (not result and {key for key in ctx["results"]
+                                if not key.startswith("_")}):
+                result = list(ctx["results"].values())[0]  # assumptions have
+            elif not result:  # been made about how python populates local()
+                result = "None"
+            response = response_block.format(str(result))
+        if len(response) > 2000:
+            attachments = [["output.txt", str(result)], ]
+            response = ("It's dangerous to go without "
+                        "the full response! Take this.")
+        api_loop(event.channel.send_message, response, attachments=attachments)
+
+    @Plugin.command(
+        "dms",
+        aliases=("DMs", "dm", "DM",),
+        group="block",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+        context={"guild": "DM", "filter_list": bot.config.blacklist})
+    @Plugin.command(
+        "blacklist",
+        "<guild:snowflake>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+        context={"filter_list": bot.config.blacklist})
+    @Plugin.command(
+        "whitelist",
+        "<guild:snowflake>",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+        context={"filter_list": bot.config.whitelist})
+    def on_filter_command(self, event, guild, filter_list):
+        """
+        Used to add or remove an item from the guild/DM filter.
+        """
+        if guild in filter_list:
+            filter_list.remove(guild)
+            return api_loop(
+                event.channel.send_message,
+                "Guild removed from filter :ok_hand:",
+            )
+        if guild != "DM" and not self.client.state.guilds.get(guild):
+            return api_loop(
+                event.channel.send_message,
+                "Guild not found :shrug:",
+            )
+        filter_list.append(guild)
+        api_loop(
+            event.channel.send_message,
+            "Guild added to filter :thumbsup:",
+        )
+
+    @Plugin.command("veto", "<target:snowflake>", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_veto_command(self, event, target=None):
+        """
+        Used to whitelist a user from the guild/DM filter.
+        """
+        if not target:
+            target = event.author.id
+        if target in bot.config.uservetos:
+            bot.config.uservetos.remove(target)
+            api_loop(
+                event.channel.send_message,
+                f"User removed from veto list :ok_hand:",
+            )
+        else:
+            bot.config.uservetos.append(target)
+            api_loop(
+                event.channel.send_message,
+                f"User added to veto list :thumbsup:",
+            )
+
+    @Plugin.command("reset", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_filter_reset(self, event):
+        """
+        Used to reset the guild filter (including the DM block).
+        """
+        bot.config.whitelist.clear()
+        bot.config.blacklist.clear()
+        api_loop(event.channel.send_message, ":thumbsup:")
+
+    @Plugin.command(
+        "dms",
+        aliases=("DMs", "dm", "DM"),
+        group="filter",
+        level=CommandLevels.OWNER,
+        metadata={"help": "owner"},
+        context={"guild": "DM"})
+    @Plugin.command("query", "[guild:snowflake]", group="filter", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_filter_query_command(self, event, guild=None):
+        """
+        Used to retrieve the status of a guild or DMs in the filter.
+        """
+        if guild:
+            whitelisted = guild in bot.config.whitelist
+            blacklisted = guild in bot.config.blacklist
+            api_loop(
+                event.channel.send_message,
+                (f"Guild status:```Whitelisted: {whitelisted}\n"
+                 f"Blacklisted: {blacklisted}```"),
+            )
+        else:
+            api_loop(
+                event.channel.send_message,
+                (f"There are currently ``{len(bot.config.whitelist)}`` "
+                 f"guilds whitelisted, and ``{len(bot.config.blacklist)}``"
+                 " guilds blacklisted."),
+            )
+
     @Plugin.command("echo", "<payload:str...>", level=CommandLevels.OWNER, metadata={"help": "owner"})
     def on_echo_command(self, event, payload):
         """
@@ -156,13 +364,87 @@ class superuserPlugin(Plugin):
         Test delay command.
         Accepts no arguments.
         """
+        websocket_ping = time()
+        try:
+            self.client.gw.ws.sock.ping()
+        except Exception as e:
+            log.warning(f"Websocket exception on ping: {e}")
+            websocket_ping = None
+        message_ping = time()
         bot_message = api_loop(
             event.channel.send_message,
             "***RADIO STATIC***",
         )
-        message_time = bot_message.timestamp.timestamp()
-        event_time = event.msg.timestamp.timestamp()
+        message_ping = round((time() - message_ping) * 1000)
+        if websocket_ping:
+            websocket_ping = self.client.gw.ws.last_pong_tm - websocket_ping
+            websocket_ping = round(websocket_ping * 1000)
+        message = f"Pong! :ping_pong:\nAPI: {message_ping} ms"
+        if websocket_ping and 0 < websocket_ping < 1000:
+            message += f"\nGateway: {websocket_ping} ms "
         api_loop(
             bot_message.edit,
-            f"Pong! {round(Decimal((message_time - event_time) * 1000))} ms"
+            message,
         )
+
+    @Plugin.command("register error webhook", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_register_error_webhook_command(self, event):
+        """
+        Used to register a webhook in the current channel for error messages.
+        """
+        #  attempt to get bot's current avatar as base64.
+        url = self.state.me.get_avatar_url(fmt="png")
+        try:
+            r = get(url)
+            avatar = ("data:" + r.headers["Content-Type"] + ";base64,"
+                      + base64.b64encode(r.content).decode("utf-8"))
+        except Exception as e:
+            log.warning(f"failed to get webhook image {e}")
+            avatar = None
+
+        #  create webhook
+        try:
+            webhook = api_loop(
+                event.channel.create_webhook,
+                self.state.me.username,
+                avatar,
+            )
+        except (APIException, CommandError) as e:
+            api_loop(
+                event.channel.send_message,
+                f"Unable to make webhook: ```{e.msg}```",
+            )
+        else:
+            #  save webhook to config
+            config = bot.get_config()
+            if "exception_webhooks" not in config:
+                config["exception_webhooks"] = {}
+            config["exception_webhooks"][webhook.id] = webhook.token
+            bot.config.exception_webhooks[webhook.id] = webhook.token
+            bot.overwrite_config(config)
+            api_loop(
+                event.channel.send_message,
+                f":thumbsup:",
+            )
+
+    @Plugin.command("register error dm", level=CommandLevels.OWNER, metadata={"help": "owner"})
+    def on_register_error_dm_command(self, event):
+        """
+        Used to register the current user's DMs for error messages.
+        """
+        if event.author.id in bot.config.exception_dms:
+            api_loop(
+                event.channel.send_message,
+                f"You're already registered :ok_hand:",
+            )
+        else:
+            config = bot.get_config()
+            if "exception_dms" not in config:
+                config["exception_dms"] = []
+            config["exception_dms"].append(event.author.id)
+            bot.overwrite_config(config)
+            bot.config.exception_dms.append(event.author.id)
+            api_loop(
+                event.channel.send_message,
+                f":thumbsup:",
+            )
