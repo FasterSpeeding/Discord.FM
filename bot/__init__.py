@@ -1,1 +1,2 @@
-__GIT__ = "https://github.com/LMByrne/Discord.FM"
+__version__ = "1.0.0"
+

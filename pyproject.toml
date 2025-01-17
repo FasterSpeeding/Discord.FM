@@ -1,0 +1,85 @@
+[tool.black]
+include         = ".*py$"
+line-length     = 120
+skip-magic-trailing-comma = true
+target-version  = ["py310"]
+
+[tool.codespell]
+ignore-regex = "nd|swith"
+
+[tool.flake8]
+count = true
+max-complexity = 20
+max-function-length = 130
+# Technically this is 120, but black has a policy of "1 or 2 over is fine if it is tidier", so we have to raise this.
+max-line-length = 130
+show_source = false
+statistics = false
+accept-encodings = "utf-8"
+docstring-convention = "numpy"
+ignore = [
+    "A002",    # Argument is shadowing a python builtin.
+    "A003",    # Class attribute is shadowing a python builtin.
+    "CFQ002",  # Function has too many arguments.
+    "CFQ004",  # Function has too many returns.
+    "E402",    # Module level import not at top of file (isn't compatible with our import style).
+    "IFS001",  # "use a oneliner here".
+    "T101",    # TO-DO comment detection (T102 is FIX-ME and T103 is XXX).
+    "W503",    # line break before binary operator.
+    "W504",    # line break before binary operator (again, I guess).
+    "S101",    # Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+    "E203",    # whitespace before ':'
+    "E231",    # missing whitespace after ','
+    "TRY003",  # Avoid specifying long messages outside the exception class
+    "E701",    # Incompatible with black: E701 multiple statements on one line (colon)
+    "E704",    # Incompatible with black: E704 multiple statements on one line (def)
+]
+per-file-ignores = ["noxfile.py: D100, FA101, F401, F403, INP001"]
+
+[tool.isort]
+profile = "black"
+force_single_line = true
+
+[tool.piped]
+default_sessions = ["reformat", "verify-markup", "flake8", "spell-check", "type-check"]
+hide = ["build", "generate_docs", "publish", "slot-check", "test", "test_coverage", "test_publish", "verify_types"]
+top_level_targets = ["./noxfile.py", "./bot"]
+version_constraint = "3.12,<3.13"
+
+[tool.piped.github_actions."*"]
+default_py_ver = "3.12"
+
+[tool.piped.github_actions.freeze_for_pr]
+[tool.piped.github_actions.lint]
+[tool.piped.github_actions.reformat]
+[tool.piped.github_actions.resync_piped]
+[tool.piped.github_actions.type_check]
+[tool.piped.github_actions.update_licence]
+[tool.piped.github_actions.upgrade_locks]
+[tool.piped.github_actions.verify_locks]
+
+[tool.pyright]
+include = ["bot"]
+
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingModuleSource = "error"  # Is only "warning" on strict mode.
+
+# Error code which are disabled even when general strict.
+reportShadowedImports = "error"
+reportCallInDefaultInitializer = "none"  # Ended up just complaining about cases where this was fine (e.g. timedeltas).
+reportImplicitStringConcatenation = "none"  # Conflicts with flake8 config.
+reportMissingSuperCall = "none"  # Way too strict (requires calls to `object.__init__`).
+reportPropertyTypeMismatch = "error"
+reportUninitializedInstanceVariable = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUnusedCallResult = "none"  # Enforces doing `_ = ...`.
+
+# Error codes which lead to too many false-positives.
+reportIncompatibleMethodOverride = "warning"  # This relies on ordering for key-word only arguments which is annoying
+                                           # than it's worth
+reportUnknownMemberType = "warning"  # This messes with instance checking generic objects
+reportUnknownArgumentType = "warning"  # Pretty much the same as reportUnknownMemberType
+reportUnknownParameterType = "warning"  # Pretty much the same as reportUnknownMemberType
+reportUnusedFunction = "warning"  # This assumes decorator calls don't load a function into something for usage
+reportImportCycles = "warning"                  # This isn't necessarily an issue if it's type checking only.

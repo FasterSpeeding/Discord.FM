@@ -13,17 +13,20 @@ from sqlalchemy import (
 from sqlalchemy.dialects.mysql import (
     TEXT, BIGINT, INTEGER, VARCHAR,
 )
+import sqlalchemy.engine
 from sqlalchemy.engine.url import URL as SQLurl
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import (
     scoped_session, sessionmaker, relationship,
 )
+import sqlalchemy.orm
 
 
 log = logging.getLogger(__name__)
 
 
-Base = declarative_base()
+class Base(sqlalchemy.orm.DeclarativeBase):
+    ...
 
 
 class SQLexception(CommandError):
@@ -276,17 +279,17 @@ class cfilter(Base):
 
     @classmethod
     def _get_wrapped(cls, *args, **kwargs):
-        return wrappedfilter(cls(*args, **kwargs))
+        return WrappedFilter(cls(*args, **kwargs))
 
     @staticmethod
     def _wrap(obj):
-        return wrappedfilter(obj)
+        return WrappedFilter(obj)
 
     def __repr__(self):
         return f"filter_status({self.target})"
 
 
-class wrappedfilter:
+class WrappedFilter:
     __slots__ = ("filter", "_status")
 
     def __init__(self, cfilter):
@@ -328,7 +331,7 @@ class wrappedfilter:
             (not target_type or filter.target_type == target_type)).count()
 
 
-class sql_instance:
+class DbConn:
     __tables__ = (
         guilds,
         users,

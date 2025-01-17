@@ -15,29 +15,6 @@ from requests.exceptions import ConnectionError as requestsCError
 log = logging.getLogger(__name__)
 
 
-def api_loop(command, *args, log_50007=True, **kwargs):
-    retries = 0
-    while True:
-        if retries >= 5:
-            raise CommandError("Command timed out.")
-
-        try:
-            return command(*args, **kwargs)
-        except requestsCError as e:
-            log.info(f"Caught discord-request error {e}.")
-        except APIException as e:
-            if e.code == 50013:  # Missing permissions
-                raise CommandError("Missing permissions to respond "
-                                   "(possibly Embed Links).")
-
-            if e.code != 50007 or log_50007:  # Cannot send messages to user
-                log.critical(f"Api exception: {e.code}: {e}")
-            raise e
-
-        finally:
-            retries += 1
-
-
 def dm_default_send(event, dm_channel, *args, **kwargs):
     """
     Attempt to send a message to the user's DM
@@ -86,34 +63,6 @@ def AT_to_id(discord_id: str):
         return int(discord_id)
 
     raise CommandError("Invalid @user.")
-
-
-dictify_regex = re.compile(r"[\w\d]+\s{0,2}[=:]\s{0,2}[\w\d\s]+[,]?")
-equal_seperate = re.compile(r"[\w\d]+\s{0,2}[=]\s{0,2}[\w\d\s]+")
-colon_seperate = re.compile(r"[\w\d]+\s{0,2}[:]\s{0,2}[\w\d\s]+")
-
-
-def beautify_json(data):
-    return json.dumps(data, indent=4, sort_keys=True)
-
-
-def dictify(intake):
-    data = {}
-    for match in dictify_regex.findall(intake):
-        seperate = equal_seperate.match(match)
-        if seperate:
-            split = "="
-        else:
-            split = ":"
-            seperate = colon_seperate.match(match)
-        split = seperate.string.split(split)
-        key = split.pop(0).strip(" ")
-        value = ""
-        for item in split:
-            value += item
-        value = (value[:-1] if value[-1] == "," else value).strip(" ")
-        data[key] = value
-    return data
 
 
 def get_dict_item(data: dict, Dict_map: list):
@@ -199,9 +148,3 @@ def time_since(time_of_event: int, timezone=pytz.UTC, **kwargs):
     time_passed = (datetime.now(timezone) -
                    datetime.fromtimestamp(int(time_of_event), timezone))
     return humanize.naturaltime(time_passed)
-
-
-def get_base64_image(url):
-    r = real_get(url)
-    return ("data:" + r.headers["Content-Type"] + ";base64,"
-            + base64.b64encode(r.content).decode("utf-8"))

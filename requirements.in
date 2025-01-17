@@ -1,0 +1,11 @@
+asyncpg
+hikari[speedup]
+hikari-tanjun
+hikari-yuyo
+httpx
+lyrics-extractor
+psutil
+python-dotenv
+sqlalchemy
+tanchan
+uvloop; platform_system != "Windows"
